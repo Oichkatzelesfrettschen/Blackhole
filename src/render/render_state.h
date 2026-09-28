@@ -263,6 +263,7 @@ struct RenderState {
     bool curveOverlayEnabled = true;
     bool curveOverlayWindowOpen = true;
     bool firstLayout = true;
+    bool diagnosticsVisible = false;
   } overlays;
 
   struct PostGroup {
@@ -608,8 +609,8 @@ struct RenderState {
   } exporting;
 
   struct DepthFxGroup {
-    bool depthEffectsEnabled = true;
-    bool fogEnabled = true;
+    bool depthEffectsEnabled = false;
+    bool fogEnabled = false;
     float fogDensity = 0.08f;
     float fogStart = 0.6f;
     float fogEnd = 0.98f;
@@ -618,7 +619,7 @@ struct RenderState {
     float edgeThreshold = 0.5f;
     float edgeWidth = 1.0f;
     float edgeColor[3] = {1.0f, 1.0f, 1.0f};
-    bool depthDesatEnabled = true;
+    bool depthDesatEnabled = false;
     float desatStrength = 0.10f;
     bool chromaDepthEnabled = false;
     bool motionParallaxHint = false;

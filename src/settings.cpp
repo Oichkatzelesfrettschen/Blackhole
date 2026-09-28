@@ -77,7 +77,7 @@ void assignLegacyVsync(Settings &settings, const std::string &value) {
 
 // Preserve file-order matching and the legacy vsync alias while binding each
 // persisted key to the type of its Settings member.
-constexpr std::array<SettingBinding, 82> K_SETTING_BINDINGS{{
+constexpr std::array<SettingBinding, 85> K_SETTING_BINDINGS{{
     {.key = "\"windowWidth\"", .assign = assignSetting<&Settings::windowWidth>},
     {.key = "\"windowHeight\"", .assign = assignSetting<&Settings::windowHeight>},
     {.key = "\"fullscreen\"", .assign = assignSetting<&Settings::fullscreen>},
@@ -166,6 +166,9 @@ constexpr std::array<SettingBinding, 82> K_SETTING_BINDINGS{{
     {.key = "\"adiskNoiseLOD\"", .assign = assignSetting<&Settings::adiskNoiseLOD>},
     {.key = "\"adiskNoiseScale\"", .assign = assignSetting<&Settings::adiskNoiseScale>},
     {.key = "\"adiskSpeed\"", .assign = assignSetting<&Settings::adiskSpeed>},
+    {.key = "\"workspaceSchemaVersion\"", .assign = assignSetting<&Settings::workspaceSchemaVersion>},
+    {.key = "\"workspaceKind\"", .assign = assignSetting<&Settings::workspaceKind>},
+    {.key = "\"advancedControls\"", .assign = assignSetting<&Settings::advancedControls>},
 }};
 
 } // namespace
@@ -226,6 +229,9 @@ bool SettingsManager::save(const std::string &filepath) {
   auto writeBool = [](bool v) { return v ? "true" : "false"; };
 
   file << "{\n";
+  file << "  \"workspaceSchemaVersion\": " << settings_.workspaceSchemaVersion << ",\n";
+  file << "  \"workspaceKind\": " << settings_.workspaceKind << ",\n";
+  file << "  \"advancedControls\": " << writeBool(settings_.advancedControls) << ",\n";
 
   // Display
   file << "  \"windowWidth\": " << settings_.windowWidth << ",\n";

@@ -21,11 +21,8 @@ void renderSettingsWindow(blackhole::RenderState &rs);
 /** @brief Curve overlay window plotting the --curve-tsv file; no-op when closed. */
 void renderCurveOverlayWindow(blackhole::RenderState &rs, const std::string &curveTsvPath);
 
-/** @brief Bloom composite sliders (strength, threshold, knee, tone). */
-void renderBloomPanel(blackhole::RenderState &rs);
-
-/** @brief Tonemap toggles and exposure/gamma sliders. */
-void renderTonemapPanel(blackhole::RenderState &rs);
+/** @brief Bloom and tone-map controls in one dockable window. */
+void renderPostProcessingPanel(blackhole::RenderState &rs);
 
 /** @brief Depth cue controls: fog, edge outlines, desaturation, depth of field. */
 void renderDepthEffectsPanel(blackhole::RenderState &rs);

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cfloat>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -24,6 +25,8 @@
 #include "grmhd_streaming.h"
 #include "kerr.h"
 #include "overlay.h"
+#include "panels.h"
+#include "presentation_metadata.h"
 #include "physics/hawking_renderer.h"
 #include "render/render_state.h"
 #include "schwarzschild.h"
@@ -146,40 +149,62 @@ bool loadGrmhdPacked(RenderState &rs, const std::string &path) {
   return true;
 }
 
+void controlHelp(const ControlPresentation &presentation) {
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("%s", presentation.help);
+  }
+}
+
+void checkbox(const ControlPresentation &presentation, bool &value) {
+  ImGui::Checkbox(presentation.label, &value);
+  controlHelp(presentation);
+}
+
+void slider(const ControlPresentation &presentation, float &value) {
+  ImGui::SliderFloat(presentation.label, &value, presentation.minimum,
+                     presentation.maximum, presentation.format);
+  controlHelp(presentation);
+}
+
 void renderVisualSettings(RenderState &rs, Settings &settings) {
-  ImGui::Checkbox("gravitationalLensing", &rs.disk.gravitationalLensing);
+  checkbox(K_DISK_PRESENTATION[0], rs.disk.gravitationalLensing);
   ImGui::SliderInt("Bloom Iterations", &rs.post.bloomIterations, 1, K_MAX_BLOOM_ITERATIONS);
   settings.bloomIterations = rs.post.bloomIterations;
-  ImGui::Checkbox("renderBlackHole", &rs.disk.renderBlackHole);
-  ImGui::Checkbox("adiskEnabled", &rs.disk.adiskEnabled);
+  checkbox(K_DISK_PRESENTATION[1], rs.disk.renderBlackHole);
+  checkbox(K_DISK_PRESENTATION[2], rs.disk.adiskEnabled);
   // These controls feed only the legacy fragment tracer's volumetric disk
   // (adiskColor in blackhole_main.frag, the density LUT, the noise volume);
   // the Kerr tracer's disk (bhDiskEmission, d_disk_emission) reads none of
   // them, so they are disabled while it runs.
   ImGui::BeginDisabled(!legacyFragmentTracerActive(rs));
-  ImGui::Checkbox("adiskParticle", &rs.disk.adiskParticle);
+  checkbox(K_DISK_PRESENTATION[3], rs.disk.adiskParticle);
   legacyTracerControlTooltip();
-  ImGui::SliderFloat("adiskDensityV", &rs.disk.adiskDensityV, 0.0f, 10.0f);
+  slider(K_DISK_PRESENTATION[4], rs.disk.adiskDensityV);
   legacyTracerControlTooltip();
-  ImGui::SliderFloat("adiskDensityH", &rs.disk.adiskDensityH, 0.0f, 10.0f);
+  slider(K_DISK_PRESENTATION[5], rs.disk.adiskDensityH);
   legacyTracerControlTooltip();
-  ImGui::SliderFloat("adiskHeight", &rs.disk.adiskHeight, 0.0f, 1.0f);
+  slider(K_DISK_PRESENTATION[6], rs.disk.adiskHeight);
   legacyTracerControlTooltip();
-  ImGui::SliderFloat("adiskLit", &rs.disk.adiskLit, 0.0f, 4.0f);
+  slider(K_DISK_PRESENTATION[7], rs.disk.adiskLit);
   legacyTracerControlTooltip();
-  ImGui::SliderFloat("adiskNoiseLOD", &rs.disk.adiskNoiseLOD, 1.0f, 12.0f);
+  slider(K_DISK_PRESENTATION[8], rs.disk.adiskNoiseLOD);
   legacyTracerControlTooltip();
-  ImGui::SliderFloat("adiskNoiseScale", &rs.disk.adiskNoiseScale, 0.0f, 10.0f);
+  slider(K_DISK_PRESENTATION[9], rs.disk.adiskNoiseScale);
   legacyTracerControlTooltip();
   ImGui::Checkbox("Noise Texture", &rs.disk.useNoiseTexture);
   legacyTracerControlTooltip();
   ImGui::SliderFloat("Noise Tex Scale", &rs.disk.noiseTextureScale, 0.05f, 2.0f);
   legacyTracerControlTooltip();
-  ImGui::SliderFloat("adiskSpeed", &rs.disk.adiskSpeed, 0.0f, 1.0f);
+  slider(K_DISK_PRESENTATION[10], rs.disk.adiskSpeed);
   legacyTracerControlTooltip();
-  ImGui::SliderFloat("dopplerStrength", &rs.disk.dopplerStrength, 0.0f, 5.0f);
+  slider(K_DOPPLER_PRESENTATION, rs.disk.dopplerStrength);
   legacyTracerControlTooltip();
   ImGui::EndDisabled();
+
+  if (!settings.advancedControls &&
+      settings.workspaceKind != static_cast<int>(WorkspaceKind::Diagnostics)) {
+    return;
+  }
 
   ImGui::Separator();
   ImGui::Text("Volumetric RTE (D2)");
@@ -729,21 +754,34 @@ void renderSettingsWindow(RenderState &rs) {
   auto &settings = SettingsManager::instance().get();
   ImGui::SetNextWindowSize(ImVec2(450, 700), ImGuiCond_FirstUseEver);
   ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoCollapse);
+  const char *const workspaceNames[] = {"Simulator", "GOROROBA", "Diagnostics"};
+  settings.workspaceKind = std::clamp(settings.workspaceKind, 0, 2);
+  if (ImGui::Combo("Workspace", &settings.workspaceKind, workspaceNames, 3)) {
+    rs.overlays.firstLayout = true;
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Reset Layout")) {
+    rs.overlays.firstLayout = true;
+  }
+  ImGui::Checkbox("Advanced controls", &settings.advancedControls);
+  const bool showAdvanced =
+      settings.advancedControls ||
+      settings.workspaceKind == static_cast<int>(WorkspaceKind::Diagnostics);
   renderSceneModeCombo(rs);
   if (ImGui::BeginTabBar("MainTabs")) {
     if (ImGui::BeginTabItem("Visuals")) {
       renderVisualSettings(rs, settings);
       ImGui::EndTabItem();
     }
-    if (ImGui::BeginTabItem("GRMHD")) {
+    if (showAdvanced && ImGui::BeginTabItem("GRMHD")) {
       renderGrmhdSettings(rs);
       ImGui::EndTabItem();
     }
-    if (ImGui::BeginTabItem("Physics")) {
+    if (showAdvanced && ImGui::BeginTabItem("Physics")) {
       renderPhysicsSettings(rs);
       ImGui::EndTabItem();
     }
-    if (ImGui::BeginTabItem("Compute")) {
+    if (showAdvanced && ImGui::BeginTabItem("Compute")) {
       renderComputeSettings(rs);
       ImGui::EndTabItem();
     }
@@ -753,7 +791,7 @@ void renderSettingsWindow(RenderState &rs) {
 }
 
 void renderCurveOverlayWindow(RenderState &rs, const std::string &curveTsvPath) {
-  if (!rs.overlays.curveOverlayWindowOpen) {
+  if (curveTsvPath.empty() || !rs.overlays.curveOverlayWindowOpen) {
     return;
   }
   ImGui::Begin("Curve Overlay", &rs.overlays.curveOverlayWindowOpen);
@@ -766,9 +804,7 @@ void renderCurveOverlayWindow(RenderState &rs, const std::string &curveTsvPath) 
     ImGui::Text("%s", curveTsvPath.c_str());
   }
 
-  if (curveTsvPath.empty()) {
-    ImGui::Text("Pass --curve-tsv <path> to plot a 2-column TSV.");
-  } else if (!rs.overlays.curveOverlayLoaded) {
+  if (!rs.overlays.curveOverlayLoaded) {
     ImGui::Text("Load error: %s", rs.overlays.curveOverlay.lastError.c_str());
   } else if (rs.overlays.curveOverlayEnabled) {
     ImVec2 plotSize = ImGui::GetContentRegionAvail();
@@ -779,26 +815,21 @@ void renderCurveOverlayWindow(RenderState &rs, const std::string &curveTsvPath) 
   ImGui::End();
 }
 
-void renderBloomPanel(RenderState &rs) {
+void renderPostProcessingPanel(RenderState &rs) {
   auto &settings = SettingsManager::instance().get();
+  ImGui::SetNextWindowSizeConstraints(ImVec2(340.0f, 180.0f), ImVec2(FLT_MAX, FLT_MAX));
   ImGui::Begin("Post Processing", nullptr, ImGuiWindowFlags_NoCollapse);
-  ImGui::SliderFloat("bloomStrength",  &rs.post.bloomStrength, 0.0f, 1.0f);
-  ImGui::SliderFloat("bloomThreshold", &rs.post.bloomThreshold, 0.0f, 2.0f);
-  ImGui::SliderFloat("bloomKnee",      &rs.post.bloomKnee, 0.0f, 0.5f);
-  ImGui::SliderFloat("bloomTone",      &rs.post.bloomTone, 0.0f, 2.0f);
+  ImGui::SliderFloat("Bloom strength", &rs.post.bloomStrength, 0.0f, 1.0f);
+  ImGui::SliderFloat("Bloom threshold", &rs.post.bloomThreshold, 0.0f, 2.0f);
+  ImGui::SliderFloat("Bloom knee", &rs.post.bloomKnee, 0.0f, 0.5f);
+  ImGui::SliderFloat("Bloom tone", &rs.post.bloomTone, 0.0f, 2.0f);
   settings.bloomStrength = rs.post.bloomStrength;
-  ImGui::End();
-}
-
-void renderTonemapPanel(RenderState &rs) {
-  auto &settings = SettingsManager::instance().get();
-  ImGui::Begin("Post Processing", nullptr, ImGuiWindowFlags_NoCollapse);
-  ImGui::Checkbox("tonemappingEnabled", &rs.post.tonemappingEnabled);
+  ImGui::Checkbox("Tone mapping", &rs.post.tonemappingEnabled);
   // The record exposure rule (record_mode.h) reaches 14.4 for cinematic and
   // 4.9 for the desktop default camera at diskBrightness 0.25.
-  ImGui::SliderFloat("exposure", &rs.post.toneExposure, 0.01f, 50.0f, "%.2f",
+  ImGui::SliderFloat("Exposure", &rs.post.toneExposure, 0.01f, 50.0f, "%.2f",
                      ImGuiSliderFlags_Logarithmic);
-  ImGui::SliderFloat("gamma", &rs.post.gamma, 1.0f, 4.0f);
+  ImGui::SliderFloat("Gamma", &rs.post.gamma, 1.0f, 4.0f);
   settings.tonemappingEnabled = rs.post.tonemappingEnabled;
   settings.toneExposure = rs.post.toneExposure;
   settings.gamma = rs.post.gamma;
@@ -807,9 +838,17 @@ void renderTonemapPanel(RenderState &rs) {
 
 void renderDepthEffectsPanel(RenderState &rs) {
   ImGui::Begin("Depth Effects", nullptr, ImGuiWindowFlags_NoCollapse);
+  ImGui::TextUnformatted(rs.depthFx.depthEffectsEnabled ? "Depth profile: Enabled"
+                                                 : "Depth profile: Off");
   ImGui::Checkbox("Enable Depth Effects", &rs.depthFx.depthEffectsEnabled);
   ImGui::SliderFloat("Depth Far", &rs.display.depthFar, 10.0f, 2000.0f, "%.0f",
                      ImGuiSliderFlags_Logarithmic);
+  if (ImGui::Button("Preset: Off")) {
+    rs.depthFx.depthEffectsEnabled = false;
+    rs.depthFx.fogEnabled = false;
+    rs.depthFx.depthDesatEnabled = false;
+  }
+  ImGui::SameLine();
   if (ImGui::Button("Preset: Subtle")) {
     rs.depthFx.depthEffectsEnabled = true;
     rs.depthFx.fogEnabled = true;

@@ -326,8 +326,6 @@ void drawStationSignals(ImDrawList *drawList, const game::CampaignViewSnapshot &
 
 void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState &uiState,
                         unsigned int backdropTextureId, const char *backdropCredit) {
-  ImGui::SetNextWindowPos(ImVec2(420.0f, 470.0f), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(520.0f, 420.0f), ImGuiCond_FirstUseEver);
   if (!ImGui::Begin("Strategic Map", nullptr, ImGuiWindowFlags_NoCollapse)) {
     ImGui::End();
     return;

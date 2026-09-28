@@ -58,8 +58,11 @@ void renderRmlUiPanel(blackhole::RenderState &rs);
 /** @brief GPU timing toggles, HUD overlay controls, and the frame-time plot. */
 void renderPerformancePanel(blackhole::RenderState &rs, float cpuFrameMs);
 
-/** @brief Rebuilds the default dockspace layout for all named windows. */
-void resetLayout(ImGuiID dockspaceId);
+enum class WorkspaceKind { Simulator, Gororoba, Diagnostics };
+inline constexpr int K_WORKSPACE_SCHEMA_VERSION = 1;
+
+/** @brief Rebuilds the selected workspace in the main dockspace. */
+void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace);
 
 } // namespace ui
 

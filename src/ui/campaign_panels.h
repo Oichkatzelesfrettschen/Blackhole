@@ -17,7 +17,9 @@
 #define BLACKHOLE_UI_CAMPAIGN_PANELS_H
 
 #include <algorithm>
+#include <array>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <string>
 
@@ -29,6 +31,18 @@
 #include "game/realtime_driver.h"
 
 namespace ui {
+
+inline constexpr std::array<float, 9> K_FLEET_COLUMN_MIN_WIDTHS = {
+    170.0f, 55.0f, 95.0f, 95.0f, 110.0f, 80.0f, 95.0f, 145.0f, 180.0f};
+
+[[nodiscard]] constexpr float fleetTableMinimumWidth() {
+  return std::accumulate(K_FLEET_COLUMN_MIN_WIDTHS.begin(),
+                         K_FLEET_COLUMN_MIN_WIDTHS.end(), 0.0f);
+}
+
+[[nodiscard]] constexpr bool fleetRosterUsesCards(float contentWidth) {
+  return contentWidth < fleetTableMinimumWidth();
+}
 
 /** @brief Panel-local UI state: window visibility, map selection, and the
  *         order composer's staged values. Owned by main beside the session. */
@@ -43,6 +57,7 @@ struct CampaignBackdrop {
 
 struct CampaignUiState {
   bool windowsOpen = false;
+  bool focusCampaignWindow = true;
   game::FleetId selectedFleet = game::K_INVALID_FLEET_ID;
   int composerTargetBand = 0;
   game::OrbitLane composerLane = game::OrbitLane::Prograde;
