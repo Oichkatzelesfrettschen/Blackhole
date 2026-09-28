@@ -10,7 +10,7 @@ from typing import Any
 # for an image, while rails need room for controls or strategic decisions.
 MINIMUMS = {
     "simulator": {"Viewport": (500, 300), "Settings": (300, 180), "Controls": (300, 180)},
-    "gororoba": {
+    "propertime": {
         "Viewport": (500, 300),
         "Operations": (380, 180),
         "System/Strategic Map": (380, 180),

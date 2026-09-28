@@ -838,7 +838,7 @@ void renderSettingsWindow(RenderState &rs) {
   auto &settings = SettingsManager::instance().get();
   ImGui::SetNextWindowSize(ImVec2(450, 700), ImGuiCond_FirstUseEver);
   ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoCollapse);
-  const char *const workspaceNames[] = {"Simulator", "GOROROBA", "Diagnostics"};
+  const char *const workspaceNames[] = {"Simulator", "Proper Time", "Diagnostics"};
   settings.workspaceKind = std::clamp(settings.workspaceKind, 0, 2);
   if (ImGui::Combo("Workspace", &settings.workspaceKind, workspaceNames, 3)) {
     rs.overlays.firstLayout = true;

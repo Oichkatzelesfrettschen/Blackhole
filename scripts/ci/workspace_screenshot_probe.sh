@@ -39,7 +39,7 @@ result=0
 for configuration in 1280x720:1 1920x1080:1 2560x1440:2; do
   size=${configuration%:*}
   scale=${configuration#*:}
-  for workspace in simulator gororoba diagnostics; do
+  for workspace in simulator propertime diagnostics; do
     prefix=$artifact_dir/$workspace-$size-scale$scale
     if ! "$build_dir/Blackhole" --workspace-screenshot "$prefix" \
       --workspace "$workspace" --window-size "$size" --ui-scale "$scale" \

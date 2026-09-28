@@ -1,6 +1,6 @@
 /**
  * @file campaign_panels.cpp
- * @brief Singularity: GOROROBA campaign windows implementation.
+ * @brief Singularity: Proper Time campaign windows implementation.
  */
 
 #include "ui/campaign_panels.h"
@@ -199,7 +199,7 @@ void renderTimeLedger(const game::CampaignViewSnapshot &view, const CampaignUiSt
     constexpr double kInstabilityFullScale = 24.0;
     const auto threat = static_cast<float>(std::min(1.0, view.instability / kInstabilityFullScale));
     ImGui::TextColored(ImVec4(0.6f + (0.4f * threat), 1.0f - (0.6f * threat), 0.4f, 1.0f),
-                       "Gororoba instability %.2f   stabilization %.2f   fleet integrity %.2f",
+                       "Singularity instability %.2f   stabilization %.2f   fleet integrity %.2f",
                        view.instability, view.stabilization, view.fleetIntegrity);
   }
   if (view.status == game::CampaignStatus::Ongoing && view.victoryEnergyUnits > 0.0) {
@@ -903,7 +903,7 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
     uiState.focusCampaignWindow = false;
   }
   if (ImGui::Begin("Campaign", nullptr, ImGuiWindowFlags_NoCollapse)) {
-    ImGui::Checkbox("Singularity: GOROROBA", &uiState.windowsOpen);
+    ImGui::Checkbox("Singularity: Proper Time", &uiState.windowsOpen);
     if (uiState.windowsOpen) {
       // The story session, once started, is the one every window plays.
       game::CampaignSession &session =
@@ -943,7 +943,7 @@ void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiStat
       renderOrderComposer(session, focusedView, uiState);
       renderDecisionLoop(focusedView, uiState);
     } else {
-      ImGui::TextDisabled("enable to command fleets around Gororoba, the singularity");
+      ImGui::TextDisabled("enable to command fleets around the singularity");
     }
   }
   ImGui::End();

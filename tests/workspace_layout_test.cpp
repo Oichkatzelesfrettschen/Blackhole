@@ -56,12 +56,14 @@ struct WorkspaceRects {
 
 WorkspaceRects drawWorkspaceWindows(ui::WorkspaceKind workspace) {
   return {.viewport = drawWindow("Viewport"),
-          .rail = drawWindow(workspace == ui::WorkspaceKind::Gororoba ? "Operations" : "Settings"),
-          .lower =
-              drawWindow(workspace == ui::WorkspaceKind::Gororoba ? "System/Strategic Map" : "Controls"),
+          .rail =
+              drawWindow(workspace == ui::WorkspaceKind::ProperTime ? "Operations" : "Settings"),
+          .lower = drawWindow(workspace == ui::WorkspaceKind::ProperTime ? "System/Strategic Map"
+                                                                         : "Controls"),
           .postProcessing = drawWindow("Post Processing"),
           .curve = drawWindow("Curve Overlay"),
-          .intel = drawWindow(workspace == ui::WorkspaceKind::Gororoba ? "Intelligence" : "Campaign Intel"),
+          .intel = drawWindow(workspace == ui::WorkspaceKind::ProperTime ? "Intelligence"
+                                                                         : "Campaign Intel"),
           .objectives = drawWindow("Objectives"),
           .events = drawWindow("Event Log"),
           .physical = drawWindow("Physical Viewport")};
@@ -90,7 +92,7 @@ void expectProtectedViewport(const WindowRect &viewport) {
   EXPECT_NE(viewportNode->LocalFlags & static_cast<int>(ImGuiDockNodeFlags_NoDockingSplit), 0);
 }
 
-void expectGororobaPanels(const WorkspaceRects &rectangles) {
+void expectProperTimePanels(const WorkspaceRects &rectangles) {
   EXPECT_NE(rectangles.objectives.dockId, 0U);
   EXPECT_NE(rectangles.events.dockId, 0U);
   EXPECT_NE(rectangles.physical.dockId, 0U);
@@ -104,8 +106,8 @@ void expectWorkspaceGeometry(const WorkspaceRects &rectangles, ImVec2 displaySiz
   EXPECT_NE(rectangles.postProcessing.dockId, 0U);
   EXPECT_NE(rectangles.curve.dockId, 0U);
   EXPECT_NE(rectangles.intel.dockId, 0U);
-  if (workspace == ui::WorkspaceKind::Gororoba) {
-    expectGororobaPanels(rectangles);
+  if (workspace == ui::WorkspaceKind::ProperTime) {
+    expectProperTimePanels(rectangles);
   }
   EXPECT_TRUE(separated(rectangles.viewport, rectangles.rail));
   EXPECT_TRUE(separated(rectangles.viewport, rectangles.lower));
@@ -147,12 +149,12 @@ void checkWorkspace(const ImVec2 displaySize, const ImVec2 framebufferScale,
 TEST(WorkspaceLayout, DeterministicAtCanonicalSizes) {
   for (const ImVec2 displaySize : {ImVec2(1280, 720), ImVec2(1920, 1080)}) {
     for (const ui::WorkspaceKind workspace :
-         {ui::WorkspaceKind::Simulator, ui::WorkspaceKind::Gororoba,
+         {ui::WorkspaceKind::Simulator, ui::WorkspaceKind::ProperTime,
           ui::WorkspaceKind::Diagnostics}) {
       checkWorkspace(displaySize, ImVec2(1, 1), workspace);
     }
   }
-  checkWorkspace(ImVec2(1280, 720), ImVec2(2, 2), ui::WorkspaceKind::Gororoba);
+  checkWorkspace(ImVec2(1280, 720), ImVec2(2, 2), ui::WorkspaceKind::ProperTime);
 }
 
 TEST(WorkspacePresentation, BasicControlsUseStablePlayerLabels) {

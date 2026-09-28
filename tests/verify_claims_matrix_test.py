@@ -129,10 +129,10 @@ class ClaimsMatrixTest(unittest.TestCase):
         self.assertEqual(summary["schema_version"], 1)
         self.assertEqual(
             set(summary["products"]),
-            {"blackhole_simulator_workbench", "singularity_gororoba"},
+            {"blackhole_simulator_workbench", "singularity_proper_time"},
         )
         simulator = summary["products"]["blackhole_simulator_workbench"]
-        game = summary["products"]["singularity_gororoba"]
+        game = summary["products"]["singularity_proper_time"]
         self.assertEqual(
             set(simulator) - {"maturity"},
             {

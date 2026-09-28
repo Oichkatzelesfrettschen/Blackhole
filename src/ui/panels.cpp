@@ -1066,14 +1066,14 @@ void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace) {
   ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->WorkSize);
 
   ImGuiID dockMainId = dockspaceId;
-  const float railFraction = workspace == WorkspaceKind::Gororoba ? 0.40f : 0.31f;
+  const float railFraction = workspace == WorkspaceKind::ProperTime ? 0.40f : 0.31f;
   ImGuiID dockLeftId =
       ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Left, railFraction, nullptr, &dockMainId);
   const ImGuiID dockLeftDownId = ImGui::DockBuilderSplitNode(
-      dockLeftId, ImGuiDir_Down, workspace == WorkspaceKind::Gororoba ? 0.42f : 0.50f,
-      nullptr, &dockLeftId);
+      dockLeftId, ImGuiDir_Down, workspace == WorkspaceKind::ProperTime ? 0.42f : 0.50f, nullptr,
+      &dockLeftId);
   ImGui::DockBuilderDockWindow("Viewport", dockMainId);
-  if (workspace == WorkspaceKind::Gororoba) {
+  if (workspace == WorkspaceKind::ProperTime) {
     ImGui::DockBuilderDockWindow("System/Strategic Map", dockLeftDownId);
     ImGui::DockBuilderDockWindow("Operations", dockLeftId);
     ImGui::DockBuilderDockWindow("Intelligence", dockLeftId);
