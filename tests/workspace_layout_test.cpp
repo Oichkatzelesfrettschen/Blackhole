@@ -49,16 +49,22 @@ struct WorkspaceRects {
   WindowRect postProcessing;
   WindowRect curve;
   WindowRect intel;
+  WindowRect objectives;
+  WindowRect events;
+  WindowRect physical;
 };
 
 WorkspaceRects drawWorkspaceWindows(ui::WorkspaceKind workspace) {
   return {.viewport = drawWindow("Viewport"),
-          .rail = drawWindow(workspace == ui::WorkspaceKind::Gororoba ? "Campaign" : "Settings"),
+          .rail = drawWindow(workspace == ui::WorkspaceKind::Gororoba ? "Operations" : "Settings"),
           .lower =
-              drawWindow(workspace == ui::WorkspaceKind::Gororoba ? "Strategic Map" : "Controls"),
+              drawWindow(workspace == ui::WorkspaceKind::Gororoba ? "System/Strategic Map" : "Controls"),
           .postProcessing = drawWindow("Post Processing"),
           .curve = drawWindow("Curve Overlay"),
-          .intel = drawWindow("Campaign Intel")};
+          .intel = drawWindow(workspace == ui::WorkspaceKind::Gororoba ? "Intelligence" : "Campaign Intel"),
+          .objectives = drawWindow("Objectives"),
+          .events = drawWindow("Event Log"),
+          .physical = drawWindow("Physical Viewport")};
 }
 
 WorkspaceRects runLayoutPass(ui::WorkspaceKind workspace) {
@@ -84,13 +90,23 @@ void expectProtectedViewport(const WindowRect &viewport) {
   EXPECT_NE(viewportNode->LocalFlags & static_cast<int>(ImGuiDockNodeFlags_NoDockingSplit), 0);
 }
 
-void expectWorkspaceGeometry(const WorkspaceRects &rectangles, ImVec2 displaySize) {
+void expectGororobaPanels(const WorkspaceRects &rectangles) {
+  EXPECT_NE(rectangles.objectives.dockId, 0U);
+  EXPECT_NE(rectangles.events.dockId, 0U);
+  EXPECT_NE(rectangles.physical.dockId, 0U);
+}
+
+void expectWorkspaceGeometry(const WorkspaceRects &rectangles, ImVec2 displaySize,
+                             ui::WorkspaceKind workspace) {
   expectProtectedViewport(rectangles.viewport);
   EXPECT_NE(rectangles.rail.dockId, 0U);
   EXPECT_NE(rectangles.lower.dockId, 0U);
   EXPECT_NE(rectangles.postProcessing.dockId, 0U);
   EXPECT_NE(rectangles.curve.dockId, 0U);
   EXPECT_NE(rectangles.intel.dockId, 0U);
+  if (workspace == ui::WorkspaceKind::Gororoba) {
+    expectGororobaPanels(rectangles);
+  }
   EXPECT_TRUE(separated(rectangles.viewport, rectangles.rail));
   EXPECT_TRUE(separated(rectangles.viewport, rectangles.lower));
   EXPECT_TRUE(separated(rectangles.rail, rectangles.lower));
@@ -121,9 +137,9 @@ void checkWorkspace(const ImVec2 displaySize, const ImVec2 framebufferScale,
   ASSERT_GT(atlasHeight, 0);
 
   const WorkspaceRects original = runLayoutPass(workspace);
-  expectWorkspaceGeometry(original, displaySize);
+  expectWorkspaceGeometry(original, displaySize, workspace);
   const WorkspaceRects repeated = runLayoutPass(workspace);
-  expectWorkspaceGeometry(repeated, displaySize);
+  expectWorkspaceGeometry(repeated, displaySize, workspace);
   expectSameWorkspace(original, repeated);
   ImGui::DestroyContext();
 }

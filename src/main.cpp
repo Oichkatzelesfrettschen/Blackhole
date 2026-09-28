@@ -131,6 +131,7 @@
 #include "texture.h"
 #include "tracy_support.h"
 #include "ui/campaign_panels.h"
+#include "ui/constellation_panels.h"
 #include "ui/observer_panels.h"
 #include "ui/panels.h"
 #include "ui/settings_window.h"
@@ -1435,25 +1436,18 @@ void prepareFrameTextures(RenderState &rs, const platform::CliOptions &cli,
   }
 }
 
-void initializeWorkspaceLayout(Settings &settings, ui::CampaignUiState &campaignUi,
+void initializeWorkspaceLayout(Settings &settings, const ui::CampaignUiState &campaignUi,
                                RenderState &rs) {
   if (campaignUi.windowsOpen) {
-    settings.workspaceKind = static_cast<int>(ui::WorkspaceKind::Gororoba);
-  } else if (settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Gororoba)) {
-    campaignUi.windowsOpen = true;
+    settings.workspaceKind = static_cast<int>(ui::WorkspaceKind::Diagnostics);
   }
   rs.overlays.firstLayout = settings.workspaceSchemaVersion != ui::K_WORKSPACE_SCHEMA_VERSION ||
                             !std::filesystem::exists(ImGui::GetIO().IniFilename);
 }
 
-void prepareWorkspaceDockspace(ImGuiID dockspaceId, Settings &settings,
-                               ui::CampaignUiState &campaignUi, RenderState &rs) {
+void prepareWorkspaceDockspace(ImGuiID dockspaceId, Settings &settings, RenderState &rs) {
   ImGui::DockSpaceOverViewport(dockspaceId, ImGui::GetMainViewport(), ImGuiDockNodeFlags_None);
   if (rs.overlays.firstLayout) {
-    if (settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Gororoba)) {
-      campaignUi.windowsOpen = true;
-      campaignUi.focusCampaignWindow = true;
-    }
     resetLayout(dockspaceId, static_cast<ui::WorkspaceKind>(settings.workspaceKind));
     rs.overlays.firstLayout = false;
     settings.workspaceSchemaVersion = ui::K_WORKSPACE_SCHEMA_VERSION;
@@ -1463,10 +1457,31 @@ void prepareWorkspaceDockspace(ImGuiID dockspaceId, Settings &settings,
                                        static_cast<int>(ui::WorkspaceKind::Diagnostics);
 }
 
+void renderModeMenu(Settings &settings, RenderState &rs) {
+  if (!ImGui::BeginMainMenuBar()) {
+    return;
+  }
+  if (ImGui::BeginMenu("Blackhole")) {
+    if (ImGui::MenuItem("Simulator / Workbench", nullptr,
+                        settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Simulator))) {
+      settings.workspaceKind = static_cast<int>(ui::WorkspaceKind::Simulator);
+      rs.overlays.firstLayout = true;
+    }
+    if (ImGui::MenuItem("Singularity: GOROROBA", nullptr,
+                        settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Gororoba))) {
+      settings.workspaceKind = static_cast<int>(ui::WorkspaceKind::Gororoba);
+      rs.overlays.firstLayout = true;
+    }
+    ImGui::EndMenu();
+  }
+  ImGui::EndMainMenuBar();
+}
+
 void renderWorkspacePanels(RenderState &rs, const Settings &settings, GLFWwindow *window,
                            int windowWidth, int windowHeight, float cpuFrameMs,
                            game::CampaignSession &campaignSession,
                            ui::CampaignUiState &campaignUi,
+                           ui::ConstellationUiState &constellationUi,
                            const std::array<ui::CampaignBackdrop, 5> &campaignBackdrops,
                            bool panelsVisible) {
   if (!panelsVisible) {
@@ -1487,6 +1502,8 @@ void renderWorkspacePanels(RenderState &rs, const Settings &settings, GLFWwindow
     renderPerformancePanel(rs, cpuFrameMs);
   }
   if (settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Gororoba)) {
+    ui::renderConstellationPanels(constellationUi, rs);
+  } else if (settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Diagnostics)) {
     ui::renderCampaignWindows(campaignSession, campaignUi, campaignBackdrops.data(),
                               static_cast<int>(campaignBackdrops.size()));
   }
@@ -1575,11 +1592,10 @@ int main(int argc, char **argv) {
     // Curve overlay for plotting (e.g., critical curves)
     RenderState rs;
 
-    // Singularity: GOROROBA campaign: pure game state beside (never inside) the
-    // renderer's RenderState. Windows stay closed unless toggled in the
-    // Campaign panel or opened via BLACKHOLE_CAMPAIGN=1.
+    // The simulator campaign and GOROROBA session own independent game state.
     game::CampaignSession campaignSession;
     ui::CampaignUiState campaignUi;
+    ui::ConstellationUiState constellationUi;
     ui::initCampaignUiFromEnv(campaignUi);
     initializeWorkspaceLayout(settings, campaignUi, rs);
     // Selectable NASA nebula backdrops for the strategic map. Each entry's
@@ -1706,7 +1722,7 @@ int main(int argc, char **argv) {
       // DOCKING & VIEWPORT SETUP (EARLY)
       // ---------------------------------------------------------
       ImGuiID const dockspaceId = ImGui::GetID("MyDockSpace");
-      prepareWorkspaceDockspace(dockspaceId, settings, campaignUi, rs);
+      prepareWorkspaceDockspace(dockspaceId, settings, rs);
 
       ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
       ImGui::Begin("Viewport", nullptr,
@@ -1743,10 +1759,15 @@ int main(int argc, char **argv) {
       */
       syncRenderStateToSettings(rs, settings, input);
 
+      if (input.isUIVisible()) {
+        renderModeMenu(settings, rs);
+      }
+
       // The Settings window owns the Scene selector, so it draws before any
       // code reads rs.scene.mode: dispatch, post-processing, and overlays then
       // see one scene for the whole frame.
-      if (input.isUIVisible()) {
+      if (input.isUIVisible() &&
+          settings.workspaceKind != static_cast<int>(ui::WorkspaceKind::Gororoba)) {
         renderSettingsWindow(rs);
       }
       // The --curve-tsv plot is independent of the scene.
@@ -1807,11 +1828,12 @@ int main(int argc, char **argv) {
 
       // Normal UI panels are hidden in record mode so they don't appear in the video.
       renderWorkspacePanels(rs, settings, window, windowWidth, windowHeight, cpuFrameMs,
-                            campaignSession, campaignUi, campaignBackdrops,
+                            campaignSession, campaignUi, constellationUi, campaignBackdrops,
                             input.isUIVisible() && cli.recordFramesDir.empty());
-      // Real time runs every frame, panels drawn or not: hiding the UI does
-      // not freeze the campaign.
-      ui::pumpCampaignRealtime(campaignSession, campaignUi, static_cast<double>(deltaTime));
+      // The diagnostic campaign clock follows wall time only in its workspace.
+      if (settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Diagnostics)) {
+        ui::pumpCampaignRealtime(campaignSession, campaignUi, static_cast<double>(deltaTime));
+      }
 
       /* --export-frame / --export-raw-frame export before ImGui renders. */
       const FrameOutcome outcome =

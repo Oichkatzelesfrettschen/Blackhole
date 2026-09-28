@@ -96,6 +96,26 @@ struct ConstellationCommand {
   StationKeeping station = StationKeeping::Orbit;
 };
 
+enum class OrderRejection : std::uint8_t {
+  None, InvalidSession, OutcomeKnown, UnknownFleet, FleetInTransit,
+  InvalidTarget, InvalidPlacement, NoLink, InsufficientFuel, DuplicateOrder,
+  NoSignalPath
+};
+
+struct OrderPreview {
+  OrderRejection rejection = OrderRejection::None;
+  SystemId targetSystem = K_INVALID_SYSTEM_ID;
+  int targetBand = 0;
+  double fuelCost = 0.0;
+  double remainingFuel = 0.0;
+  std::int64_t signalTurns = 0;
+  std::int64_t effectTurn = 0;
+  std::int64_t travelTurns = 0;
+  std::int64_t arrivalTurn = 0;
+  bool riskKnown = false;
+  FactionId knownController = K_INVALID_FACTION_ID;
+};
+
 class Constellation {
 public:
   explicit Constellation(ConstellationConfig config);
@@ -126,6 +146,8 @@ public:
    *         authority to where that report placed the fleet: the light path
    *         between authorities plus the radial leg. */
   bool issueCommand(FactionId faction, const ConstellationCommand &command);
+  [[nodiscard]] OrderPreview previewCommand(FactionId faction,
+                                             const ConstellationCommand &command) const;
 
   /** @brief One coordinate turn: advance the clock, deliver due orders/reports/
    *         observations, land arrivals, run each fleet's work, score control,
@@ -231,6 +253,7 @@ private:
   [[nodiscard]] ConstellationFleet *findFleet(FleetId fleetId);
   [[nodiscard]] const ConstellationFleet *findFleet(FleetId fleetId) const;
   [[nodiscard]] double bandRadiusCm(SystemId system, int bandIndex) const;
+  [[nodiscard]] std::vector<PlayerOrderView> playerOrderViews() const;
   [[nodiscard]] bool validBand(SystemId system, int bandIndex) const;
   /** @brief Same rule as CampaignState::placementAllowed, per system. */
   [[nodiscard]] bool placementAllowed(SystemId system, OrbitLane lane, StationKeeping station,
@@ -355,6 +378,10 @@ private:
   // faction's authority last learned about, delayed by the radial leg and the
   // light path between authorities.
   std::vector<std::vector<std::vector<FactionId>>> perceived_;
+  // Presentation timestamps are derived from delivered observations. They do
+  // not affect decisions or the canonical state digest.
+  std::vector<std::vector<std::vector<std::int64_t>>> perceivedSourceTurn_;
+  std::vector<std::vector<std::vector<std::int64_t>>> perceivedArrivalTurn_;
   // lastEmittedController_[systemIndex][bandIndex]: the actual controller when an
   // observation was last emitted, so only changes generate new intel.
   std::vector<std::vector<FactionId>> lastEmittedController_;
