@@ -122,10 +122,12 @@ TEST(RenderOutputMetrics, LimbFollowsDisplacedShadow) {
 TEST(RenderOutputMetrics, DiskSidesAndNearSideEdgeUseDiskTerminals) {
   constexpr int width = 8;
   constexpr int height = 8;
-  std::vector<float> luminance(width * height, 10.0f);
-  std::vector<std::uint8_t> terminals(width * height, BH_TERMINAL_ESCAPE);
+  constexpr std::size_t pixels = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+  std::vector<float> luminance(pixels, 10.0f);
+  std::vector<std::uint8_t> terminals(pixels, BH_TERMINAL_ESCAPE);
   const auto markDisk = [&](int column, int row, float value) {
-    const auto index = static_cast<std::size_t>(row * width + column);
+    const auto index = (static_cast<std::size_t>(row) * static_cast<std::size_t>(width)) +
+                       static_cast<std::size_t>(column);
     terminals[index] = BH_TERMINAL_DISK_HIT;
     luminance[index] = value;
   };

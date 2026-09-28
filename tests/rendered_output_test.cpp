@@ -345,7 +345,8 @@ double criticalEdgeColumnError(const CapturedFrame &frame) {
   const int row = frame.height / 2;
   int rightmostHorizon = -1;
   for (int column = 0; column < frame.width; ++column) {
-    const auto index = static_cast<std::size_t>(row * frame.width + column);
+    const auto index = (static_cast<std::size_t>(row) * static_cast<std::size_t>(frame.width)) +
+                       static_cast<std::size_t>(column);
     if (frame.terminals[index] == BH_TERMINAL_HORIZON) {
       rightmostHorizon = column;
     }
@@ -354,7 +355,7 @@ double criticalEdgeColumnError(const CapturedFrame &frame) {
     return static_cast<double>(frame.width);
   }
   return std::abs(static_cast<double>(rightmostHorizon + 1) -
-                  static_cast<double>(frame.width) / 2.0);
+                  (static_cast<double>(frame.width) / 2.0));
 }
 
 bool contextAvailable() {

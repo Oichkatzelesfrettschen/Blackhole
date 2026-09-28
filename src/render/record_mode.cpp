@@ -12,9 +12,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <format>
+#include <fstream>
 #include <iostream>
+#include <numbers>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -30,6 +31,7 @@
 #include <stb_image_write.h>
 
 #include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <glm/geometric.hpp>
 
 #include "cinematic.h" // K_CINEMATIC_KEYFRAMES / DURATION / FPS
@@ -53,10 +55,10 @@ glm::vec3 referenceSceneAimTarget(std::string_view scene, const glm::vec3 &camer
     return focusTarget;
   }
   const float distance = glm::length(cameraPosition - focusTarget);
-  const float impact = 3.0f * std::sqrt(3.0f);
+  const float impact = 3.0f * std::numbers::sqrt3_v<float>;
   const float lapseSquared = 1.0f - (2.0f / distance);
-  const float sineSquared = impact * impact /
-                            (distance * distance + (1.0f - lapseSquared) * impact * impact);
+  const float sineSquared = (impact * impact) /
+                            ((distance * distance) + ((1.0f - lapseSquared) * impact * impact));
   const float tangent = std::sqrt(sineSquared / (1.0f - sineSquared));
   const glm::vec3 right = buildCameraBasis(cameraPosition, focusTarget, 0.0f)[0];
   return focusTarget + right * (distance * tangent);

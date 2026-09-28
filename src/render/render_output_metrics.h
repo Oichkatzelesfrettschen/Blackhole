@@ -80,7 +80,7 @@ struct DiskImageMetrics {
   DiskImageMetrics result;
   for (int row = 0; row < height; ++row) {
     for (int column = 0; column < width; ++column) {
-      const auto index = static_cast<std::size_t>(row) * static_cast<std::size_t>(width) +
+      const auto index = (static_cast<std::size_t>(row) * static_cast<std::size_t>(width)) +
                          static_cast<std::size_t>(column);
       if (terminals[index] != BH_TERMINAL_DISK_HIT) {
         continue;
@@ -102,10 +102,11 @@ struct DiskImageMetrics {
   }
   const int centerColumn = width / 2;
   for (int row = height / 2; row < height; ++row) {
-    const auto index = static_cast<std::size_t>(row) * static_cast<std::size_t>(width) +
+    const auto index = (static_cast<std::size_t>(row) * static_cast<std::size_t>(width)) +
                        static_cast<std::size_t>(centerColumn);
     if (terminals[index] == BH_TERMINAL_DISK_HIT) {
-      result.nearSideInnerEdgePixels = static_cast<double>(row - height / 2) + 0.5;
+      result.nearSideInnerEdgePixels =
+          (static_cast<double>(row) + 0.5) - (static_cast<double>(height) / 2.0);
       break;
     }
   }
