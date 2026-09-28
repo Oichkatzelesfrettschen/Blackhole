@@ -168,7 +168,7 @@ bool loadGrbModulationLutAssets(std::vector<float> &values, float &timeMin, floa
 }
 
 void updateLuts(RenderState &rs, float spin, float densityV) {
-  spin = std::clamp(spin, -0.99f, 0.99f);
+  spin = std::clamp(spin, -blackhole::K_LUT_SPIN_LIMIT, blackhole::K_LUT_SPIN_LIMIT);
   if (!rs.luts.lutAssetsTried) {
     rs.luts.lutAssetsTried = true;
     rs.luts.lutAssetsLoaded = loadLutAssets(rs.luts.lutAssetEmissivity, rs.luts.lutAssetRedshift, rs.luts.lutAssetSpin);

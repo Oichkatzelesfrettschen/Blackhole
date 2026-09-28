@@ -1628,6 +1628,16 @@ GLuint viewportDisplayTexture(const RenderState &rs, GLuint finalTexture) {
 
 // Workspace captures take a canonical workspace and an explicit framebuffer
 // size, and exclude the scene exports, which own the frame loop's exit.
+// An explicit export size wins, then the fixed reference-scene extent, then
+// the docked viewport.
+int renderTargetExtent(int exportExtent, bool referenceScene, float viewportExtent) {
+  if (exportExtent > 0) {
+    return exportExtent;
+  }
+  return referenceScene ? blackhole::K_REFERENCE_SCENE_EXTENT
+                        : static_cast<int>(viewportExtent);
+}
+
 bool workspaceCaptureOptionsValid(const platform::CliOptions &cli) {
   const bool capture = !cli.workspaceScreenshotPath.empty();
   const bool options = !cli.workspaceName.empty() || cli.windowWidth != 0 ||
@@ -1944,12 +1954,10 @@ int main(int argc, char **argv) {
       ImVec2 viewportSize = ImGui::GetContentRegionAvail();
 
       // Resize render targets to match viewport
-      const int targetWidth = cli.exportWidth > 0 ? cli.exportWidth
-          : (cli.referenceScene.empty() ? static_cast<int>(viewportSize.x)
-                                        : blackhole::K_REFERENCE_SCENE_EXTENT);
-      const int targetHeight = cli.exportHeight > 0 ? cli.exportHeight
-          : (cli.referenceScene.empty() ? static_cast<int>(viewportSize.y)
-                                        : blackhole::K_REFERENCE_SCENE_EXTENT);
+      const int targetWidth =
+          renderTargetExtent(cli.exportWidth, !cli.referenceScene.empty(), viewportSize.x);
+      const int targetHeight =
+          renderTargetExtent(cli.exportHeight, !cli.referenceScene.empty(), viewportSize.y);
       if (targetWidth > 0 && targetHeight > 0 &&
           (targetWidth != rs.targets.renderWidth || targetHeight != rs.targets.renderHeight)) {
         recreateRenderTargets(rs, targetWidth, targetHeight);

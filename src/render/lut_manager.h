@@ -15,6 +15,12 @@
 #include <vector>
 
 namespace blackhole {
+/// |spin| bound of the generated emissivity and redshift LUTs; updateLuts
+/// clamps the requested spin to it while the tracer keeps the full value.
+inline constexpr float K_LUT_SPIN_LIMIT = 0.99f;
+} // namespace blackhole
+
+namespace blackhole {
 
 struct RenderState;
 

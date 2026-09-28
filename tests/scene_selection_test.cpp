@@ -8,7 +8,9 @@
  * command-line contract without a GL context.
  */
 
+#include <algorithm>
 #include <cstdlib>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -18,8 +20,8 @@
 #include <stdlib.h> // NOLINT(modernize-deprecated-headers)
 
 #include "platform/cli_options.h"
-#include "render/env_config.h"
 #include "render/capture_identity.h"
+#include "render/env_config.h"
 #include "render/record_mode.h"
 #include "render/render_state.h"
 
@@ -98,9 +100,10 @@ TEST(SceneSelection, TesseractSceneRejectsRawExportAtStartup) {
 }
 
 TEST(SceneSelection, CaptureIdentitySeparatesTracerAndLutSpin) {
-  blackhole::RenderState state;
-  state.physicsCore.kerrSpin = 0.998f;
-  const blackhole::CaptureIdentity identity = blackhole::captureIdentity(state);
+  // RenderState is large enough to exceed the GCC stack-usage budget.
+  const auto state = std::make_unique<blackhole::RenderState>();
+  state->physicsCore.kerrSpin = 0.998f;
+  const blackhole::CaptureIdentity identity = blackhole::captureIdentity(*state);
   EXPECT_NEAR(identity.tracerSpin, 0.998f, 1.0e-6f);
   EXPECT_NEAR(identity.lutSpin, 0.99f, 1.0e-6f);
   EXPECT_TRUE(identity.lutSpinClamped);
@@ -110,10 +113,10 @@ TEST(SceneSelection, ExportDisplayOptionsParseWithoutRecordMode) {
   std::vector<std::string> arguments = {
       "Blackhole", "--export-frame", "frame.png", "--export-size", "640", "480",
       "--export-exposure", "0.5", "--export-bloom", "0", "--export-tone-mapping", "off"};
-  std::vector<char *> argv;
-  for (std::string &argument : arguments) {
-    argv.push_back(argument.data());
-  }
+  // parseCliOptions takes a mutable argv, so each element points into arguments.
+  std::vector<char *> argv(arguments.size());
+  // cppcheck-suppress constParameterReference
+  std::ranges::transform(arguments, argv.begin(), [](std::string &value) { return value.data(); });
   platform::CliOptions options;
   EXPECT_EQ(platform::parseCliOptions(static_cast<int>(argv.size()), argv.data(), options),
             platform::CliParseOutcome::Run);
