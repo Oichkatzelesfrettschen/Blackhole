@@ -28,10 +28,11 @@
 #include "physics/kerr_observer.h"
 #include "physics/observer_sky_lut.h"
 #include "physics/observer_sky_map.h"
-#include "render/observer_sky_view.h"
 #include "render/observer_sky_footprint.h"
+#include "render/observer_sky_view.h"
 #include "render/render_state.h"
 #include "ui/observer_panels.h"
+#include "ui/ux_explanations.h"
 
 namespace {
 
@@ -41,6 +42,29 @@ using blackhole::ObserverKind;
 
 constexpr double K_PI = std::numbers::pi;
 constexpr double K_STEFAN_BOLTZMANN = 5.670374419e-8; // W m^-2 K^-4 (CODATA 2018, exact form)
+
+TEST(ObserverSkyView, AngularScaleUsesPerspectiveProjection) {
+  const double oneArcminute = ui::angularScaleBarPixels(1.0, 1.0, 1080);
+  EXPECT_NEAR(oneArcminute, 18.0, 0.01);
+  EXPECT_NEAR(ui::angularScaleBarPixels(1.0, 0.1, 1080), 1.8, 0.01);
+  EXPECT_DOUBLE_EQ(ui::angularScaleBarPixels(0.0, 1.0, 1080), 0.0);
+  EXPECT_DOUBLE_EQ(ui::angularScaleBarPixels(1.0, 1.0, 0), 0.0);
+}
+
+TEST(ObserverSkyView, SimulatorExplanationTracksTransferAndDisplayState) {
+  const ui::SimulatorExplanation physical =
+      ui::simulatorExplanation(true, true, false, false, true);
+  EXPECT_NE(physical.disk.find("orbiting gas"), std::string_view::npos);
+  EXPECT_NE(physical.shadow.find("captured"), std::string_view::npos);
+  EXPECT_NE(physical.approachingSide.find("Doppler"), std::string_view::npos);
+  EXPECT_NE(physical.inclination.find("edge-on"), std::string_view::npos);
+  EXPECT_NE(physical.transfer.find("Physical"), std::string_view::npos);
+  EXPECT_NE(physical.display.find("without bloom"), std::string_view::npos);
+  EXPECT_NE(physical.display.find("tone mapping"), std::string_view::npos);
+  const ui::SimulatorExplanation film = ui::simulatorExplanation(false, true, true, true, false);
+  EXPECT_NE(film.transfer.find("film mode"), std::string_view::npos);
+  EXPECT_NE(film.display.find("tone mapping is off"), std::string_view::npos);
+}
 
 TEST(ObserverSkyView, PixelFootprintsConserveTileFluxAcrossFieldsOfView) {
   // mpmath 1.4.1: pi * mpf('0.00003')**2, at 50 decimal digits.
@@ -54,11 +78,10 @@ TEST(ObserverSkyView, PixelFootprintsConserveTileFluxAcrossFieldsOfView) {
   const double logMinimum = std::log(minimumRadius);
   const double logMaximum = std::log(maximumRadius);
   for (int ring = 0; ring < rings; ++ring) {
-    const double radius = std::exp(logMinimum +
-                                   ((logMaximum - logMinimum) * (ring + 1) / rings));
-    cumulativeFlux.at(static_cast<std::size_t>(ring)) = referenceFlux *
-                              ((radius * radius) - (minimumRadius * minimumRadius)) /
-                              ((patchRadius * patchRadius) - (minimumRadius * minimumRadius));
+    const double radius = std::exp(logMinimum + ((logMaximum - logMinimum) * (ring + 1) / rings));
+    cumulativeFlux.at(static_cast<std::size_t>(ring)) =
+        referenceFlux * ((radius * radius) - (minimumRadius * minimumRadius)) /
+        ((patchRadius * patchRadius) - (minimumRadius * minimumRadius));
   }
   for (const double fovDegrees : {0.01, 0.1, 1.0, 3.0, 10.0, 30.0, 100.0}) {
     const double pitch = 2.0 * std::tan(fovDegrees * K_PI / 360.0) / pixelsPerAxis;
@@ -67,9 +90,9 @@ TEST(ObserverSkyView, PixelFootprintsConserveTileFluxAcrossFieldsOfView) {
       for (int column = 0; column < pixelsPerAxis; ++column) {
         const double left = (column - (pixelsPerAxis / 2.0)) * pitch;
         const double bottom = (row - (pixelsPerAxis / 2.0)) * pitch;
-        displayedFlux += blackhole::skyFootprintFlux(cumulativeFlux, logMinimum, logMaximum,
-                                                     {.left = left, .bottom = bottom,
-                                                      .right = left + pitch, .top = bottom + pitch});
+        displayedFlux += blackhole::skyFootprintFlux(
+            cumulativeFlux, logMinimum, logMaximum,
+            {.left = left, .bottom = bottom, .right = left + pitch, .top = bottom + pitch});
       }
     }
     EXPECT_NEAR(displayedFlux / referenceFlux, 1.0, 0.01) << fovDegrees;

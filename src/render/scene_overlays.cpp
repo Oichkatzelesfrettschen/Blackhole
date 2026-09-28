@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <format>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <glbinding/gl/enum.h>
@@ -14,10 +16,13 @@
 #include "hud_overlay.h"
 #include "input.h"
 #include "render.h"
+#include "render/observer_sky_view.h"
 #include "render/render_state.h"
 #include "render/tesseract/tesseract_renderer.h"
 #include "tracy_support.h"
 #include "ui/observer_panels.h"
+#include "ui/settings_window.h"
+#include "ui/ux_explanations.h"
 
 using namespace gl;
 
@@ -61,6 +66,55 @@ void drawObserverDisclosureLabel(RenderState &rs) {
   view.disclosureLabel.render(rs.targets.renderWidth, rs.targets.renderHeight);
 }
 
+void drawObserverViewGuide(RenderState &rs) {
+  const auto &view = rs.observerView;
+  const double barArcminutes = view.fovDeg < 0.1 ? 0.1 : 1.0;
+  const double barPixels =
+      ui::angularScaleBarPixels(view.fovDeg, barArcminutes, rs.targets.renderHeight);
+  HudOverlayOptions options;
+  options.scale = 1.0f;
+  options.margin = 12.0f;
+  options.align = HudOverlayOptions::Align::Left;
+  options.origin = HudOverlayOptions::Origin::BottomLeft;
+  options.drawBackground = true;
+  rs.observerView.viewGuide.setOptions(options);
+  const std::string direction =
+      view.navigation == ObserverNavigation::OrbitCamera
+          ? "Viewing direction: orbit camera"
+          : std::format("Viewing direction: lon {:.4f} deg, lat {:.4f} deg", view.lookLongitudeDeg,
+                        view.lookLatitudeDeg);
+  std::vector<HudOverlayLine> lines = {
+      {.text = direction, .background = glm::vec4(0.0f, 0.0f, 0.0f, 0.65f)},
+      {.text = std::format("Angular bar: {:.3g} arcmin = {:.1f} px", barArcminutes, barPixels),
+       .background = glm::vec4(0.0f, 0.0f, 0.0f, 0.65f)}};
+  if (view.fovDeg < 5.0) {
+    lines.push_back({.text = "Inset: full observer sky; cross marks viewing direction",
+                     .background = glm::vec4(0.0f, 0.0f, 0.0f, 0.65f)});
+  }
+  rs.observerView.viewGuide.setLines(lines);
+  rs.observerView.viewGuide.render(rs.targets.renderWidth, rs.targets.renderHeight);
+}
+
+void drawSimulatorExplanation(RenderState &rs) {
+  const ui::SimulatorExplanation explanation = ui::simulatorExplanation(
+      rs.disk.adiskEnabled, ui::kerrDiskShadingActive(rs), rs.disk.diskTransferMode == 1,
+      rs.post.bloomStrength > 0.0f, rs.post.tonemappingEnabled);
+  HudOverlayOptions options;
+  options.scale = 1.0f;
+  options.margin = 12.0f;
+  options.origin = HudOverlayOptions::Origin::BottomLeft;
+  options.drawBackground = true;
+  rs.overlays.simulatorExplanation.setOptions(options);
+  std::vector<HudOverlayLine> lines;
+  for (const std::string_view line :
+       {explanation.disk, explanation.shadow, explanation.approachingSide, explanation.inclination,
+        explanation.transfer, explanation.display}) {
+    lines.push_back({.text = std::string(line), .background = glm::vec4(0.0f, 0.0f, 0.0f, 0.65f)});
+  }
+  rs.overlays.simulatorExplanation.setLines(lines);
+  rs.overlays.simulatorExplanation.render(rs.targets.renderWidth, rs.targets.renderHeight);
+}
+
 } // namespace
 
 void composeSceneOverlays(RenderState &rs, const InputManager &input, GLuint finalTexture,
@@ -69,8 +123,7 @@ void composeSceneOverlays(RenderState &rs, const InputManager &input, GLuint fin
     glGenFramebuffers(1, &rs.targets.sceneFbo);
   }
   glBindFramebuffer(GL_FRAMEBUFFER, rs.targets.sceneFbo);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, finalTexture,
-                         0);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, finalTexture, 0);
   glViewport(0, 0, rs.targets.renderWidth, rs.targets.renderHeight);
 
   // 1. Wiregrid BL-coord overlay -- implemented in task A2 (fragment shader)
@@ -98,7 +151,8 @@ void composeSceneOverlays(RenderState &rs, const InputManager &input, GLuint fin
         glDeleteTextures(1, &rs.grmhd.texGrmhdSlice);
         rs.grmhd.texGrmhdSlice = 0;
       }
-      rs.grmhd.texGrmhdSlice = createColorTexture32f(rs.grmhd.grmhdSliceSize, rs.grmhd.grmhdSliceSize);
+      rs.grmhd.texGrmhdSlice =
+          createColorTexture32f(rs.grmhd.grmhdSliceSize, rs.grmhd.grmhdSliceSize);
       rs.grmhd.grmhdSliceSizeCached = rs.grmhd.grmhdSliceSize;
     }
 
@@ -173,6 +227,9 @@ void composeSceneOverlays(RenderState &rs, const InputManager &input, GLuint fin
   // presented texture so exported and recorded frames keep it too.
   if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
     drawObserverDisclosureLabel(rs);
+    drawObserverViewGuide(rs);
+  } else if (rs.scene.mode == RenderState::SceneMode::Blackhole) {
+    drawSimulatorExplanation(rs);
   }
 
   // 4. HUD Overlays (Perf/Controls)

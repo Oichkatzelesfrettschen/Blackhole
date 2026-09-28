@@ -41,6 +41,7 @@
 #include "platform/resource_paths.h"
 #include "render.h"
 #include "render/render_state.h"
+#include "ui/ux_explanations.h"
 
 using namespace gl;
 
@@ -669,6 +670,10 @@ void renderObserverSkyScene(RenderState &rs, const glm::mat3 &cameraBasis, float
   rtti.floatUniforms["logLuminanceMin"] = view.logLuminanceMin;
   rtti.floatUniforms["logLuminanceMax"] = view.logLuminanceMax;
   rtti.floatUniforms["displayPeak"] = view.displayPeak;
+  const double barArcminutes = view.fovDeg < 0.1 ? 0.1 : 1.0;
+  rtti.floatUniforms["scaleBarPixels"] = static_cast<float>(
+      ui::angularScaleBarPixels(view.fovDeg, barArcminutes, rtti.height));
+  rtti.floatUniforms["showOverview"] = view.fovDeg < 5.0 ? 1.0F : 0.0F;
   if (lut) {
     const sky::LogPolarTile &tile = lut->tile;
     const auto vec3 = [](const sky::Vec3 &v) {

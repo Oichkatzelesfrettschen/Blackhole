@@ -21,6 +21,7 @@
 #include "game/fleet.h"
 #include "game/station_node.h"
 #include "ui/campaign_panels.h"
+#include "ui/ux_explanations.h"
 
 namespace ui {
 
@@ -36,6 +37,8 @@ constexpr float K_HIT_RADIUS_PX = 14.0f;
 
 struct MapScale {
   ImVec2 center;
+  ImVec2 origin;
+  ImVec2 size;
   float maxRadiusPx = 0.0f;
   double rMinCm = 1.0;
   double rMaxCm = 10.0;
@@ -43,9 +46,19 @@ struct MapScale {
   [[nodiscard]] float pixelRadius(double radiusCm) const {
     const double clamped = std::clamp(radiusCm, rMinCm, rMaxCm);
     const double normalized = std::log(clamped / rMinCm) / std::log(rMaxCm / rMinCm);
-    return maxRadiusPx * (K_CORE_FRACTION + ((1.0f - K_CORE_FRACTION) * static_cast<float>(normalized)));
+    return maxRadiusPx *
+           (K_CORE_FRACTION + ((1.0f - K_CORE_FRACTION) * static_cast<float>(normalized)));
   }
 };
+
+void drawBoundedText(ImDrawList *drawList, const MapScale &scale, ImVec2 desired, ImU32 color,
+                     const char *text) {
+  const ImVec2 textSize = ImGui::CalcTextSize(text);
+  const BoundedLabelPosition position =
+      boundedMapLabel(desired.x, desired.y, textSize.x, textSize.y, scale.origin.x, scale.origin.y,
+                      scale.size.x, scale.size.y);
+  drawList->AddText({position.x, position.y}, color, text);
+}
 
 ImVec2 ringPoint(const MapScale &scale, double radiusCm, float angleRad) {
   const float radiusPx = scale.pixelRadius(radiusCm);
@@ -69,8 +82,8 @@ float signalProgress(std::int64_t nowTurn, std::int64_t fromTurn, std::int64_t u
   if (untilTurn <= fromTurn) {
     return 1.0f;
   }
-  const float fraction = static_cast<float>(nowTurn - fromTurn) /
-                         static_cast<float>(untilTurn - fromTurn);
+  const float fraction =
+      static_cast<float>(nowTurn - fromTurn) / static_cast<float>(untilTurn - fromTurn);
   return std::clamp(fraction, 0.0f, 1.0f);
 }
 
@@ -83,8 +96,7 @@ ImVec2 lerp(const ImVec2 &a, const ImVec2 &b, float t) {
 // across frames and runs without storing anything. A couple of dim nebula
 // washes tint the dark. This is procedural art -- no texture, no RAM cost.
 void drawStarfield(ImDrawList *drawList, const ImVec2 &origin, const ImVec2 &size) {
-  drawList->AddRectFilled(origin, {origin.x + size.x, origin.y + size.y},
-                          IM_COL32(6, 8, 16, 255));
+  drawList->AddRectFilled(origin, {origin.x + size.x, origin.y + size.y}, IM_COL32(6, 8, 16, 255));
   // Two broad nebula washes (layered translucent fills approximate a glow).
   const ImVec2 nebulaA = {origin.x + (size.x * 0.30f), origin.y + (size.y * 0.28f)};
   const ImVec2 nebulaB = {origin.x + (size.x * 0.72f), origin.y + (size.y * 0.70f)};
@@ -102,8 +114,8 @@ void drawStarfield(ImDrawList *drawList, const ImVec2 &origin, const ImVec2 &siz
     const float y = origin.y + ((static_cast<float>(hy % 1000U) / 1000.0f) * size.y);
     const int brightness = 90 + static_cast<int>(hb % 150U);
     const float radius = (hb % 17U) == 0U ? 1.6f : 0.8f; // a few brighter stars
-    drawList->AddCircleFilled({x, y}, radius, IM_COL32(brightness, brightness, brightness + 20, 255),
-                              6);
+    drawList->AddCircleFilled({x, y}, radius,
+                              IM_COL32(brightness, brightness, brightness + 20, 255), 6);
   }
 }
 
@@ -152,8 +164,8 @@ void drawFrameDragArc(ImDrawList *drawList, const ImVec2 &center, float corePx) 
 // extraction a downward drill triangle, research a lens, fabrication a frame,
 // relay a dish, verification a check. All ImDrawList primitives -- procedural,
 // no sprite sheet.
-void drawCapabilityIcon(ImDrawList *drawList, const ImVec2 &center, game::FleetCapability capability,
-                        ImU32 color) {
+void drawCapabilityIcon(ImDrawList *drawList, const ImVec2 &center,
+                        game::FleetCapability capability, ImU32 color) {
   const float s = 4.5f;
   switch (capability) {
   case game::FleetCapability::Extraction:
@@ -208,7 +220,8 @@ void drawOrbitalBands(ImDrawList *drawList, const MapScale &scale,
       drawGlow(drawList, scale.center, bandPx, ringColor);
     }
     drawList->AddCircle(scale.center, bandPx, ringColor, 96, thickness);
-    drawList->AddText(
+    drawBoundedText(
+        drawList, scale,
         {scale.center.x + (bandPx * 0.7071f) + 6.0f, scale.center.y - (bandPx * 0.7071f) - 6.0f},
         IM_COL32(200, 200, 210, 255), label.c_str());
   }
@@ -300,8 +313,9 @@ std::vector<StationPos> drawColonies(ImDrawList *drawList, const MapScale &scale
     stations.push_back({.node = node.id, .pos = pos});
     drawGlow(drawList, pos, 7.0f, IM_COL32(120, 230, 150, 255));
     drawList->AddCircleFilled(pos, 5.5f, IM_COL32(120, 230, 150, 255), 24);
-    drawList->AddText({pos.x + 8.0f, pos.y - 8.0f}, IM_COL32(150, 240, 170, 255),
-                      remoteLabel(view, node, "colony").c_str());
+    const std::string label = remoteLabel(view, node, "colony");
+    drawBoundedText(drawList, scale, {pos.x + 8.0f, pos.y - 8.0f}, IM_COL32(150, 240, 170, 255),
+                    label.c_str());
   }
   return stations;
 }
@@ -321,7 +335,6 @@ void drawStationSignals(ImDrawList *drawList, const game::CampaignViewSnapshot &
   }
 }
 
-
 } // namespace
 
 void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState &uiState,
@@ -330,6 +343,9 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
     ImGui::End();
     return;
   }
+
+  const std::string schematicLegend(K_MAP_SCHEMATIC_LEGEND);
+  ImGui::TextWrapped("%s", schematicLegend.c_str());
 
   const ImVec2 canvasOrigin = ImGui::GetCursorScreenPos();
   ImVec2 canvasSize = ImGui::GetContentRegionAvail();
@@ -341,8 +357,12 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
   const bool canvasClicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
 
   ImDrawList *drawList = ImGui::GetWindowDrawList();
+  drawList->PushClipRect(canvasOrigin,
+                         {canvasOrigin.x + canvasSize.x, canvasOrigin.y + canvasSize.y}, true);
   drawMapBackdrop(drawList, canvasOrigin, canvasSize, backdropTextureId);
   MapScale scale;
+  scale.origin = canvasOrigin;
+  scale.size = canvasSize;
   scale.center = {canvasOrigin.x + (canvasSize.x * 0.5f), canvasOrigin.y + (canvasSize.y * 0.5f)};
   scale.maxRadiusPx = (0.5f * std::min(canvasSize.x, canvasSize.y)) - 8.0f;
 
@@ -361,9 +381,10 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
     drawList->AddCircleFilled(scale.center, ergoPx, IM_COL32(70, 45, 15, 90), 96);
     drawGlow(drawList, scale.center, ergoPx, IM_COL32(210, 150, 60, 255));
     drawList->AddCircle(scale.center, ergoPx, IM_COL32(210, 150, 60, 200), 96, 1.5f);
-    drawList->AddText({scale.center.x + (ergoPx * 0.7071f) + 4.0f,
-                       scale.center.y + (ergoPx * 0.7071f) + 4.0f},
-                      IM_COL32(210, 150, 60, 220), "ergosphere");
+    drawBoundedText(
+        drawList, scale,
+        {scale.center.x + (ergoPx * 0.7071f) + 4.0f, scale.center.y + (ergoPx * 0.7071f) + 4.0f},
+        IM_COL32(210, 150, 60, 220), "ergosphere");
   }
 
   // Horizon core: the forbidden zone every other radius is measured from.
@@ -386,8 +407,9 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
                       IM_COL32(120, 140, 220, 140), 96, 1.0f);
   drawGlow(drawList, authorityPos, 7.0f, IM_COL32(120, 140, 220, 255));
   drawList->AddCircleFilled(authorityPos, 6.0f, IM_COL32(120, 140, 220, 255), 24);
-  drawList->AddText({authorityPos.x + 8.0f, authorityPos.y - 8.0f},
-                    IM_COL32(150, 170, 240, 255), authorityLabel(view).c_str());
+  const std::string authority = authorityLabel(view);
+  drawBoundedText(drawList, scale, {authorityPos.x + 8.0f, authorityPos.y - 8.0f},
+                  IM_COL32(150, 170, 240, 255), authority.c_str());
 
   const std::vector<StationPos> stations = drawColonies(drawList, scale, view, authorityPos);
   const auto nodePos = [&stations, authorityPos](game::NodeId id) {
@@ -437,7 +459,8 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
     drawCapabilityIcon(drawList, {pos.x + 12.0f, pos.y}, fleet.capability,
                        IM_COL32(235, 235, 240, 255));
     const char laneText[2] = {fleet.lane == game::OrbitLane::Retrograde ? '-' : '+', '\0'};
-    drawList->AddText({pos.x + 18.0f, pos.y - 7.0f}, IM_COL32(200, 200, 210, 255), laneText);
+    drawBoundedText(drawList, scale, {pos.x + 18.0f, pos.y - 7.0f}, IM_COL32(200, 200, 210, 255),
+                    laneText);
   }
 
   const auto markerFor = [&markers](game::FleetId fleetId) -> const Marker * {
@@ -503,6 +526,7 @@ void renderStrategicMap(const game::CampaignViewSnapshot &view, CampaignUiState 
 
   // Drawn last so the legend sits above the map and stays readable.
   drawMapLegend(drawList, canvasOrigin, canvasSize);
+  drawList->PopClipRect();
 
   ImGui::End();
 }
