@@ -27,10 +27,13 @@ The verifier checks that:
 - an applicable registered test supplies the claim's required evidence class
 - conditional test requirements match explicit BOOL values in `CMakeCache.txt`
 - a report is written under `build/*/reports/physics_claims.md`
+- an optional rendered-output receipt records a passing shipping-pixel test
 
-The report establishes file presence, declared evidence class, and test registration. Test execution,
-numerical accuracy, rendered-image validation, and CUDA device execution require
-their own test results. A CPU configuration records CUDA obligations as
+The ordinary report establishes file presence, declared evidence class, and
+test registration. A rendered-output claim stays execution-pending until
+`scripts/ci/render_output_probe.sh` runs the test and invokes the verifier
+with `--require-render-passing`. Numerical accuracy and CUDA device execution
+require their own test results. A CPU configuration records CUDA obligations as
 `not-applicable`; the report preserves their names and the `ENABLE_CUDA=OFF`
 evidence. A CUDA configuration requires every declared CUDA test registration.
 
@@ -52,10 +55,12 @@ Evidence classes are `formula-unit`, `component-integration`,
 `shared-path-parity`, `independent-oracle`, `render-output`, and
 `observational-calibration`. The verifier requires an exact class match. Class
 labels are manifest assertions subject to source review, not automatic proof of
-test semantics. `eht_shadow_validation` generates an analytic observable and is
-classified `mock-observable`; it cannot support `render-output` or
-`observational-calibration`. Its comparison with published ring diameters is
-context for an analytic scale, not calibration of shipping renderer pixels.
+test semantics. `analytic_shadow_size_validation` checks a closed-form
+observable and is classified `formula-unit`; its published ring-diameter
+comparisons provide scale context. `rendered_output_validation` produces
+shipping desktop pixels and is classified `render-output`. The verifier marks
+that claim as validated only when the offscreen runner leaves a passing
+execution receipt. The image tests do not establish observational calibration.
 
 Run the applicability and failure-path regressions with
 `ctest --preset docs -R physics_claims_verifier --output-on-failure`.

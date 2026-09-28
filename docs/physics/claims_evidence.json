@@ -98,11 +98,11 @@
     },
     {
       "id": "eht_observables",
-      "claim": "The repository computes EHT-facing visibility observables and checks the analytic Schwarzschild shadow angular size (critical impact parameter b_c = 3 sqrt(3) M) against its closed form and for consistency with the EHT-measured M87*/Sgr A* ring diameters, which are set by but not identical to the shadow's b_c critical curve, with local tests. Rendered-image shadow validation (photon-ring brightness, Kerr asymmetry) is not covered by these tests.",
+      "claim": "The repository computes EHT-facing visibility observables and checks the analytic Schwarzschild critical impact parameter against its closed form. The analytic diameter comparison does not measure renderer pixels.",
       "status": "test-registration",
       "files": [
         "src/physics/eht_visibility.h",
-        "tests/eht_shadow_test.cpp",
+        "tests/analytic_shadow_size_test.cpp",
         "tests/eht_visibility_test.cpp"
       ],
       "tests": [
@@ -111,8 +111,8 @@
           "evidence_class": "formula-unit"
         },
         {
-          "name": "eht_shadow_validation",
-          "evidence_class": "mock-observable"
+          "name": "analytic_shadow_size_validation",
+          "evidence_class": "formula-unit"
         },
         {
           "name": "phase5_multiwavelength_validation",
@@ -120,6 +120,23 @@
         }
       ],
       "required_evidence_class": "formula-unit"
+    },
+    {
+      "id": "rendered_eht_geometry",
+      "claim": "The shipping renderer's Schwarzschild critical-curve pixels are measured against an independent camera and impact-parameter oracle when the rendered-output execution receipt passes.",
+      "status": "execution-gated",
+      "files": [
+        "src/render/render_output_metrics.h",
+        "tests/rendered_output_test.cpp"
+      ],
+      "tests": [
+        {
+          "name": "rendered_output_validation",
+          "requires": ["ENABLE_DESKTOP_APP"],
+          "evidence_class": "render-output"
+        }
+      ],
+      "required_evidence_class": "render-output"
     },
     {
       "id": "grmhd_ingestion_streaming",

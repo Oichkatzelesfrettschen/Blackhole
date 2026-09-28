@@ -95,6 +95,21 @@ void applyShowcaseBeautyWiregridTuning(std::string_view compositionArg, Wiregrid
 bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, InputManager &input,
                              GLFWwindow *window);
 
+/** @brief Square render-target extent, in pixels, of every --reference-scene capture. */
+inline constexpr int K_REFERENCE_SCENE_EXTENT = 160;
+
+/**
+ * @brief True for the backlit reference scenes (A, C+, C-, D): disk off and a
+ *        uniform bright sky, so the captured region is the shadow alone.
+ */
+[[nodiscard]] inline bool referenceSceneBacklit(std::string_view scene) {
+  return scene == "A" || scene == "C+" || scene == "C-" || scene == "D";
+}
+
+/** @brief Applies the fixed reference camera, source, and numerical controls. */
+void applyReferenceSceneSetup(RenderState &rs, const platform::CliOptions &cli,
+                              InputManager &input, GLFWwindow *window);
+
 /**
  * @brief Replace @p cam's distance and field of view with --record-distance
  *        and --record-fov where given.

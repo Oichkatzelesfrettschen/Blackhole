@@ -1,5 +1,5 @@
 /**
- * @file eht_shadow_test.cpp
+ * @file analytic_shadow_size_test.cpp
  * @brief Analytic Schwarzschild shadow-size self-consistency checks.
  *
  * The angular size of a black-hole shadow seen by a distant observer is set by

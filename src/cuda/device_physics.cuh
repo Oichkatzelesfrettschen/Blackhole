@@ -1469,19 +1469,6 @@ __device__ __forceinline__ float3 d_sample_galaxy_cubemap(float3 dir) {
     return d_scale(sum, 0.2f);
 }
 
-__device__ __forceinline__ float3 d_sample_background_equirect(float3 dir) {
-    if (!d_tex_background_equirect) {
-        return make_f3(0.0f, 0.0f, 0.0f);
-    }
-
-    float3 const n = d_rotate_background_dir(d_normalize(dir));
-    float2 const uv = d_dir_to_uv(n);
-    float const u = uv.x;
-    float const v = uv.y;
-    float4 const s = tex2DLod<float4>((cudaTextureObject_t)d_tex_background_equirect, u, v, 0.0f);
-    return d_srgb_to_linear(make_f3(s.x, s.y, s.z));
-}
-
 __device__ __forceinline__ float3 d_sample_background_equirect_layered(float3 dir, float *weight_out) {
     if (weight_out != nullptr) {
         *weight_out = 0.0f;
@@ -1573,7 +1560,10 @@ __device__ __forceinline__ float3 d_sample_background_equirect_layered(float3 di
  *      squarings) with temperature-varied colour (blue-white / yellow-white /
  *      orange) plus a dim ambient nebula glow scaled by d_background_intensity.
  *
- * Returns black if d_background_enabled is 0.
+ * d_background_enabled gates the layered equirect backdrop, whose positive
+ * layer weight replaces the cubemap sample scaled by d_background_intensity,
+ * as bhBackgroundColorFromDir does, and the procedural field; a registered
+ * cubemap is the sky on both backends whatever the flag.
  *
  * @param dir Escaped ray direction (normalised in d_shade_hit).
  * @return RGBA float4 sky colour.
@@ -1596,27 +1586,25 @@ __device__ __forceinline__ float3 d_physics_to_world(float3 v) {
 
 /** @brief Sky color for a physics-frame direction (the textures are world-frame). */
 __device__ __forceinline__ float4 d_background_color(float3 dir) {
-    if (!d_background_enabled) {
-        return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
-    }
     float3 n = d_normalize(d_physics_to_world(dir));
     n = d_rotate_about_axis(n, make_f3(0.0f, 1.0f, 0.0f), d_time_sec);
 
-    if (d_tex_background_equirect) {
+    if (d_background_enabled && d_tex_background_equirect) {
         float layer_weight = 0.0f;
-        float3 sky = d_sample_background_equirect_layered(n, &layer_weight);
-        if (layer_weight <= 0.0f) {
-            sky = d_sample_background_equirect(n);
+        float3 layer = d_sample_background_equirect_layered(n, &layer_weight);
+        if (layer_weight > 0.0f) {
+            layer = d_scale(layer, d_background_intensity);
+            return make_float4(layer.x, layer.y, layer.z, 1.0f);
         }
-        sky = d_scale(sky, d_background_intensity);
-        return make_float4(sky.x, sky.y, sky.z, 1.0f);
     }
 
-    /* If galaxy cubemap is registered, sample it directly (matches GL path). */
+    /* The galaxy cubemap is the sky under the backdrop on both backends. */
     if (d_tex_galaxy) {
         float3 sky = d_sample_galaxy_cubemap(n);
-        sky = d_scale(sky, d_background_intensity);
         return make_float4(sky.x, sky.y, sky.z, 1.0f);
+    }
+    if (!d_background_enabled) {
+        return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
 
     /* Procedural star field: hash-based point stars */

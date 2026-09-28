@@ -250,6 +250,7 @@ struct RenderState {
     bool curveOverlayLoaded = false;
     HudOverlay controlsOverlay;
     HudOverlay simulatorExplanation;
+    bool simulatorExplanationEnabled = true; ///< Draws the explanation lines into the scene.
     bool controlsOverlayReady = false;
     bool controlsOverlayConfigInit = false;
     bool controlsOverlayEnabled = true;
@@ -460,6 +461,9 @@ struct RenderState {
   } terminalDiagnostics;
 
   struct RecordingGroup {
+    // --reference-scene: fixed validation capture state
+    bool referenceInitDone = false;
+    bool referenceBackgroundReady = false;
       // --record-frames: cinematic recording state
     bool         recordInitDone    = false;
     int          recordFrameIndex  = 0; // assigned from recordStartFrame after construction
