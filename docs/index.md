@@ -84,6 +84,7 @@ maintaining separate release evidence.
 
 ## Validation
 
+- [Capture Identity and Comparisons](validation/capture-identity-and-comparisons.md) -- frame identity and fixed display/observer capture sweeps
 - [Default Renderer Promotion](validation/default-renderer-promotion.md) -- startup-camera captures and GPU timing for legacy beauty and the default contract
 - [Rendered-Output Lane](validation/rendered-output-lane.md) -- deterministic desktop captures, analytic geometry, image metrics, and offscreen CI
 - [Workspace Screenshot Lane](validation/workspace-screenshot-lane.md) -- full UI captures and dock layout assertions in CI

@@ -39,6 +39,14 @@ struct CliOptions {
   int         recordFramesTotal = 0; ///< Seeded to K_CINEMATIC_FRAMES by parseCliOptions.
   int         recordStartFrame  = 0;
   int         exportFrames = 0; ///< Zero preserves the normal five-frame export warmup.
+  int         exportWidth = 0;
+  int         exportHeight = 0;
+  float       exportExposure = 1.0f;
+  float       exportBloomStrength = 0.0f;
+  bool        hasExportExposure = false;
+  bool        hasExportBloomStrength = false;
+  bool        hasExportToneMapping = false;
+  bool        exportToneMapping = true;
   float       recordYawDeg = 0.0f;
   float       recordPitchDeg = 0.0f;
   float       recordDistance = 0.0f;

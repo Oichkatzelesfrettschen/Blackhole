@@ -1750,7 +1750,9 @@ int main(int argc, char **argv) {
     settings.workspaceKind = std::clamp(settings.workspaceKind, 0, 2);
 
     // Initialize window and OpenGL context
-    GLFWwindow *window = initializeWindow(settings.windowWidth, settings.windowHeight);
+    GLFWwindow *window = initializeWindow(
+        cli.exportWidth > 0 ? cli.exportWidth : settings.windowWidth,
+        cli.exportHeight > 0 ? cli.exportHeight : settings.windowHeight);
     if (window == nullptr) {
       return 1;
     }
@@ -1844,6 +1846,9 @@ int main(int argc, char **argv) {
     // record profile applied on frame 1 (applyRecordProfileSetup) and the
     // environment overrides below replace them rather than being replaced.
     loadSettingsIntoRenderState(rs, settings);
+    if (cli.exportWidth > 0) {
+      rs.display.renderScale = 1.0f;
+    }
     applyEnvironmentConfig(rs);
     if (K_APP_VARIANT_CUDA_ONLY) {
       rs.dispatch.contract.backend = RenderBackend::Cuda;
@@ -1939,10 +1944,12 @@ int main(int argc, char **argv) {
       ImVec2 viewportSize = ImGui::GetContentRegionAvail();
 
       // Resize render targets to match viewport
-      const int targetWidth = cli.referenceScene.empty() ? static_cast<int>(viewportSize.x)
-                                                         : blackhole::K_REFERENCE_SCENE_EXTENT;
-      const int targetHeight = cli.referenceScene.empty() ? static_cast<int>(viewportSize.y)
-                                                          : blackhole::K_REFERENCE_SCENE_EXTENT;
+      const int targetWidth = cli.exportWidth > 0 ? cli.exportWidth
+          : (cli.referenceScene.empty() ? static_cast<int>(viewportSize.x)
+                                        : blackhole::K_REFERENCE_SCENE_EXTENT);
+      const int targetHeight = cli.exportHeight > 0 ? cli.exportHeight
+          : (cli.referenceScene.empty() ? static_cast<int>(viewportSize.y)
+                                        : blackhole::K_REFERENCE_SCENE_EXTENT);
       if (targetWidth > 0 && targetHeight > 0 &&
           (targetWidth != rs.targets.renderWidth || targetHeight != rs.targets.renderHeight)) {
         recreateRenderTargets(rs, targetWidth, targetHeight);
@@ -1975,7 +1982,10 @@ int main(int argc, char **argv) {
         recreateRenderTargets(rs, targetWidth, targetHeight);
       }
       */
-      syncRenderStateToSettings(rs, settings, input);
+      if (cli.exportWidth == 0 && !cli.hasExportExposure &&
+          !cli.hasExportBloomStrength && !cli.hasExportToneMapping) {
+        syncRenderStateToSettings(rs, settings, input);
+      }
 
       if (input.isUIVisible()) {
         renderModeMenu(settings, rs);
@@ -1995,6 +2005,15 @@ int main(int argc, char **argv) {
       // cancels it and restores the live camera.
       updateComparePresetSweep(rs, input, ShaderManager::instance().canUseComputeShaders());
       blackhole::applyReferenceSceneSetup(rs, cli, input, window);
+      if (cli.hasExportExposure) {
+        rs.post.toneExposure = cli.exportExposure;
+      }
+      if (cli.hasExportBloomStrength) {
+        rs.post.bloomStrength = cli.exportBloomStrength;
+      }
+      if (cli.hasExportToneMapping) {
+        rs.post.tonemappingEnabled = cli.exportToneMapping;
+      }
 
       // --record-frames: drive camera and spin from the selected record path
       applyRecordCameraPath(rs, cli, input);
@@ -2104,7 +2123,12 @@ int main(int argc, char **argv) {
 #if BLACKHOLE_HAS_CUDA
     rs.dispatch.cudaManager.shutdown();
 #endif
-    cleanup(window, !workspaceCapture && cli.recordFramesDir.empty() && cli.referenceScene.empty());
+    // Scene exports, record runs, and workspace captures run from overridden
+    // state, so only an ordinary session writes settings back.
+    cleanup(window, !workspaceCapture && cli.recordFramesDir.empty() &&
+                        cli.referenceScene.empty() && cli.exportWidth == 0 &&
+                        !cli.hasExportExposure && !cli.hasExportBloomStrength &&
+                        !cli.hasExportToneMapping);
     return (exitCode != 0 || rs.exporting.exportFailed) ? 1 : 0;
 #if BLACKHOLE_HAS_CPPTRACE
   } catch (const cpptrace::exception &err) {

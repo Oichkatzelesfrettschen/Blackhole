@@ -1,0 +1,9 @@
+#include "render/capture_identity.h"
+
+namespace blackhole {
+
+std::string_view captureSourceRevision() {
+  return "@BLACKHOLE_CAPTURE_REVISION@";
+}
+
+} // namespace blackhole

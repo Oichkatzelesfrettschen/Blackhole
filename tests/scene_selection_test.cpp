@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 // POSIX declares setenv and unsetenv only in <stdlib.h>.
@@ -18,6 +19,7 @@
 
 #include "platform/cli_options.h"
 #include "render/env_config.h"
+#include "render/capture_identity.h"
 #include "render/record_mode.h"
 #include "render/render_state.h"
 
@@ -93,6 +95,36 @@ TEST(SceneSelection, TesseractSceneRejectsRawExportAtStartup) {
   platform::CliOptions pngOnly;
   pngOnly.exportFramePath = "out.png";
   EXPECT_FALSE(exportConflictForScene(pngOnly, SceneMode::Tesseract).has_value());
+}
+
+TEST(SceneSelection, CaptureIdentitySeparatesTracerAndLutSpin) {
+  blackhole::RenderState state;
+  state.physicsCore.kerrSpin = 0.998f;
+  const blackhole::CaptureIdentity identity = blackhole::captureIdentity(state);
+  EXPECT_NEAR(identity.tracerSpin, 0.998f, 1.0e-6f);
+  EXPECT_NEAR(identity.lutSpin, 0.99f, 1.0e-6f);
+  EXPECT_TRUE(identity.lutSpinClamped);
+}
+
+TEST(SceneSelection, ExportDisplayOptionsParseWithoutRecordMode) {
+  std::vector<std::string> arguments = {
+      "Blackhole", "--export-frame", "frame.png", "--export-size", "640", "480",
+      "--export-exposure", "0.5", "--export-bloom", "0", "--export-tone-mapping", "off"};
+  std::vector<char *> argv;
+  for (std::string &argument : arguments) {
+    argv.push_back(argument.data());
+  }
+  platform::CliOptions options;
+  EXPECT_EQ(platform::parseCliOptions(static_cast<int>(argv.size()), argv.data(), options),
+            platform::CliParseOutcome::Run);
+  EXPECT_EQ(options.exportWidth, 640);
+  EXPECT_EQ(options.exportHeight, 480);
+  EXPECT_TRUE(options.hasExportExposure);
+  EXPECT_FLOAT_EQ(options.exportExposure, 0.5f);
+  EXPECT_TRUE(options.hasExportBloomStrength);
+  EXPECT_FLOAT_EQ(options.exportBloomStrength, 0.0f);
+  EXPECT_TRUE(options.hasExportToneMapping);
+  EXPECT_FALSE(options.exportToneMapping);
 }
 
 } // namespace
