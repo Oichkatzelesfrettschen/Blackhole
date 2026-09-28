@@ -33,6 +33,10 @@ void printCliUsage(const char *argv0) {
   std::printf("  --renderer-geodesic <legacy-beauty|schwarzschild-reference|kerr-reference>  Startup geodesic.\n");
   std::printf("  --renderer-backend <fragment|compute|cuda>  Startup backend.\n");
   std::printf("  --export-frames N       Export on settled frame N, then exit (default: frame 5, exit 6).\n");
+  std::printf("  --export-size W H       Set export render dimensions.\n");
+  std::printf("  --export-exposure X     Set export exposure without changing saved settings.\n");
+  std::printf("  --export-bloom X        Set export bloom strength without changing saved settings.\n");
+  std::printf("  --export-tone-mapping on|off  Set export tone mapping.\n");
   std::printf("  --record-frames <dir> N  Record N profile-driven frames as PNG into <dir>.\n");
   std::printf("                           N defaults to %d (3 min @ 60 fps).\n",
               K_CINEMATIC_FRAMES);
@@ -142,6 +146,48 @@ CliParseOutcome parseCliOptions(int argc, char **argv, CliOptions &out) {
                                                 out.exportFrames);
       if (error == std::errc{} && end == value.data() + value.size() &&
           out.exportFrames >= 5) {
+        continue;
+      }
+    }
+    if (arg == "--export-size" && i + 2 < argc) {
+      const std::string width = argv[++i];
+      const std::string height = argv[++i];
+      const auto [widthEnd, widthError] = std::from_chars(
+          width.data(), width.data() + width.size(), out.exportWidth);
+      const auto [heightEnd, heightError] = std::from_chars(
+          height.data(), height.data() + height.size(), out.exportHeight);
+      if (widthError == std::errc{} && heightError == std::errc{} &&
+          widthEnd == width.data() + width.size() &&
+          heightEnd == height.data() + height.size() &&
+          out.exportWidth > 0 && out.exportHeight > 0) {
+        continue;
+      }
+    }
+    if (arg == "--export-exposure" && i + 1 < argc) {
+      const std::string value = argv[++i];
+      const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(),
+                                                out.exportExposure);
+      if (error == std::errc{} && end == value.data() + value.size() &&
+          physics::safeIsfinite(out.exportExposure) && out.exportExposure > 0.0f) {
+        out.hasExportExposure = true;
+        continue;
+      }
+    }
+    if (arg == "--export-bloom" && i + 1 < argc) {
+      const std::string value = argv[++i];
+      const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(),
+                                                out.exportBloomStrength);
+      if (error == std::errc{} && end == value.data() + value.size() &&
+          physics::safeIsfinite(out.exportBloomStrength) && out.exportBloomStrength >= 0.0f) {
+        out.hasExportBloomStrength = true;
+        continue;
+      }
+    }
+    if (arg == "--export-tone-mapping" && i + 1 < argc) {
+      const std::string value = argv[++i];
+      if (value == "on" || value == "off") {
+        out.hasExportToneMapping = true;
+        out.exportToneMapping = value == "on";
         continue;
       }
     }

@@ -37,6 +37,7 @@
 #include "cinematic.h" // K_CINEMATIC_KEYFRAMES / DURATION / FPS
 #include "input.h"     // InputManager, CameraState, CameraMode
 #include "render/camera_math.h"
+#include "render/capture_identity.h"
 #include "physics/safe_limits.h"
 #include "platform/cli_options.h"
 #include "render/render_state.h"   // RenderState, WiregridParams
@@ -584,6 +585,7 @@ void writeRendererMetadata(const RenderState &rs, const platform::CliOptions &cl
     throw std::runtime_error("Failed to open renderer metadata: " + metadataPath);
   }
   const RendererContract &contract = rs.dispatch.contract;
+  const CaptureIdentity identity = captureIdentity(rs);
   const CameraState &camera = InputManager::instance().camera();
   const glm::vec3 cameraPosition = cameraPositionFromYawPitch(
       camera.yaw, camera.pitch, camera.distance);
@@ -608,6 +610,36 @@ void writeRendererMetadata(const RenderState &rs, const platform::CliOptions &cl
       camera.distance, camera.yaw, camera.pitch, camera.fov, aimTarget.x, aimTarget.y, aimTarget.z,
       contract.geodesic == GeodesicModel::SchwarzschildReference ? 0.0f : rs.physicsCore.kerrSpin,
       rs.recording.recordCurRs, rs.recording.recordCurIsco);
+  metadata << std::format(
+      "  \"source_revision\": \"{}\",\n  \"scene_mode\": \"{}\",\n"
+      "  \"tracer_spin\": {:.9g},\n  \"lut_spin\": {:.9g},\n"
+      "  \"lut_spin_clamped\": {},\n  \"disk_transfer_mode\": \"{}\",\n"
+      "  \"requested_backend\": \"{}\",\n  \"effective_backend\": \"{}\",\n"
+      "  \"requested_geodesic_model\": \"{}\",\n"
+      "  \"effective_geodesic_model\": \"{}\",\n"
+      "  \"requested_max_steps\": {},\n  \"effective_max_steps\": {},\n"
+      "  \"requested_step_size\": {:.9g},\n  \"effective_step_size\": {:.9g},\n"
+      "  \"tone_mapping_enabled\": {},\n  \"exposure\": {:.9g},\n"
+      "  \"gamma\": {:.9g},\n  \"bloom_strength\": {:.9g},\n"
+      "  \"bloom_threshold\": {:.9g},\n  \"film_grain_active\": {},\n"
+      "  \"vignette_active\": {},\n  \"chromatic_aberration_active\": {},\n"
+      "  \"observer_fov_degrees\": {:.9g},\n  \"observer_look_longitude_degrees\": {:.9g},\n"
+      "  \"observer_look_latitude_degrees\": {:.9g},\n"
+      "  \"observer_spin_deficit\": {:.17g},\n  \"observer_radius_offset\": {:.17g},\n",
+      captureSourceRevision(), identity.sceneMode, identity.tracerSpin, identity.lutSpin,
+      identity.lutSpinClamped, identity.diskTransferMode,
+      cli.rendererBackend.empty() ? rendererName(contract.backend) : std::string_view(cli.rendererBackend),
+      rendererName(contract.backend),
+      cli.rendererGeodesic.empty() ? rendererName(contract.geodesic) : std::string_view(cli.rendererGeodesic),
+      rendererName(contract.geodesic), rs.dispatch.computeMaxSteps, identity.effectiveSteps,
+      rs.dispatch.computeStepSize, identity.effectiveStepSize, rs.post.tonemappingEnabled,
+      rs.post.toneExposure, rs.post.gamma, rs.post.bloomStrength, rs.post.bloomThreshold,
+      rs.post.tonemappingEnabled && rs.post.tonemapFilmGrainStrength > 0.0f,
+      rs.post.tonemappingEnabled && rs.post.tonemapVignetteStrength > 0.0f,
+      rs.post.tonemappingEnabled && rs.post.tonemapChromaticAberrationStrength > 0.0f,
+      rs.observerView.fovDeg,
+      rs.observerView.lookLongitudeDeg, rs.observerView.lookLatitudeDeg,
+      rs.observerView.epsilon, rs.observerView.x);
   if (rs.terminalDiagnostics.valid) {
     const auto &counts = rs.terminalDiagnostics.counts;
     metadata << std::format(

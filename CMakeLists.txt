@@ -1230,11 +1230,29 @@ set_source_files_properties(${THIRDPARTY_SRC_FILES} PROPERTIES
   COMPILE_OPTIONS "-w"
 )
 
+# Capture sidecars report the source revision. The generator runs on every
+# build and rewrites its TU only when HEAD or the dirty state changes.
+set(BH_SOURCE_REVISION_CPP "${CMAKE_BINARY_DIR}/generated/capture_source_revision.cpp")
+set(BH_SOURCE_REVISION_ARGS
+  -DSOURCE_DIR=${PROJECT_SOURCE_DIR}
+  -DTEMPLATE=${PROJECT_SOURCE_DIR}/src/render/capture_source_revision.cpp.in
+  -DOUTPUT=${BH_SOURCE_REVISION_CPP}
+  -P ${PROJECT_SOURCE_DIR}/cmake/WriteSourceRevision.cmake)
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
+execute_process(COMMAND ${CMAKE_COMMAND} ${BH_SOURCE_REVISION_ARGS})
+add_custom_target(blackhole_source_revision
+  COMMAND ${CMAKE_COMMAND} ${BH_SOURCE_REVISION_ARGS}
+  BYPRODUCTS ${BH_SOURCE_REVISION_CPP}
+  COMMENT "Checking capture source revision"
+  VERBATIM)
+
 function(add_blackhole_desktop_target target_name)
   set(options CUDA_ONLY GLSL_ONLY)
   cmake_parse_arguments(BH_DESKTOP "${options}" "" "" ${ARGN})
 
-  add_executable(${target_name} ${PROJECT_SRC_FILES} ${THIRDPARTY_SRC_FILES} ${HEADER_FILES})
+  add_executable(${target_name} ${PROJECT_SRC_FILES} ${THIRDPARTY_SRC_FILES} ${HEADER_FILES}
+    ${BH_SOURCE_REVISION_CPP})
+  add_dependencies(${target_name} blackhole_source_revision)
 
   # The UI font is compiled from its Glyphs source; the desktop app cannot run
   # without it, so it must exist before the executable is considered built. The
@@ -3908,7 +3926,9 @@ if(BUILD_TESTING)
   if(NOT TARGET blackhole_testcore)
     set(BH_TESTCORE_SRC ${PROJECT_SRC_FILES})
     list(REMOVE_ITEM BH_TESTCORE_SRC "${PROJECT_SOURCE_DIR}/src/main.cpp")
-    add_library(blackhole_testcore STATIC ${BH_TESTCORE_SRC} ${THIRDPARTY_SRC_FILES})
+    add_library(blackhole_testcore STATIC ${BH_TESTCORE_SRC} ${THIRDPARTY_SRC_FILES}
+      ${BH_SOURCE_REVISION_CPP})
+    add_dependencies(blackhole_testcore blackhole_source_revision)
     target_include_directories(blackhole_testcore PUBLIC
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
