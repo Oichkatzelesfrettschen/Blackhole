@@ -87,8 +87,13 @@ def normalized(layout: dict[str, Any]) -> tuple[Any, ...]:
         dock_id = window["dock_node_id"]
         group = dock_groups.setdefault(dock_id, len(dock_groups)) if dock_id else None
         windows.append((window["name"], group, window["collapsed"], window.get("visible", True)))
-    return (layout["workspace"], layout.get("scene", "blackhole"),
-            tuple(layout["viewport"]), layout["ui_scale"], tuple(windows))
+    return (
+        layout["workspace"],
+        layout.get("scene", "blackhole"),
+        tuple(layout["viewport"]),
+        layout["ui_scale"],
+        tuple(windows),
+    )
 
 
 def geometry_drift(layout: dict[str, Any], first: dict[str, Any]) -> list[str]:

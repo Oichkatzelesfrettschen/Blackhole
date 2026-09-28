@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cfloat>
 #include <cstddef>
 #include <filesystem>
 #include <format>
