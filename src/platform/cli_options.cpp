@@ -12,6 +12,7 @@
 #include <system_error>
 
 #include "cinematic.h" // K_CINEMATIC_FRAMES
+#include "physics/safe_limits.h"
 
 namespace platform {
 
@@ -20,6 +21,10 @@ void printCliUsage(const char *argv0) {
               " [--export-raw-frame <path.pfm>]"
               " [--record-frames <dir> <N>] [--record-profile <name>]\n", argv0);
   std::printf("  --curve-tsv <path>       Load a 2-column TSV and plot it in ImGui.\n");
+  std::printf("  --workspace-screenshot <prefix>  Capture whole-window PNG and layout JSON.\n");
+  std::printf("  --workspace <simulator|gororoba|diagnostics>  Select a fresh workspace.\n");
+  std::printf("  --window-size <WxH>      Capture framebuffer size.\n");
+  std::printf("  --ui-scale <S>           Capture UI scale (default: 1).\n");
   std::printf("  --export-frame <path>    Render one frame, save as PNG, then exit.\n");
   std::printf("  --export-raw-frame <path> Export raw texBlackhole HDR RGB as PFM, then exit.\n");
   std::printf("  --reference-scene <A|B|C+|C-|Cd+|Cd-|D>  Fixed camera and source model for rendered validation.\n");
@@ -63,6 +68,38 @@ CliParseOutcome parseCliOptions(int argc, char **argv, CliOptions &out) {
     if (arg == "--curve-tsv" && i + 1 < argc) {
       out.curveTsvPath = argv[++i];
       continue;
+    }
+    if (arg == "--workspace-screenshot" && i + 1 < argc) {
+      out.workspaceScreenshotPath = argv[++i];
+      continue;
+    }
+    if (arg == "--workspace" && i + 1 < argc) {
+      out.workspaceName = argv[++i];
+      continue;
+    }
+    if (arg == "--window-size" && i + 1 < argc) {
+      const std::string value = argv[++i];
+      const size_t separator = value.find('x');
+      if (separator != std::string::npos) {
+        const char *const begin = value.data();
+        const char *const end = begin + value.size();
+        const auto widthResult = std::from_chars(begin, begin + separator, out.windowWidth);
+        const auto heightResult = std::from_chars(begin + separator + 1, end, out.windowHeight);
+        if (widthResult.ec == std::errc{} && widthResult.ptr == begin + separator &&
+            heightResult.ec == std::errc{} && heightResult.ptr == end &&
+            out.windowWidth >= 640 && out.windowWidth <= 8192 && out.windowHeight >= 480 &&
+            out.windowHeight <= 4320) {
+          continue;
+        }
+      }
+    }
+    if (arg == "--ui-scale" && i + 1 < argc) {
+      const std::string value = argv[++i];
+      const auto result = std::from_chars(value.data(), value.data() + value.size(), out.uiScale);
+      if (result.ec == std::errc{} && result.ptr == value.data() + value.size() &&
+          physics::safeIsfinite(out.uiScale) && out.uiScale >= 0.5f && out.uiScale <= 3.0f) {
+        continue;
+      }
     }
     if (arg == "--export-frame" && i + 1 < argc) {
       out.exportFramePath = argv[++i];

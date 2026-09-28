@@ -43,6 +43,7 @@
 #include <array>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <ostream>
@@ -73,6 +74,9 @@
 #endif
 #include <GLFW/glfw3.h>
 #include <imgui.h>
+#include <imgui_internal.h>
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 // ImGuizmo declarations require the ImGui types above.
 #include <ImGuizmo.h>
@@ -449,6 +453,30 @@ GLFWwindow *initializeWindow(int width, int height) {
   configureParallelShaderCompile();
 
   return window;
+}
+
+void sizeWorkspaceFramebuffer(GLFWwindow *window, int framebufferWidth, int framebufferHeight) {
+  int windowWidth = 0;
+  int windowHeight = 0;
+  int actualWidth = 0;
+  int actualHeight = 0;
+  glfwGetWindowSize(window, &windowWidth, &windowHeight);
+  glfwGetFramebufferSize(window, &actualWidth, &actualHeight);
+  if (actualWidth <= 0 || actualHeight <= 0) {
+    throw std::runtime_error("Workspace framebuffer has zero size");
+  }
+  if (actualWidth != framebufferWidth || actualHeight != framebufferHeight) {
+    const int logicalWidth = static_cast<int>(std::lround(
+        static_cast<double>(framebufferWidth) * windowWidth / actualWidth));
+    const int logicalHeight = static_cast<int>(std::lround(
+        static_cast<double>(framebufferHeight) * windowHeight / actualHeight));
+    glfwSetWindowSize(window, logicalWidth, logicalHeight);
+    glfwPollEvents();
+  }
+  glfwGetFramebufferSize(window, &actualWidth, &actualHeight);
+  if (actualWidth != framebufferWidth || actualHeight != framebufferHeight) {
+    throw std::runtime_error("GLFW cannot provide the requested workspace framebuffer size");
+  }
 }
 
 // Configure custom ImGui style for "Blackhole" theme (16-bit Voxel Aesthetic)
@@ -1314,9 +1342,66 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
   return result;
 }
 
+void writeWorkspaceLayout(const platform::CliOptions &cli, bool first) {
+  nlohmann::json layout;
+  const ImGuiViewport *const viewport = ImGui::GetMainViewport();
+  layout["workspace"] = cli.workspaceName;
+  layout["viewport"] = {viewport->Pos.x, viewport->Pos.y, viewport->Size.x,
+                        viewport->Size.y};
+  layout["ui_scale"] = cli.uiScale;
+  layout["windows"] = nlohmann::json::array();
+  // A docked window is rooted at its dock host, and an unselected tab is
+  // hidden while its node shows a sibling, so both enter the record through
+  // DockIsActive with "visible" telling the selected tab from the others.
+  for (const ImGuiWindow *const window : ImGui::GetCurrentContext()->Windows) {
+    const bool docked = window->DockIsActive;
+    const bool topLevel = window->RootWindow == window &&
+                          (window->Flags & ImGuiWindowFlags_ChildWindow) == 0;
+    if (window->IsFallbackWindow || !(docked || (topLevel && window->Active))) {
+      continue;
+    }
+    layout["windows"].push_back({{"name", window->Name},
+                                  {"position", {window->Pos.x, window->Pos.y}},
+                                  {"size", {window->Size.x, window->Size.y}},
+                                  {"dock_node_id", window->DockId},
+                                  {"visible", window->Active && !window->Hidden},
+                                  {"collapsed", window->Collapsed}});
+  }
+  const std::string path = cli.workspaceScreenshotPath + (first ? ".first.json" : ".json");
+  std::ofstream output(path);
+  if (!output || !(output << layout.dump(2) << '\n')) {
+    throw std::runtime_error("Cannot write workspace layout: " + path);
+  }
+}
+
+void writeWorkspaceScreenshot(const platform::CliOptions &cli, GLFWwindow *window) {
+  int width = 0;
+  int height = 0;
+  glfwGetFramebufferSize(window, &width, &height);
+  if (width != cli.windowWidth || height != cli.windowHeight) {
+    throw std::runtime_error("Workspace framebuffer size differs from --window-size");
+  }
+  const size_t stride = static_cast<size_t>(width) * 4;
+  std::vector<unsigned char> pixels(stride * static_cast<size_t>(height));
+  std::vector<unsigned char> topDown(pixels.size());
+  glPixelStorei(GL_PACK_ALIGNMENT, 1);
+  glReadBuffer(GL_BACK);
+  glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+  glPixelStorei(GL_PACK_ALIGNMENT, 4);
+  for (int row = 0; row < height; ++row) {
+    std::memcpy(topDown.data() + (static_cast<size_t>(row) * stride),
+                pixels.data() + (static_cast<size_t>(height - row - 1) * stride), stride);
+  }
+  const std::string path = cli.workspaceScreenshotPath + ".png";
+  if (stbi_write_png(path.c_str(), width, height, 4, topDown.data(),
+                     static_cast<int>(stride)) == 0) {
+    throw std::runtime_error("Cannot write workspace screenshot: " + path);
+  }
+}
+
 bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow *window,
                    const glm::vec3 &cameraPos, float cpuFrameMs, bool computeActiveForLog,
-                   bool sceneSettled) {
+                   bool sceneSettled, int &workspaceCaptureFrame) {
   /* --record-frames: draw cinematic physics HUD via foreground draw list.
    * GetForegroundDrawList() adds to ImGui's draw list, so this must be called
    * before ImGui::Render().  The overlay is composited over the scene by the
@@ -1336,6 +1421,17 @@ bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow 
   // ImGui Render
   ImGui::Render();
   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+  if (!cli.workspaceScreenshotPath.empty()) {
+    ++workspaceCaptureFrame;
+    if (workspaceCaptureFrame == 3) {
+      writeWorkspaceLayout(cli, true);
+      rs.overlays.firstLayout = true;
+    } else if (workspaceCaptureFrame == 6) {
+      writeWorkspaceLayout(cli, false);
+      writeWorkspaceScreenshot(cli, window);
+    }
+  }
 
   /* --record-frames: capture the tonemapped scene texture and advance the
    * frame index. The cinematic HUD drawn above is composited later by ffmpeg;
@@ -1365,6 +1461,10 @@ bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow 
   }
   FRAME_MARK;
   glfwSwapBuffers(window);
+
+  if (!cli.workspaceScreenshotPath.empty() && workspaceCaptureFrame == 6) {
+    return true;
+  }
 
   /* --export-frame / --export-raw-frame: break after the export frame above. */
   if ((!cli.exportFramePath.empty() || !cli.exportRawFramePath.empty()) && sceneSettled) {
@@ -1396,7 +1496,8 @@ enum class FrameOutcome : std::uint8_t { Continue = 0, Finished = 1, CaptureFail
  *        observer or a failed load or build.
  */
 FrameOutcome finishFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow *window,
-                         const glm::vec3 &cameraPos, float cpuFrameMs, bool computeActiveForLog) {
+                         const glm::vec3 &cameraPos, float cpuFrameMs, bool computeActiveForLog,
+                         int &workspaceCaptureFrame) {
   const blackhole::SceneCaptureState captureState = blackhole::sceneCaptureState(rs);
   const bool sceneSettled = captureState == blackhole::SceneCaptureState::Ready;
   const bool capturing = !cli.exportFramePath.empty() || !cli.exportRawFramePath.empty() ||
@@ -1404,7 +1505,8 @@ FrameOutcome finishFrame(RenderState &rs, const platform::CliOptions &cli, GLFWw
   if (sceneSettled) {
     exportFrameOnce(rs, cli);
   }
-  if (completeFrame(rs, cli, window, cameraPos, cpuFrameMs, computeActiveForLog, sceneSettled)) {
+  if (completeFrame(rs, cli, window, cameraPos, cpuFrameMs, computeActiveForLog, sceneSettled,
+                    workspaceCaptureFrame)) {
     return FrameOutcome::Finished;
   }
   if (capturing && captureState == blackhole::SceneCaptureState::Failed) {
@@ -1445,11 +1547,12 @@ void prepareFrameTextures(RenderState &rs, const platform::CliOptions &cli,
 }
 
 void initializeWorkspaceLayout(Settings &settings, const ui::CampaignUiState &campaignUi,
-                               RenderState &rs) {
+                               RenderState &rs, bool freshLayout) {
   if (campaignUi.windowsOpen) {
     settings.workspaceKind = static_cast<int>(ui::WorkspaceKind::Diagnostics);
   }
-  rs.overlays.firstLayout = settings.workspaceSchemaVersion != ui::K_WORKSPACE_SCHEMA_VERSION ||
+  rs.overlays.firstLayout = freshLayout ||
+                            settings.workspaceSchemaVersion != ui::K_WORKSPACE_SCHEMA_VERSION ||
                             !std::filesystem::exists(ImGui::GetIO().IniFilename);
 }
 
@@ -1523,6 +1626,33 @@ GLuint viewportDisplayTexture(const RenderState &rs, GLuint finalTexture) {
              : finalTexture;
 }
 
+// Workspace captures take a canonical workspace and an explicit framebuffer
+// size, and exclude the scene exports, which own the frame loop's exit.
+bool workspaceCaptureOptionsValid(const platform::CliOptions &cli) {
+  const bool capture = !cli.workspaceScreenshotPath.empty();
+  const bool options = !cli.workspaceName.empty() || cli.windowWidth != 0 ||
+                       cli.windowHeight != 0 || cli.uiScale != 1.0f;
+  if (!capture) {
+    return !options;
+  }
+  const bool known = cli.workspaceName == "simulator" || cli.workspaceName == "gororoba" ||
+                     cli.workspaceName == "diagnostics";
+  const bool sized = cli.windowWidth != 0 && cli.windowHeight != 0;
+  const bool exclusive = cli.exportFramePath.empty() && cli.exportRawFramePath.empty() &&
+                         cli.recordFramesDir.empty() && cli.referenceScene.empty();
+  return known && sized && exclusive;
+}
+
+ui::WorkspaceKind workspaceKindFromName(std::string_view name) {
+  if (name == "gororoba") {
+    return ui::WorkspaceKind::Gororoba;
+  }
+  if (name == "diagnostics") {
+    return ui::WorkspaceKind::Diagnostics;
+  }
+  return ui::WorkspaceKind::Simulator;
+}
+
 bool referenceOptionsValid(const platform::CliOptions &cli) {
   if (cli.referenceScene.empty()) {
     return true;
@@ -1582,6 +1712,12 @@ int main(int argc, char **argv) {
     if (!referenceOptionsValid(cli)) {
       return 2;
     }
+    const bool workspaceCapture = !cli.workspaceScreenshotPath.empty();
+    if (!workspaceCaptureOptionsValid(cli)) {
+      (void)std::fprintf(stderr, "Workspace screenshot requires --workspace and --window-size "
+                                 "and cannot combine with scene exports\n");
+      return 2;
+    }
 
     if (const auto conflict = blackhole::recordCameraConflict(cli)) {
       std::printf("%s\n", conflict->c_str());
@@ -1597,14 +1733,29 @@ int main(int argc, char **argv) {
     setShaderBaseDir(platform::resourceRoot().string() + "/");
 
     // Load settings first
-    SettingsManager::instance().load();
+    if (workspaceCapture) {
+      SettingsManager::instance().setPersistenceEnabled(false);
+      SettingsManager::instance().resetToDefaults();
+    } else {
+      SettingsManager::instance().load();
+    }
     auto &settings = SettingsManager::instance().get();
+    if (workspaceCapture) {
+      settings.windowWidth = cli.windowWidth;
+      settings.windowHeight = cli.windowHeight;
+      settings.fullscreen = false;
+      settings.swapInterval = 0;
+      settings.workspaceKind = static_cast<int>(workspaceKindFromName(cli.workspaceName));
+    }
     settings.workspaceKind = std::clamp(settings.workspaceKind, 0, 2);
 
     // Initialize window and OpenGL context
     GLFWwindow *window = initializeWindow(settings.windowWidth, settings.windowHeight);
     if (window == nullptr) {
       return 1;
+    }
+    if (workspaceCapture) {
+      sizeWorkspaceFramebuffer(window, cli.windowWidth, cli.windowHeight);
     }
 
     glfwSwapInterval(settings.swapInterval);
@@ -1627,6 +1778,11 @@ int main(int argc, char **argv) {
 
     // Initialize ImGui
     initializeImGui(window);
+    if (workspaceCapture) {
+      ImGui::GetIO().IniFilename = nullptr;
+      ImGui::GetIO().FontGlobalScale = cli.uiScale;
+      ImGui::GetStyle().ScaleAllSizes(cli.uiScale);
+    }
 
     // Curve overlay for plotting (e.g., critical curves)
     RenderState rs;
@@ -1636,7 +1792,10 @@ int main(int argc, char **argv) {
     ui::CampaignUiState campaignUi;
     ui::ConstellationUiState constellationUi;
     ui::initCampaignUiFromEnv(campaignUi);
-    initializeWorkspaceLayout(settings, campaignUi, rs);
+    if (workspaceCapture) {
+      campaignUi.windowsOpen = false;
+    }
+    initializeWorkspaceLayout(settings, campaignUi, rs, workspaceCapture);
     // Selectable NASA nebula backdrops for the strategic map. Each entry's
     // texture is 0 when its asset is absent, in which case the map draws its
     // procedural starfield for that choice. Loaded once; the Campaign panel
@@ -1715,6 +1874,7 @@ int main(int argc, char **argv) {
      * and reset it to 0, triggering lazy re-creation on the next iteration. */
     GLuint computeProgram = 0;
     int exitCode = 0;
+    int workspaceCaptureFrame = 0;
 
     while (glfwWindowShouldClose(window) == 0) {
       // Clear default framebuffer (essential for ImGui Docking over Viewport)
@@ -1726,11 +1886,13 @@ int main(int argc, char **argv) {
       // ...
       // Calculate delta time
       double const wallTime = glfwGetTime();
-      auto const deltaTime = static_cast<float>(wallTime - lastTime);
+      auto const deltaTime = workspaceCapture ? 0.0f : static_cast<float>(wallTime - lastTime);
       lastTime = wallTime;
       // Time-driven shading reads content time: the record output clock
       // under --record-frames, the wall clock otherwise.
-      double const currentTime = frameContentSeconds(cli, rs.recording.recordFrameIndex, wallTime);
+      double const currentTime = workspaceCapture
+                                     ? 0.0
+                                     : frameContentSeconds(cli, rs.recording.recordFrameIndex, wallTime);
       auto const frameTime = static_cast<float>(currentTime);
       const float cpuFrameMs = deltaTime * 1000.0f;
 
@@ -1889,12 +2051,14 @@ int main(int argc, char **argv) {
                             input.isUIVisible() && cli.recordFramesDir.empty());
       // The diagnostic campaign clock follows wall time only in its workspace.
       if (settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Diagnostics)) {
-        ui::pumpCampaignRealtime(campaignSession, campaignUi, static_cast<double>(deltaTime));
+        ui::pumpCampaignRealtime(campaignSession, campaignUi,
+                                 workspaceCapture ? 0.0 : static_cast<double>(deltaTime));
       }
 
       /* --export-frame / --export-raw-frame export before ImGui renders. */
       const FrameOutcome outcome =
-          finishFrame(rs, cli, window, cameraPos, cpuFrameMs, computeActiveForLog);
+          finishFrame(rs, cli, window, cameraPos, cpuFrameMs, computeActiveForLog,
+                      workspaceCaptureFrame);
       if (outcome != FrameOutcome::Continue) {
         exitCode = static_cast<int>(outcome == FrameOutcome::CaptureFailed);
         break;
@@ -1940,7 +2104,7 @@ int main(int argc, char **argv) {
 #if BLACKHOLE_HAS_CUDA
     rs.dispatch.cudaManager.shutdown();
 #endif
-    cleanup(window, cli.recordFramesDir.empty() && cli.referenceScene.empty());
+    cleanup(window, !workspaceCapture && cli.recordFramesDir.empty() && cli.referenceScene.empty());
     return (exitCode != 0 || rs.exporting.exportFailed) ? 1 : 0;
 #if BLACKHOLE_HAS_CPPTRACE
   } catch (const cpptrace::exception &err) {
