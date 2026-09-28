@@ -219,6 +219,9 @@ bool SettingsManager::load(const std::string &filepath) {
 }
 
 bool SettingsManager::save(const std::string &filepath) {
+  if (!persistenceEnabled_) {
+    return false;
+  }
   lastFilepath_ = filepath;
 
   std::ofstream file(filepath);

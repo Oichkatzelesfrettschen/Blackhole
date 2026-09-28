@@ -4828,6 +4828,9 @@ if(BUILD_TESTING)
   target_link_libraries(workspace_layout_test PRIVATE blackhole_testcore GTest::gtest_main)
   add_test(NAME workspace_layout_validation COMMAND workspace_layout_test)
   set_tests_properties(workspace_layout_validation PROPERTIES TIMEOUT 30 LABELS "ui;unit")
+  add_test(NAME workspace_layout_json_validation
+    COMMAND ${PYTHON3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/ci/test_check_workspace_layout.py)
+  set_tests_properties(workspace_layout_json_validation PROPERTIES TIMEOUT 30 LABELS "ui;unit")
 
   add_executable(desktop_game_test "${PROJECT_SOURCE_DIR}/tests/desktop_game_test.cpp")
   target_compile_options(desktop_game_test PRIVATE ${PROJECT_WARNINGS})

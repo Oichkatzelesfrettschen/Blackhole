@@ -20,6 +20,11 @@ namespace platform {
 
 struct CliOptions {
   std::string curveTsvPath;
+  std::string workspaceScreenshotPath;
+  std::string workspaceName;
+  int windowWidth = 0;
+  int windowHeight = 0;
+  float uiScale = 1.0f;
   std::string exportFramePath;
   std::string exportRawFramePath;
   std::string referenceScene;

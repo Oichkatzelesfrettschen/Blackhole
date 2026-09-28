@@ -168,6 +168,9 @@ public:
    */
   bool save(const std::string &filepath = "settings.json");
 
+  /** @brief Prevents settings file writes during isolated captures. */
+  void setPersistenceEnabled(bool enabled) { persistenceEnabled_ = enabled; }
+
   /** @brief Resets all settings to their compiled-in defaults. */
   void resetToDefaults();
 
@@ -185,6 +188,7 @@ private:
 
   Settings settings_;
   std::string lastFilepath_;
+  bool persistenceEnabled_ = true;
 };
 
 #endif // SETTINGS_H
