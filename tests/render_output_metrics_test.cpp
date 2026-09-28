@@ -8,26 +8,43 @@
 #include "../shader/include/ray_terminal.h"
 #include "render/render_output_metrics.h"
 
-TEST(RenderOutputMetrics, SyntheticCircularCaptureAndLimb) {
-  constexpr int width = 65;
-  constexpr int height = 65;
-  constexpr std::size_t pixels = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
-  std::vector<float> luminance(pixels, 0.1f);
-  std::vector<std::uint8_t> terminals(pixels, BH_TERMINAL_ESCAPE);
-  for (int y = 0; y < height; ++y) {
+namespace {
+
+// A captured disk of radius 12 about pixel (32, 32) inside a ring of
+// luminance 0.8 out to radius 15, on a 65x65 sky of luminance 0.1.
+struct SyntheticShadow {
+  static constexpr int K_WIDTH = 65;
+  std::vector<float> luminance;
+  std::vector<std::uint8_t> terminals;
+};
+
+SyntheticShadow ringedShadow() {
+  constexpr int width = SyntheticShadow::K_WIDTH;
+  constexpr std::size_t pixels = static_cast<std::size_t>(width) * static_cast<std::size_t>(width);
+  SyntheticShadow image{.luminance = std::vector<float>(pixels, 0.1f),
+                        .terminals = std::vector<std::uint8_t>(pixels, BH_TERMINAL_ESCAPE)};
+  for (int y = 0; y < width; ++y) {
     for (int x = 0; x < width; ++x) {
       const double radius = std::hypot(x - 32.0, y - 32.0);
       const auto index = (static_cast<std::size_t>(y) * static_cast<std::size_t>(width)) +
                          static_cast<std::size_t>(x);
       if (radius <= 12.0) {
-        terminals[index] = BH_TERMINAL_HORIZON;
-        luminance[index] = 0.01f;
+        image.terminals[index] = BH_TERMINAL_HORIZON;
+        image.luminance[index] = 0.01f;
       } else if (radius < 15.0) {
-        luminance[index] = 0.8f;
+        image.luminance[index] = 0.8f;
       }
     }
   }
-  const auto metrics = blackhole::measureImage(luminance, terminals, width, height);
+  return image;
+}
+
+} // namespace
+
+TEST(RenderOutputMetrics, SyntheticCircularCaptureAndLimb) {
+  const auto image = ringedShadow();
+  const auto metrics = blackhole::measureImage(image.luminance, image.terminals,
+                                               SyntheticShadow::K_WIDTH, SyntheticShadow::K_WIDTH);
   // Pixel centers within 12 of (32.5, 32.5) span 25 pixels edge to edge.
   EXPECT_NEAR(metrics.boundaryRadius, 12.5, 1e-9);
   EXPECT_NEAR(metrics.boundingWidth, 25.0, 1e-9);

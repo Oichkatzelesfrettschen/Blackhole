@@ -5,7 +5,6 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
-#include <iterator>
 #include <numbers>
 #include <optional>
 #include <stdexcept>
@@ -14,8 +13,6 @@
 #include <utility>
 #include <vector>
 
-#include <glbinding/gl/enum.h>
-#include <glbinding/gl/functions.h>
 #include <gtest/gtest.h>
 #include <stdlib.h> // NOLINT(modernize-deprecated-headers) -- POSIX setenv declaration.
 #include <sys/types.h>
@@ -29,6 +26,8 @@
 
 #ifdef BH_RENDER_HAS_CUDA
 #include <cuda_runtime_api.h>
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions.h>
 #endif
 
 namespace {
@@ -315,13 +314,15 @@ double escapedDisplaySpread(const CapturedFrame &frame) {
 // metadata, which records the effective configuration the frame rendered with.
 int metadataInteger(const std::filesystem::path &path, std::string_view key) {
   std::ifstream input(path);
-  const std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
   const std::string needle = "\"" + std::string(key) + "\": ";
-  const auto position = text.find(needle);
-  if (position == std::string::npos) {
-    throw std::runtime_error("metadata field missing: " + std::string(key));
+  std::string line;
+  while (std::getline(input, line)) {
+    const auto position = line.find(needle);
+    if (position != std::string::npos) {
+      return std::stoi(line.substr(position + needle.size()));
+    }
   }
-  return std::stoi(text.substr(position + needle.size()));
+  throw std::runtime_error("metadata field missing: " + std::string(key));
 }
 
 bool contextAvailable() {
@@ -329,6 +330,7 @@ bool contextAvailable() {
   return context.available();
 }
 
+#ifdef BH_RENDER_HAS_CUDA
 std::string glVendor() {
   const bhtest::HiddenGlContext context;
   if (!context.available()) {
@@ -337,6 +339,7 @@ std::string glVendor() {
   const auto *vendor = reinterpret_cast<const char *>(gl::glGetString(gl::GL_VENDOR));
   return vendor != nullptr ? std::string(vendor) : std::string();
 }
+#endif
 
 } // namespace
 

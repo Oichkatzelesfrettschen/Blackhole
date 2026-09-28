@@ -78,6 +78,81 @@ struct ImageComparison {
          (2.0 * std::tan(verticalFovDegrees * std::numbers::pi / 360.0));
 }
 
+namespace detail {
+
+// Diameters along the row and column through (centerX, centerY), edge to edge.
+inline void measureExtents(ImageMetrics &result, std::span<const std::uint8_t> terminals,
+                           int width, int height, double centerX, double centerY) {
+  const auto index = [width](int x, int y) {
+    return (static_cast<std::size_t>(y) * static_cast<std::size_t>(width)) +
+           static_cast<std::size_t>(x);
+  };
+  const int row = std::clamp(static_cast<int>(centerY), 0, height - 1);
+  const int column = std::clamp(static_cast<int>(centerX), 0, width - 1);
+  int minX = width;
+  int maxX = -1;
+  int minY = height;
+  int maxY = -1;
+  for (int x = 0; x < width; ++x) {
+    if (terminals[index(x, row)] == BH_TERMINAL_HORIZON) {
+      minX = std::min(minX, x);
+      maxX = std::max(maxX, x);
+    }
+  }
+  for (int y = 0; y < height; ++y) {
+    if (terminals[index(column, y)] == BH_TERMINAL_HORIZON) {
+      minY = std::min(minY, y);
+      maxY = std::max(maxY, y);
+    }
+  }
+  result.boundaryDiameter = maxX >= minX ? static_cast<double>(maxX - minX + 1) : 0.0;
+  result.verticalDiameter = maxY >= minY ? static_cast<double>(maxY - minY + 1) : 0.0;
+  result.boundaryRadius = (result.boundaryDiameter + result.verticalDiameter) / 4.0;
+  const double widest = std::max(result.boundaryDiameter, result.verticalDiameter);
+  result.circularity =
+      widest > 0.0 ? std::abs(result.boundaryDiameter - result.verticalDiameter) / widest : 0.0;
+}
+
+// The limb is a local maximum of the radial profile near the critical radius,
+// measured against the profile three bins inside and outside it; a hard matte
+// steps from dark to sky with no such maximum.
+inline void measureLimb(ImageMetrics &result, double limbCenter, bool anyCaptured) {
+  const auto bins = result.radialLuminance.size();
+  constexpr std::size_t shoulder = 3;
+  const auto limbStart =
+      static_cast<std::size_t>(std::max(static_cast<double>(shoulder), limbCenter - 2.0));
+  const auto limbEnd =
+      std::min(bins - 1 - shoulder, static_cast<std::size_t>(limbCenter + 8.0));
+  if (anyCaptured && limbStart <= limbEnd) {
+    std::size_t peak = limbStart;
+    for (std::size_t radius = limbStart; radius <= limbEnd; ++radius) {
+      if (result.radialLuminance[radius] > result.radialLuminance[peak]) {
+        peak = radius;
+      }
+    }
+    const double peakValue = result.radialLuminance[peak];
+    const double baseline = std::max(result.radialLuminance[peak - shoulder],
+                                     result.radialLuminance[peak + shoulder]);
+    result.limbRadius = static_cast<double>(peak);
+    result.limbContrast = peakValue - baseline;
+    result.centralToRing = peakValue > 0.0 ? result.radialLuminance.front() / peakValue : 0.0;
+    if (result.limbContrast > 0.0) {
+      const double halfMaximum = baseline + (result.limbContrast * 0.5);
+      std::size_t lower = peak;
+      while (lower > 0 && result.radialLuminance[lower - 1] > halfMaximum) {
+        --lower;
+      }
+      std::size_t upper = peak;
+      while (upper + 1 < bins && result.radialLuminance[upper + 1] > halfMaximum) {
+        ++upper;
+      }
+      result.limbWidth = static_cast<double>(upper - lower + 1);
+    }
+  }
+}
+
+} // namespace detail
+
 // Pixel (x, y) covers [x, x + 1) x [y, y + 1), so its center sits at x + 0.5
 // and a run of captured pixels xmin..xmax spans xmax - xmin + 1 pixels edge to
 // edge. The radial profile is centered on the anchor when one is given, since
@@ -189,30 +264,7 @@ struct ImageComparison {
     }
   }
 
-  const int row = std::clamp(static_cast<int>(centerY), 0, height - 1);
-  const int column = std::clamp(static_cast<int>(centerX), 0, width - 1);
-  int minX = width;
-  int maxX = -1;
-  int minY = height;
-  int maxY = -1;
-  for (int x = 0; x < width; ++x) {
-    if (terminals[at(x, row)] == BH_TERMINAL_HORIZON) {
-      minX = std::min(minX, x);
-      maxX = std::max(maxX, x);
-    }
-  }
-  for (int y = 0; y < height; ++y) {
-    if (terminals[at(column, y)] == BH_TERMINAL_HORIZON) {
-      minY = std::min(minY, y);
-      maxY = std::max(maxY, y);
-    }
-  }
-  result.boundaryDiameter = maxX >= minX ? static_cast<double>(maxX - minX + 1) : 0.0;
-  result.verticalDiameter = maxY >= minY ? static_cast<double>(maxY - minY + 1) : 0.0;
-  result.boundaryRadius = (result.boundaryDiameter + result.verticalDiameter) / 4.0;
-  const double widest = std::max(result.boundaryDiameter, result.verticalDiameter);
-  result.circularity =
-      widest > 0.0 ? std::abs(result.boundaryDiameter - result.verticalDiameter) / widest : 0.0;
+  detail::measureExtents(result, terminals, width, height, centerX, centerY);
 
   const auto bins = result.radialLuminance.size();
   const auto gradientStart = static_cast<std::size_t>(std::max(1.0, result.boundaryRadius - 8.0));
@@ -229,41 +281,7 @@ struct ImageComparison {
   }
   result.luminanceBoundaryDiameter = 2.0 * result.luminanceBoundaryRadius;
 
-  // The limb is a local maximum of the radial profile near the critical
-  // radius, measured against the profile three bins inside and outside it; a
-  // hard matte steps from dark to sky with no such maximum.
-  constexpr std::size_t shoulder = 3;
-  const double limbCenter = anchor ? anchor->radius : result.boundaryRadius;
-  const auto limbStart =
-      static_cast<std::size_t>(std::max(static_cast<double>(shoulder), limbCenter - 2.0));
-  const auto limbEnd =
-      std::min(bins - 1 - shoulder, static_cast<std::size_t>(limbCenter + 8.0));
-  if (captured > 0 && limbStart <= limbEnd) {
-    std::size_t peak = limbStart;
-    for (std::size_t radius = limbStart; radius <= limbEnd; ++radius) {
-      if (result.radialLuminance[radius] > result.radialLuminance[peak]) {
-        peak = radius;
-      }
-    }
-    const double peakValue = result.radialLuminance[peak];
-    const double baseline = std::max(result.radialLuminance[peak - shoulder],
-                                     result.radialLuminance[peak + shoulder]);
-    result.limbRadius = static_cast<double>(peak);
-    result.limbContrast = peakValue - baseline;
-    result.centralToRing = peakValue > 0.0 ? result.radialLuminance.front() / peakValue : 0.0;
-    if (result.limbContrast > 0.0) {
-      const double halfMaximum = baseline + (result.limbContrast * 0.5);
-      std::size_t lower = peak;
-      while (lower > 0 && result.radialLuminance[lower - 1] > halfMaximum) {
-        --lower;
-      }
-      std::size_t upper = peak;
-      while (upper + 1 < bins && result.radialLuminance[upper + 1] > halfMaximum) {
-        ++upper;
-      }
-      result.limbWidth = static_cast<double>(upper - lower + 1);
-    }
-  }
+  detail::measureLimb(result, anchor ? anchor->radius : result.boundaryRadius, captured > 0);
   return result;
 }
 
