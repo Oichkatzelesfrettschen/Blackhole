@@ -1059,27 +1059,24 @@ void renderTesseractPanel(RenderState &rs) {
   ImGui::End();
 }
 
-void resetLayout(ImGuiID dockspaceId) {
+void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace) {
   ImGui::DockBuilderRemoveNode(dockspaceId);
   ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
-  ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
+  ImGui::DockBuilderSetNodePos(dockspaceId, ImGui::GetMainViewport()->WorkPos);
+  ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->WorkSize);
 
   ImGuiID dockMainId = dockspaceId;
+  const float railFraction = workspace == WorkspaceKind::Gororoba ? 0.40f : 0.31f;
   ImGuiID dockLeftId =
-      ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Left, 0.30f, nullptr, &dockMainId);
-  ImGuiID const dockLeftDownId =
-      ImGui::DockBuilderSplitNode(dockLeftId, ImGuiDir_Down, 0.50f, nullptr, &dockLeftId);
-
-  // Dock Windows
+      ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Left, railFraction, nullptr, &dockMainId);
+  const ImGuiID dockLeftDownId = ImGui::DockBuilderSplitNode(
+      dockLeftId, ImGuiDir_Down, workspace == WorkspaceKind::Gororoba ? 0.42f : 0.50f,
+      nullptr, &dockLeftId);
   ImGui::DockBuilderDockWindow("Viewport", dockMainId);
-
-  // Left Upper: Main Settings
   ImGui::DockBuilderDockWindow("Settings", dockLeftId);
   ImGui::DockBuilderDockWindow("Display", dockLeftId);
   ImGui::DockBuilderDockWindow("Background", dockLeftId);
   ImGui::DockBuilderDockWindow("Tesseract", dockLeftId);
-
-  // Left Lower: Controls, Performance, Tools
   ImGui::DockBuilderDockWindow("Controls", dockLeftDownId);
   ImGui::DockBuilderDockWindow("Performance", dockLeftDownId);
   ImGui::DockBuilderDockWindow("Wiregrid", dockLeftDownId);
@@ -1087,6 +1084,20 @@ void resetLayout(ImGuiID dockspaceId) {
   ImGui::DockBuilderDockWindow("Gizmo", dockLeftDownId);
   ImGui::DockBuilderDockWindow("Controls Help", dockLeftDownId);
   ImGui::DockBuilderDockWindow("RmlUi", dockLeftDownId);
+  ImGui::DockBuilderDockWindow("Post Processing", dockLeftDownId);
+  ImGui::DockBuilderDockWindow("Curve Overlay", dockLeftDownId);
+  ImGui::DockBuilderDockWindow("Observer physics note", dockLeftDownId);
+  ImGui::DockBuilderDockWindow("Observer from far away (schematic)", dockLeftDownId);
+  ImGui::DockBuilderDockWindow("Observer sky", dockLeftDownId);
+  ImGui::DockBuilderDockWindow("Campaign", dockLeftId);
+  ImGui::DockBuilderDockWindow("Campaign Intel", dockLeftId);
+  ImGui::DockBuilderDockWindow("CampaignInbox", dockLeftId);
+  ImGui::DockBuilderDockWindow("Technology", dockLeftId);
+  ImGui::DockBuilderDockWindow("Strategic Map", dockLeftDownId);
+
+  ImGuiDockNode *viewportNode = ImGui::DockBuilderGetNode(dockMainId);
+  viewportNode->LocalFlags |= static_cast<int>(ImGuiDockNodeFlags_NoDockingOverMe) |
+                              static_cast<int>(ImGuiDockNodeFlags_NoDockingSplit);
 
   ImGui::DockBuilderFinish(dockspaceId);
 }

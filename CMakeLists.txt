@@ -4814,6 +4814,12 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  add_executable(workspace_layout_test "${PROJECT_SOURCE_DIR}/tests/workspace_layout_test.cpp")
+  target_compile_options(workspace_layout_test PRIVATE ${PROJECT_WARNINGS})
+  target_link_libraries(workspace_layout_test PRIVATE blackhole_testcore GTest::gtest_main)
+  add_test(NAME workspace_layout_validation COMMAND workspace_layout_test)
+  set_tests_properties(workspace_layout_validation PROPERTIES TIMEOUT 30 LABELS "ui;unit")
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp")
     add_executable(campaign_task_graph_test
       "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp"

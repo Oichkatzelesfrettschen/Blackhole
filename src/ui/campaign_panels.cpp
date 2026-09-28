@@ -6,6 +6,7 @@
 #include "ui/campaign_panels.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -220,33 +221,81 @@ void renderTimeLedger(const game::CampaignViewSnapshot &view, const CampaignUiSt
   }
 }
 
-void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &uiState) {
+void renderFleetCards(const game::CampaignViewSnapshot &view, CampaignUiState &uiState) {
+  // A rail-sized campaign panel shows one complete fleet per card.
+  for (const game::FleetView &fleet : view.fleets) {
+    ImGui::PushID(static_cast<int>(fleet.id));
+    const std::string identity =
+        std::format("Fleet {} - {}", fleet.id, game::capabilityName(fleet.capability));
+    if (ImGui::Selectable(identity.c_str(), fleet.id == uiState.selectedFleet)) {
+      uiState.selectedFleet = fleet.id;
+    }
+    if (fleet.positionKnown) {
+      ImGui::Text("Band: %d", fleet.bandIndex);
+    } else {
+      ImGui::TextDisabled("Band: ?");
+    }
+    if (fleet.telemetryKnown) {
+      ImGui::Text("dtau/dt: %.4g  |  Proper time: %.2f d", fleet.properTimeRate,
+                  days(fleet.properTimeSec));
+      ImGui::Text("Tasks pending/active/completed: %u/%u/%u", fleet.pendingTasks, fleet.activeTasks,
+                  fleet.completedTasks);
+      ImGui::Text("Fuel: %.0f  |  Reliability: %.2f%s", fleet.fuelUnits, fleet.reliability,
+                  fleet.telemetryCorrupted ? " (corrupted)" : "");
+    } else {
+      ImGui::TextDisabled("Telemetry unavailable at this station");
+    }
+    if (fleet.positionKnown) {
+      const std::string lane = fleet.observer == game::Observer::Hovering
+                                   ? "hover"
+                                   : std::format("{}{}", game::laneName(fleet.lane),
+                                                 fleet.unstableOrbit ? " (unstable)" : "");
+      ImGui::TextWrapped("Lane: %s", lane.c_str());
+    }
+    ImGui::TextWrapped("Effect: %s x%.2f", capabilityEffectText(fleet.capability),
+                       fleet.yieldMultiplier);
+    ImGui::Separator();
+    ImGui::PopID();
+  }
+}
+
+void renderFleetTable(const game::CampaignViewSnapshot &view, CampaignUiState &uiState) {
   if (!ImGui::BeginTable("fleet_roster", 9,
                          ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
-                             ImGuiTableFlags_SizingStretchProp)) {
+                             ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollX |
+                             ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit,
+                         ImVec2(0.0f, 280.0f))) {
     return;
   }
-  ImGui::TableSetupColumn("fleet");
-  ImGui::TableSetupColumn("band");
-  ImGui::TableSetupColumn("dtau/dt");
-  ImGui::TableSetupColumn("tau (d)");
-  ImGui::TableSetupColumn("tasks p/a/c");
-  ImGui::TableSetupColumn("fuel");
-  ImGui::TableSetupColumn("reliability");
-  ImGui::TableSetupColumn("lane");
-  ImGui::TableSetupColumn("effect");
+  ImGui::TableSetupScrollFreeze(1, 1);
+  ImGui::TableSetupColumn("fleet", ImGuiTableColumnFlags_WidthFixed, K_FLEET_COLUMN_MIN_WIDTHS[0]);
+  ImGui::TableSetupColumn("band", ImGuiTableColumnFlags_WidthFixed, K_FLEET_COLUMN_MIN_WIDTHS[1]);
+  ImGui::TableSetupColumn("dtau/dt", ImGuiTableColumnFlags_WidthFixed,
+                          K_FLEET_COLUMN_MIN_WIDTHS[2]);
+  ImGui::TableSetupColumn("tau (d)", ImGuiTableColumnFlags_WidthFixed,
+                          K_FLEET_COLUMN_MIN_WIDTHS[3]);
+  ImGui::TableSetupColumn("tasks p/a/c", ImGuiTableColumnFlags_WidthFixed,
+                          K_FLEET_COLUMN_MIN_WIDTHS[4]);
+  ImGui::TableSetupColumn("fuel", ImGuiTableColumnFlags_WidthFixed, K_FLEET_COLUMN_MIN_WIDTHS[5]);
+  ImGui::TableSetupColumn("reliability", ImGuiTableColumnFlags_WidthFixed,
+                          K_FLEET_COLUMN_MIN_WIDTHS[6]);
+  ImGui::TableSetupColumn("lane", ImGuiTableColumnFlags_WidthFixed, K_FLEET_COLUMN_MIN_WIDTHS[7]);
+  ImGui::TableSetupColumn("effect", ImGuiTableColumnFlags_WidthStretch, 1.0f);
   ImGui::TableHeadersRow();
   for (const game::FleetView &fleet : view.fleets) {
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     char rowLabel[48];
     static_cast<void>(std::snprintf(rowLabel, sizeof(rowLabel), "%u %s##fleet%u", fleet.id,
-                  game::capabilityName(fleet.capability), fleet.id));
+                                    game::capabilityName(fleet.capability), fleet.id));
     const bool selected = fleet.id == uiState.selectedFleet;
     if (ImGui::Selectable(rowLabel, selected,
                           ImGuiSelectableFlags_SpanAllColumns |
                               ImGuiSelectableFlags_AllowOverlap)) {
       uiState.selectedFleet = fleet.id;
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Fleet %u - %s", fleet.id, game::capabilityName(fleet.capability));
     }
     ImGui::TableNextColumn();
     if (fleet.positionKnown) {
@@ -285,11 +334,26 @@ void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &
       ImGui::TextUnformatted("hover");
     } else {
       ImGui::Text("%s%s", game::laneName(fleet.lane), fleet.unstableOrbit ? " (unstable)" : "");
+      if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s%s", game::laneName(fleet.lane),
+                          fleet.unstableOrbit ? " (unstable)" : "");
+      }
     }
     ImGui::TableNextColumn();
     ImGui::Text("%s x%.2f", capabilityEffectText(fleet.capability), fleet.yieldMultiplier);
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("%s x%.2f", capabilityEffectText(fleet.capability), fleet.yieldMultiplier);
+    }
   }
   ImGui::EndTable();
+}
+
+void renderFleetRoster(const game::CampaignViewSnapshot &view, CampaignUiState &uiState) {
+  if (fleetRosterUsesCards(ImGui::GetContentRegionAvail().x)) {
+    renderFleetCards(view, uiState);
+  } else {
+    renderFleetTable(view, uiState);
+  }
 }
 
 void renderOrderComposer(game::CampaignSession &session, const game::CampaignViewSnapshot &view,
@@ -392,8 +456,6 @@ void renderOrderComposer(game::CampaignSession &session, const game::CampaignVie
 }
 
 void renderIntelWindow(const game::CampaignViewSnapshot &view, const CampaignUiState &uiState) {
-  ImGui::SetNextWindowPos(ImVec2(980.0f, 40.0f), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(420.0f, 300.0f), ImGuiCond_FirstUseEver);
   if (!ImGui::Begin("Campaign Intel", nullptr, ImGuiWindowFlags_NoCollapse)) {
     ImGui::End();
     return;
@@ -560,8 +622,6 @@ void renderClocks(const game::CampaignViewSnapshot &view, const CampaignUiState 
 }
 
 void renderInboxWindow(const game::CampaignViewSnapshot &view, CampaignUiState &uiState) {
-  ImGui::SetNextWindowPos(ImVec2(980.0f, 360.0f), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(620.0f, 320.0f), ImGuiCond_FirstUseEver);
   // The inbox of the station the player stands at, labeled by that station.
   game::Inbox &inbox =
       uiState.focusNode == game::K_AUTHORITY_NODE ? uiState.hostInbox : uiState.inbox;
@@ -636,8 +696,6 @@ void renderTechWindow(const game::CampaignViewSnapshot &view, const CampaignUiSt
   if (view.techTiers.empty()) {
     return;
   }
-  ImGui::SetNextWindowPos(ImVec2(980.0f, 700.0f), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(460.0f, 300.0f), ImGuiCond_FirstUseEver);
   if (!ImGui::Begin("Technology", nullptr, ImGuiWindowFlags_NoCollapse)) {
     ImGui::End();
     return;
@@ -768,8 +826,11 @@ void initCampaignUiFromEnv(CampaignUiState &uiState) {
 
 void renderCampaignWindows(game::CampaignSession &defaultSession, CampaignUiState &uiState,
                            const CampaignBackdrop *backdrops, int backdropCount) {
-  ImGui::SetNextWindowPos(ImVec2(420.0f, 40.0f), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(540.0f, 420.0f), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSizeConstraints(ImVec2(360.0f, 240.0f), ImVec2(FLT_MAX, FLT_MAX));
+  if (uiState.focusCampaignWindow) {
+    ImGui::SetNextWindowFocus();
+    uiState.focusCampaignWindow = false;
+  }
   if (ImGui::Begin("Campaign", nullptr, ImGuiWindowFlags_NoCollapse)) {
     ImGui::Checkbox("Singularity: GOROROBA", &uiState.windowsOpen);
     if (uiState.windowsOpen) {

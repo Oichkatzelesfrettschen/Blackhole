@@ -13,9 +13,8 @@
 
 using namespace gl;
 
-using ui::renderBloomPanel;
 using ui::renderDepthEffectsPanel;
-using ui::renderTonemapPanel;
+using ui::renderPostProcessingPanel;
 
 namespace blackhole {
 
@@ -38,6 +37,10 @@ RenderToTextureInfo tonemapPass(const RenderState &rs, double contentSeconds) {
 }
 
 GLuint runPostProcessPipeline(RenderState &rs, const InputManager &input, double contentSeconds) {
+  if (input.isUIVisible() && rs.overlays.diagnosticsVisible) {
+    renderPostProcessingPanel(rs);
+    renderDepthEffectsPanel(rs);
+  }
   // Bound texture indexing and mip-level shifts for every caller.
   const int bloomIterations = std::clamp(rs.post.bloomIterations, 1, K_MAX_BLOOM_ITERATIONS);
   if (rs.timing.gpuTimers.initialized) {
@@ -55,8 +58,6 @@ GLuint runPostProcessPipeline(RenderState &rs, const InputManager &input, double
     rtti.floatUniforms["brightPassKnee"]      = rs.post.bloomKnee;
     renderToTexture(rtti);
   }
-
-  // Post Processing panel moved to Main Settings
 
   {
     ZONE_SCOPED_N("Bloom Downsample");
@@ -106,9 +107,6 @@ GLuint runPostProcessPipeline(RenderState &rs, const InputManager &input, double
     rtti.width = rs.targets.renderWidth;
     rtti.height = rs.targets.renderHeight;
 
-    if (input.isUIVisible()) {
-      renderBloomPanel(rs);
-    }
     rtti.floatUniforms["bloomStrength"] = rs.post.bloomStrength;
     rtti.floatUniforms["tone"]          = rs.post.bloomTone;
 
@@ -123,9 +121,6 @@ GLuint runPostProcessPipeline(RenderState &rs, const InputManager &input, double
   }
   {
     ZONE_SCOPED_N("Tonemap");
-    if (input.isUIVisible()) {
-      renderTonemapPanel(rs);
-    }
     const RenderToTextureInfo rtti = tonemapPass(rs, contentSeconds);
     renderToTexture(rtti);
   }
@@ -133,10 +128,6 @@ GLuint runPostProcessPipeline(RenderState &rs, const InputManager &input, double
     rs.timing.gpuTimers.tonemap.end();
   }
 
-
-  if (input.isUIVisible()) {
-    renderDepthEffectsPanel(rs);
-  }
 
   GLuint finalTexture = rs.targets.texTonemapped;
   // Depth cues read the geodesic integrator's depth from texBlackhole alpha;

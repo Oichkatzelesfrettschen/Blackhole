@@ -41,6 +41,9 @@ inline constexpr float K_LEGACY_TONE_EXPOSURE = 1.0f;
 inline constexpr float K_DEFAULT_BACKGROUND_INTENSITY = 0.15f;
 
 struct Settings {
+  int workspaceSchemaVersion = 0;
+  int workspaceKind = 0;
+  bool advancedControls = false;
   // === DISPLAY ===
   int windowWidth = 1920;
   int windowHeight = 1080;

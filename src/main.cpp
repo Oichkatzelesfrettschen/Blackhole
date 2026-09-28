@@ -1397,6 +1397,63 @@ void prepareFrameTextures(RenderState &rs, const platform::CliOptions &cli,
   }
 }
 
+void initializeWorkspaceLayout(Settings &settings, ui::CampaignUiState &campaignUi,
+                               RenderState &rs) {
+  if (campaignUi.windowsOpen) {
+    settings.workspaceKind = static_cast<int>(ui::WorkspaceKind::Gororoba);
+  } else if (settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Gororoba)) {
+    campaignUi.windowsOpen = true;
+  }
+  rs.overlays.firstLayout = settings.workspaceSchemaVersion != ui::K_WORKSPACE_SCHEMA_VERSION ||
+                            !std::filesystem::exists(ImGui::GetIO().IniFilename);
+}
+
+void prepareWorkspaceDockspace(ImGuiID dockspaceId, Settings &settings,
+                               ui::CampaignUiState &campaignUi, RenderState &rs) {
+  ImGui::DockSpaceOverViewport(dockspaceId, ImGui::GetMainViewport(), ImGuiDockNodeFlags_None);
+  if (rs.overlays.firstLayout) {
+    if (settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Gororoba)) {
+      campaignUi.windowsOpen = true;
+      campaignUi.focusCampaignWindow = true;
+    }
+    resetLayout(dockspaceId, static_cast<ui::WorkspaceKind>(settings.workspaceKind));
+    rs.overlays.firstLayout = false;
+    settings.workspaceSchemaVersion = ui::K_WORKSPACE_SCHEMA_VERSION;
+  }
+  rs.overlays.diagnosticsVisible = settings.advancedControls ||
+                                   settings.workspaceKind ==
+                                       static_cast<int>(ui::WorkspaceKind::Diagnostics);
+}
+
+void renderWorkspacePanels(RenderState &rs, const Settings &settings, GLFWwindow *window,
+                           int windowWidth, int windowHeight, float cpuFrameMs,
+                           game::CampaignSession &campaignSession,
+                           ui::CampaignUiState &campaignUi,
+                           const std::array<ui::CampaignBackdrop, 5> &campaignBackdrops,
+                           bool panelsVisible) {
+  if (!panelsVisible) {
+    return;
+  }
+  if (settings.workspaceKind != static_cast<int>(ui::WorkspaceKind::Gororoba)) {
+    renderControlsSettingsPanel(rs);
+    renderDisplaySettingsPanel(rs, window, windowWidth, windowHeight);
+    renderBackgroundPanel(rs);
+  }
+  if (rs.overlays.diagnosticsVisible) {
+    renderControlsHelpPanel();
+    renderWiregridPanel(rs);
+    ui::renderObserverWindows(rs);
+    renderTesseractPanel(rs);
+    renderRmlUiPanel(rs);
+    renderGizmoPanel(rs);
+    renderPerformancePanel(rs, cpuFrameMs);
+  }
+  if (settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Gororoba)) {
+    ui::renderCampaignWindows(campaignSession, campaignUi, campaignBackdrops.data(),
+                              static_cast<int>(campaignBackdrops.size()));
+  }
+}
+
 } // anonymous namespace
 
 int main(int argc, char **argv) {
@@ -1442,6 +1499,7 @@ int main(int argc, char **argv) {
     // Load settings first
     SettingsManager::instance().load();
     auto &settings = SettingsManager::instance().get();
+    settings.workspaceKind = std::clamp(settings.workspaceKind, 0, 2);
 
     // Initialize window and OpenGL context
     GLFWwindow *window = initializeWindow(settings.windowWidth, settings.windowHeight);
@@ -1479,6 +1537,7 @@ int main(int argc, char **argv) {
     game::CampaignSession campaignSession;
     ui::CampaignUiState campaignUi;
     ui::initCampaignUiFromEnv(campaignUi);
+    initializeWorkspaceLayout(settings, campaignUi, rs);
     // Selectable NASA nebula backdrops for the strategic map. Each entry's
     // texture is 0 when its asset is absent, in which case the map draws its
     // procedural starfield for that choice. Loaded once; the Campaign panel
@@ -1587,12 +1646,7 @@ int main(int argc, char **argv) {
       // DOCKING & VIEWPORT SETUP (EARLY)
       // ---------------------------------------------------------
       ImGuiID const dockspaceId = ImGui::GetID("MyDockSpace");
-      ImGui::DockSpaceOverViewport(dockspaceId, ImGui::GetMainViewport(), ImGuiDockNodeFlags_None);
-
-      if (rs.overlays.firstLayout) {
-        resetLayout(dockspaceId);
-        rs.overlays.firstLayout = false;
-      }
+      prepareWorkspaceDockspace(dockspaceId, settings, campaignUi, rs);
 
       ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
       ImGui::Begin("Viewport", nullptr,
@@ -1691,20 +1745,9 @@ int main(int argc, char **argv) {
       ImGui::PopStyleVar(); // WindowPadding
 
       // Normal UI panels are hidden in record mode so they don't appear in the video.
-      if (input.isUIVisible() && cli.recordFramesDir.empty()) {
-        renderControlsHelpPanel();
-        renderControlsSettingsPanel(rs);
-        renderDisplaySettingsPanel(rs, window, windowWidth, windowHeight);
-        renderBackgroundPanel(rs);
-        renderWiregridPanel(rs);
-        ui::renderObserverWindows(rs);
-        renderTesseractPanel(rs);
-        renderRmlUiPanel(rs);
-        renderGizmoPanel(rs);
-        renderPerformancePanel(rs, cpuFrameMs);
-        ui::renderCampaignWindows(campaignSession, campaignUi, campaignBackdrops.data(),
-                                  static_cast<int>(campaignBackdrops.size()));
-      }
+      renderWorkspacePanels(rs, settings, window, windowWidth, windowHeight, cpuFrameMs,
+                            campaignSession, campaignUi, campaignBackdrops,
+                            input.isUIVisible() && cli.recordFramesDir.empty());
       // Real time runs every frame, panels drawn or not: hiding the UI does
       // not freeze the campaign.
       ui::pumpCampaignRealtime(campaignSession, campaignUi, static_cast<double>(deltaTime));
