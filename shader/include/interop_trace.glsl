@@ -7,6 +7,7 @@
 #include "include/stokes_transport.glsl"
 #include "include/disk_profile.glsl"
 #include "include/disk_transfer.glsl"
+#include "include/ray_terminal.h"
 
 const float BH_EPSILON = 1e-6;
 const float BH_DEBUG_MAX_RADIUS_MULT = 4.0;
@@ -30,6 +31,7 @@ struct Ray {
 };
 
 struct HitResult {
+  int terminal;
   // Camera position in the tracer's chart (kerrChartPosition); hit and
   // closest-approach points are in the same chart.
   vec3 origin;
@@ -55,6 +57,14 @@ struct HitResult {
 const int BH_BACKGROUND_LAYERS = 3;
 
 int bhDebugMask() { return int(bhDebugFlags + 0.5); }
+
+vec3 bhDisplayTerminal(vec3 color, int terminal) {
+  if (terminal == BH_TERMINAL_MAX_STEPS &&
+      (bhDebugMask() & BH_DEBUG_FLAG_MAXSTEPS) != 0) {
+    return vec3(0.0, 1.0, 1.0);
+  }
+  return color;
+}
 
 // Frames. The world frame is y-up: the camera orbit (camera_math.cpp), the
 // sky's equirect pole (bhDirToUv), and the legacy tracer's spin axis. The
@@ -296,6 +306,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
                           float stepSize) {
   float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
   HitResult result;
+  result.terminal = BH_TERMINAL_RUNNING;
   result.hitDisk = false;
   result.hitHorizon = false;
   result.escaped = false;
@@ -312,6 +323,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   result.debugFlags = 0;
 
   if (!bhHoleRendered()) {
+    result.terminal = BH_TERMINAL_ESCAPE;
     result.escaped = true;
     result.hitPoint = ray.position + escapeRadius * result.escapedDir;
     result.minRadius = BH_NO_HOLE_RADIUS;
@@ -338,7 +350,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   result.origin = kerrChartPosition(ray.position, rsMetric, aTrace);
   result.closestApproachPoint = result.origin;
 
-  vec3 oldPos;
+  vec3 oldPos = kerrRayPosition(kerrRay);
   float dt = stepSize;
 
   for (int step = 0; step < maxSteps; ++step) {
@@ -346,6 +358,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
     bhRecordClosestApproach(result, kerrRay.r, oldPos, step);
 
     if (kerrRay.r <= r_horizon) {
+      result.terminal = BH_TERMINAL_HORIZON;
       result.hitHorizon = true;
       result.hitPoint = oldPos;
       return result;
@@ -363,6 +376,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
     if (adiskEnabled > 0.5) {
       vec3 diskHit;
       if (bhCheckDiskIntersection(oldPos, newPos, r_disk_in, r_disk_out, diskHit)) {
+        result.terminal = BH_TERMINAL_DISK_HIT;
         result.hitDisk = true;
         result.hitPoint = diskHit;
         result.phi = atan(diskHit.y, diskHit.x);
@@ -372,6 +386,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
     }
 
     if (kerrRay.r > escapeRadius && kerrRay.vr > 0.0) {
+      result.terminal = BH_TERMINAL_ESCAPE;
       result.escaped = true;
       result.hitPoint = newPos;
       result.escapedDir = normalize(newPos - oldPos);
@@ -380,6 +395,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   }
 
   result.debugFlags |= BH_DEBUG_FLAG_MAXSTEPS;
+  result.terminal = BH_TERMINAL_MAX_STEPS;
   result.escaped = true;
   result.hitPoint = kerrRayPosition(kerrRay);
   result.escapedDir = normalize(result.hitPoint - oldPos);
@@ -507,7 +523,8 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
   // (rather than gating each flag's assignment) lets the integrator classify
   // unconditionally while an exhausted ray under an unrelated mask bit still
   // falls through to normal shading instead of being swallowed to black.
-  int displayFlags = hit.debugFlags & bhDebugMask();
+  int terminalFlags = hit.terminal == BH_TERMINAL_MAX_STEPS ? BH_DEBUG_FLAG_MAXSTEPS : 0;
+  int displayFlags = (hit.debugFlags | terminalFlags) & bhDebugMask();
   if (displayFlags != 0) {
     vec3 debugColor = vec3(0.0);
     if ((displayFlags & BH_DEBUG_FLAG_NAN) != 0) {
@@ -521,10 +538,10 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
     }
     return vec4(clamp(debugColor, 0.0, 1.0), 1.0);
   }
-  if (hit.hitHorizon) {
+  if (hit.terminal == BH_TERMINAL_HORIZON) {
     return vec4(bhHorizonShade(length(hit.hitPoint), r_s), 1.0);
   }
-  if (hit.hitDisk) {
+  if (hit.terminal == BH_TERMINAL_DISK_HIT) {
     return bhDiskColorFromHit(hit, r_s);
   }
   if (debugShaperInputs > 0.5) {
@@ -712,7 +729,9 @@ bool bhDiskSegment(vec3 p0, vec3 p1, float rIn, float rOut, float h, float r_s,
 // alpha_nu are per unit affine length (kerrAffineStep).
 // ---------------------------------------------------------------------------
 vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
-                        float stepSize, float opacityScale, out vec3 terminalPos) {
+                        float stepSize, float opacityScale, out vec3 terminalPos,
+                        out int terminal) {
+  terminal = BH_TERMINAL_RUNNING;
   float a = 0.5 * kerrSpin * r_s;
   float r_horizon = kerrOuterHorizon(r_s, a);
   if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
@@ -724,6 +743,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 
   float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
   if (!bhHoleRendered()) {
+    terminal = BH_TERMINAL_ESCAPE;
     vec3 dir = normalize(ray.velocity);
     terminalPos = ray.position + escapeRadius * dir;
     return vec4(bhBackgroundColorFromDir(dir).rgb, 1.0);
@@ -745,6 +765,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
     vec3 curPos = kerrRayPosition(kRay);
 
     if (kRay.r <= r_horizon) {
+      terminal = BH_TERMINAL_HORIZON;
       terminalPos = curPos;
       accumI += transmit * bhHorizonShade(kRay.r, r_s);
       return vec4(accumI, 1.0);
@@ -772,12 +793,14 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 
       // Early exit when medium becomes opaque
       if (transmit < 0.005) {
+        terminal = BH_TERMINAL_OPAQUE_MEDIUM;
         terminalPos = newPos;
         return vec4(accumI, 1.0);
       }
     }
 
     if (kRay.r > escapeRadius && kRay.vr > 0.0) {
+      terminal = BH_TERMINAL_ESCAPE;
       vec3 escDir = newPos - curPos;
       terminalPos = newPos;
       if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
@@ -787,13 +810,21 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
     }
   }
 
-  // Max steps exhausted -- treat as escaped toward last known direction
+  terminal = BH_TERMINAL_MAX_STEPS;
+  // The sky uses the last known direction when the step budget ends.
   vec3 finalPos = kerrRayPosition(kRay);
   terminalPos = finalPos;
   if (dot(lastDir, lastDir) > BH_EPSILON * BH_EPSILON) {
     accumI += transmit * bhBackgroundColorFromDir(normalize(lastDir)).rgb;
   }
   return vec4(accumI, 1.0);
+}
+
+vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
+                        float stepSize, float opacityScale, out vec3 terminalPos) {
+  int terminal;
+  return bhTraceGeodesicRTE(ray, r_s, maxDistance, maxSteps, stepSize, opacityScale,
+                            terminalPos, terminal);
 }
 
 // ---------------------------------------------------------------------------
@@ -826,7 +857,8 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
 vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
                             float stepSize, float opacityScale,
                             float bFieldAngle, float neScale,
-                            out vec3 terminalPos) {
+                            out vec3 terminalPos, out int terminal) {
+  terminal = BH_TERMINAL_RUNNING;
   float a = 0.5 * kerrSpin * r_s;
   float r_horizon = kerrOuterHorizon(r_s, a);
   if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
@@ -840,6 +872,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
 
   float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
   if (!bhHoleRendered()) {
+    terminal = BH_TERMINAL_ESCAPE;
     vec3 dir = normalize(ray.velocity);
     terminalPos = ray.position + escapeRadius * dir;
     vec3 sky = bhBackgroundColorFromDir(dir).rgb;
@@ -872,6 +905,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
     vec3 curPos = kerrRayPosition(kRay);
 
     if (kRay.r <= r_horizon) {
+      terminal = BH_TERMINAL_HORIZON;
       terminalPos = curPos;
       accumI += transmit * bhHorizonShade(kRay.r, r_s);
       float I = (accumI.r + accumI.g + accumI.b) / 3.0;
@@ -914,12 +948,14 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
                           pathStep);
 
       if (transmit < 0.005) {
+        terminal = BH_TERMINAL_OPAQUE_MEDIUM;
         finished = true;
         break;
       }
     }
 
     if (kRay.r > escapeRadius && kRay.vr > 0.0) {
+      terminal = BH_TERMINAL_ESCAPE;
       vec3 escDir = newPos - curPos;
       terminalPos = newPos;
       if (dot(escDir, escDir) > BH_EPSILON * BH_EPSILON) {
@@ -932,12 +968,24 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
 
   // Map accumulated Stokes state to display color
   terminalPos = kerrRayPosition(kRay);
+  if (!finished) {
+    terminal = BH_TERMINAL_MAX_STEPS;
+  }
   if (!finished && dot(lastDir, lastDir) > BH_EPSILON * BH_EPSILON) {
     accumI += transmit * bhBackgroundColorFromDir(normalize(lastDir)).rgb;
   }
   float I = (accumI.r + accumI.g + accumI.b) / 3.0;
   vec4 stokes = vec4(I, polObserved.y, polObserved.z, polObserved.w);
   return vec4(stokesDisplayColor(stokes, accumI), 1.0);
+}
+
+vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
+                            float stepSize, float opacityScale,
+                            float bFieldAngle, float neScale,
+                            out vec3 terminalPos) {
+  int terminal;
+  return bhTraceGeodesicStokes(ray, r_s, maxDistance, maxSteps, stepSize, opacityScale,
+                               bFieldAngle, neScale, terminalPos, terminal);
 }
 
 #endif // INTEROP_TRACE_GLSL

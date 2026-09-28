@@ -236,21 +236,23 @@ void main() {
     if (stokesEnabled > 0.5) {
         // D4: Polarized Stokes IQUV transport.
         vec3 terminalPos;
+        int terminal;
         vec4 stokesColor = bhTraceGeodesicStokes(
             ray, schwarzschildRadius, depthFar,
             interopMaxSteps, interopStepSize, rteOpacityScale,
-            stokesBFieldAngle, stokesNeScale, terminalPos);
-        vec3 col = stokesColor.rgb;
+            stokesBFieldAngle, stokesNeScale, terminalPos, terminal);
+        vec3 col = bhDisplayTerminal(stokesColor.rgb, terminal);
         applyWiregridOverlay(col, bhChartToBoyerLindquist(terminalPos, schwarzschildRadius));
         result = vec4(col, 1.0);
 
     } else if (rteEnabled > 0.5) {
         // D2: Volumetric radiative transfer.
         vec3 terminalPos;
+        int terminal;
         vec4 rteColor = bhTraceGeodesicRTE(
             ray, schwarzschildRadius, depthFar,
-            interopMaxSteps, interopStepSize, rteOpacityScale, terminalPos);
-        vec3 col = rteColor.rgb;
+            interopMaxSteps, interopStepSize, rteOpacityScale, terminalPos, terminal);
+        vec3 col = bhDisplayTerminal(rteColor.rgb, terminal);
         applyWiregridOverlay(col, bhChartToBoyerLindquist(terminalPos, schwarzschildRadius));
         result = vec4(col, 1.0);
 

@@ -15,6 +15,23 @@
 #include <math.h>
 
 #include "device_disk_transfer.cuh"
+#include "../../shader/include/ray_terminal.h"
+
+enum class RayTerminal : unsigned char {
+    Running = BH_TERMINAL_RUNNING,
+    Horizon = BH_TERMINAL_HORIZON,
+    Escape = BH_TERMINAL_ESCAPE,
+    DiskHit = BH_TERMINAL_DISK_HIT,
+    OpaqueMedium = BH_TERMINAL_OPAQUE_MEDIUM,
+    MaxSteps = BH_TERMINAL_MAX_STEPS,
+    NonFinite = BH_TERMINAL_NON_FINITE,
+    OutsideDomain = BH_TERMINAL_OUTSIDE_DOMAIN,
+    InvariantFailure = BH_TERMINAL_INVARIANT_FAILURE,
+};
+
+__device__ __forceinline__ void d_set_terminal(RayTerminal *output, RayTerminal terminal) {
+    if (output != nullptr) { *output = terminal; }
+}
 
 /* ========================================================================
  * Constants (mirrors physics_constants.glsl)
@@ -912,6 +929,7 @@ __device__ __forceinline__ float4 d_wiregrid_overlay(float r, float theta, float
 }
 
 struct HitResult {
+    RayTerminal terminal;
     float3 origin;     /**< @brief Camera position in the tracer's chart (d_kerr_chart_position);
                             hit and closest-approach points share it. */
     bool hit_disk;     /**< @brief Ray terminated on the accretion disk. */
@@ -929,6 +947,18 @@ struct HitResult {
     int first_closest_approach_step;   /**< @brief Step index of the first min-radius improvement, or -1. */
     int last_closest_approach_step;    /**< @brief Step index of the last min-radius improvement, or -1. */
 };
+
+__device__ __forceinline__ void d_classify_hit(HitResult &hit) {
+    if (hit.hit_horizon) {
+        hit.terminal = RayTerminal::Horizon;
+    } else if (hit.hit_disk) {
+        hit.terminal = RayTerminal::DiskHit;
+    } else if (hit.max_steps) {
+        hit.terminal = RayTerminal::MaxSteps;
+    } else if (hit.escaped) {
+        hit.terminal = RayTerminal::Escape;
+    }
+}
 
 __device__ __forceinline__ void d_record_closest_approach(HitResult& hit,
                                                           float radius,
@@ -1041,6 +1071,7 @@ __device__ __forceinline__ float d_schwarzschild_photon_lambda(float3 cam_pos, f
  */
 __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray_dir) {
     HitResult result;
+    result.terminal = RayTerminal::Running;
     result.hit_disk = false;
     result.hit_horizon = false;
     result.escaped = false;
@@ -1083,6 +1114,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
             d_record_closest_approach(result, kr.r, old_pos, step);
 
             if (kr.r <= r_horizon) {
+                result.terminal = RayTerminal::Horizon;
                 result.hit_horizon = true;
                 result.hit_point = old_pos;
                 return result;
@@ -1096,6 +1128,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
             if (d_adisk_enabled) {
                 float3 disk_hit;
                 if (d_check_disk(old_pos, new_pos, r_disk_in, r_disk_out, disk_hit)) {
+                    result.terminal = RayTerminal::DiskHit;
                     result.hit_disk = true;
                     result.hit_point = disk_hit;
                     result.phi = atan2f(disk_hit.y, disk_hit.x);
@@ -1105,6 +1138,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
             }
 
             if (kr.r > escape_r && kr.vr > 0.0f) {
+                result.terminal = RayTerminal::Escape;
                 result.escaped = true;
                 result.hit_point = new_pos;
                 return result;
@@ -1112,6 +1146,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
         }
         result.escaped = true;
         result.max_steps = true;
+        result.terminal = RayTerminal::MaxSteps;
         result.hit_point = d_kerr_ray_position(kr);
     } else {
         /* Schwarzschild geodesic integration */
@@ -1128,6 +1163,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
             d_record_closest_approach(result, r, pos, step);
 
             if (r <= rs) {
+                result.terminal = RayTerminal::Horizon;
                 result.hit_horizon = true;
                 result.hit_point = pos;
                 return result;
@@ -1136,6 +1172,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
             if (d_adisk_enabled) {
                 float3 disk_hit;
                 if (d_check_disk(old_pos, pos, r_disk_in, r_disk_out, disk_hit)) {
+                    result.terminal = RayTerminal::DiskHit;
                     result.hit_disk = true;
                     result.hit_point = disk_hit;
                     result.phi = atan2f(disk_hit.y, disk_hit.x);
@@ -1145,6 +1182,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
             }
 
             if (r > escape_r && d_dot(pos, vel) > 0.0f) {
+                result.terminal = RayTerminal::Escape;
                 result.escaped = true;
                 result.hit_point = pos;
                 return result;
@@ -1152,6 +1190,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
         }
         result.escaped = true;
         result.max_steps = true;
+        result.terminal = RayTerminal::MaxSteps;
         result.hit_point = pos;
     }
     return result;
@@ -1871,10 +1910,10 @@ __device__ __forceinline__ float4 d_sample_grmhd(float3 pos) {
  * @return Final RGBA float4 pixel color.
  */
 __device__ __forceinline__ float4 d_shade_hit(const HitResult& hit, float3 cam_pos) {
-    if (hit.hit_horizon) {
+    if (hit.terminal == RayTerminal::Horizon) {
         return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
-    if (hit.hit_disk) {
+    if (hit.terminal == RayTerminal::DiskHit) {
         if (d_debug_pre_redshift_background != 0 || d_debug_pre_shaping_background != 0 ||
             d_debug_post_shaping_background != 0 ||
             d_debug_shaper_inputs != 0 ||
@@ -2200,13 +2239,16 @@ __device__ __forceinline__ bool d_disk_segment(float3 p0, float3 p1, float r_in,
  * @return Composited RGBA float4 pixel color.
  */
 __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ray_dir,
-                                                       float3 *terminal_pos) {
+                                                       float3 *terminal_pos,
+                                                       RayTerminal *terminal = nullptr) {
+    d_set_terminal(terminal, RayTerminal::Running);
     float const rs = d_rs;
     float const a  = 0.5f * d_spin * rs;
 
     if (!d_kerr_enabled) {
         /* Schwarzschild fallback: single-scatter (same as baseline kernel) */
         HitResult const hit = d_trace_geodesic(cam_pos, ray_dir);
+        d_set_terminal(terminal, hit.terminal);
         if (terminal_pos != nullptr) { *terminal_pos = hit.hit_point; }
         return d_shade_hit(hit, hit.origin);
     }
@@ -2245,6 +2287,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
         }
 
         if (kr.r <= r_horizon) {
+            d_set_terminal(terminal, RayTerminal::Horizon);
             /* Horizon absorbs everything: return accumulated emission */
             if (terminal_pos != nullptr) { *terminal_pos = cur_pos; }
             return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
@@ -2271,12 +2314,14 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
             accum_i = d_add(accum_i, contrib);
 
             if (transmit < 0.005f) {
+                d_set_terminal(terminal, RayTerminal::OpaqueMedium);
                 if (terminal_pos != nullptr) { *terminal_pos = new_pos; }
                 return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
             }
         }
 
         if (kr.r > escape_r && kr.vr > 0.0f) {
+            d_set_terminal(terminal, RayTerminal::Escape);
             float3 const esc_dir = d_sub(new_pos, cur_pos);
             if (terminal_pos != nullptr) { *terminal_pos = new_pos; }
             if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
@@ -2300,7 +2345,8 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
         }
     }
 
-    /* Step budget exhausted -- treat as escaped along last known direction */
+    /* The step-budget terminal keeps the last direction for sky shading. */
+    d_set_terminal(terminal, RayTerminal::MaxSteps);
     float3 const final_pos = d_kerr_ray_position(kr);
     if (terminal_pos != nullptr) { *terminal_pos = final_pos; }
     float3 const esc_dir   = last_dir;
@@ -2525,12 +2571,15 @@ __device__ __forceinline__ float4 d_stokes_display_color(DStokes stokes, float3 
  */
 __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
                                                           float3 ray_dir,
-                                                          float3 *terminal_pos) {
+                                                          float3 *terminal_pos,
+                                                          RayTerminal *terminal = nullptr) {
+    d_set_terminal(terminal, RayTerminal::Running);
     float const rs = d_rs;
     float const a  = 0.5f * d_spin * rs;
 
     if (!d_kerr_enabled) {
         HitResult const hit = d_trace_geodesic(cam_pos, ray_dir);
+        d_set_terminal(terminal, hit.terminal);
         if (terminal_pos != nullptr) { *terminal_pos = hit.hit_point; }
         return d_shade_hit(hit, hit.origin);
     }
@@ -2585,6 +2634,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
         }
 
         if (kr.r <= r_horizon) {
+            d_set_terminal(terminal, RayTerminal::Horizon);
             if (terminal_pos != nullptr) { *terminal_pos = cur_pos; }
             return make_float4(accum_i.x, accum_i.y, accum_i.z, 1.0f);
         }
@@ -2626,12 +2676,14 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
                                     alpha_nu, rho_v, path_step);
 
             if (transmit < 0.005f) {
+                d_set_terminal(terminal, RayTerminal::OpaqueMedium);
                 finished = true;
                 break;
             }
         }
 
         if (kr.r > escape_r && kr.vr > 0.0f) {
+            d_set_terminal(terminal, RayTerminal::Escape);
             float3 const esc_dir = d_sub(new_pos, cur_pos);
             if (terminal_pos != nullptr) { *terminal_pos = new_pos; }
             if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
@@ -2657,6 +2709,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     }
 
     if (!finished) {
+        d_set_terminal(terminal, RayTerminal::MaxSteps);
         float3 const esc_dir = last_dir;
         if (d_dot(esc_dir, esc_dir) > D_EPSILON * D_EPSILON) {
             float4 const bg4 = d_background_color(d_normalize(esc_dir));

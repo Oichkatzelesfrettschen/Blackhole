@@ -706,11 +706,12 @@ void main() {
     if (stokesEnabled > 0.5) {
       // D4: Polarized Stokes IQUV transport (supersedes scalar RTE)
       vec3 terminalPos;
+      int terminal;
       vec4 stokesColor = bhTraceGeodesicStokes(ray, schwarzschildRadius, depthFar, steps,
                                                interopStepSize, rteOpacityScale,
                                                stokesBFieldAngle, stokesNeScale,
-                                               terminalPos);
-      vec3 interopColor = stokesColor.rgb;
+                                               terminalPos, terminal);
+      vec3 interopColor = bhDisplayTerminal(stokesColor.rgb, terminal);
       applyWiregridOverlay(interopColor, bhChartToBoyerLindquist(terminalPos, schwarzschildRadius));
       fragColor = vec4(interopColor, 1.0);
       return;
@@ -719,10 +720,11 @@ void main() {
     if (rteEnabled > 0.5) {
       // D2: Volumetric RTE path -- accumulates emission/absorption through disk
       vec3 terminalPos;
+      int terminal;
       vec4 rteColor = bhTraceGeodesicRTE(ray, schwarzschildRadius, depthFar, steps,
                                          interopStepSize, rteOpacityScale,
-                                         terminalPos);
-      vec3 interopColor = rteColor.rgb;
+                                         terminalPos, terminal);
+      vec3 interopColor = bhDisplayTerminal(rteColor.rgb, terminal);
       applyWiregridOverlay(interopColor, bhChartToBoyerLindquist(terminalPos, schwarzschildRadius));
       fragColor = vec4(interopColor, 1.0);
       return;
