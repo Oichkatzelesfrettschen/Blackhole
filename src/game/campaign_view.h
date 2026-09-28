@@ -178,7 +178,7 @@ struct CampaignViewSnapshot {
   double stabilization = 0.0;      ///< Cumulative containment produced by ergoregion work.
   double victoryStabilizationUnits = 0.0; ///< Alternate win: tame the singularity; 0 = off.
   double fleetIntegrity = 1.0;     ///< Lowest fleet reliability -- the cost the dive pays.
-  std::int64_t clearedTurn = 0;    ///< Turn a victory was reached; 0 until won.
+  std::int64_t clearedTurn = 0;    ///< Exact victory turn; -1 for a colony's inferred energy win.
   double ergosphereRadiusCm = 0.0; ///< Static limit; equals the horizon without spin.
   double spinDimensionless = 0.0;  ///< Black-hole spin a/M (0 for Schwarzschild).
   double spinDeficit = 1.0;        ///< 1 - |a|, exact near extremal spin.

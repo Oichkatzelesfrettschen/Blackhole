@@ -54,6 +54,7 @@ struct ReceivedFromNode {
   std::int64_t lastSenderProperSec = 0;    ///< Sender's local clock at that emission.
   std::int64_t lastSenderTechPoints = 0;   ///< Sender's tech points at that emission.
   double lastSenderEnergyUnits = 0.0;      ///< Host's banked energy at that emission (host senders).
+  std::int64_t energyWinEmitTurn = -1;      ///< Earliest received host stamp proving an on-time energy win.
 };
 
 struct StationNode {

@@ -641,6 +641,12 @@ void CampaignState::noteSenderStamp(const Delivery &delivery) {
     return; // a fleet's reply: no station clock to record
   }
   ReceivedFromNode &received = nodes_.at(delivery.destination).received.at(delivery.sender);
+  if (delivery.sender == K_AUTHORITY_NODE && config_.victoryEnergyUnits > 0.0 &&
+      delivery.senderEnergyUnitsAtEmit >= config_.victoryEnergyUnits &&
+      (config_.deadlineTurn == 0 || delivery.emitTurn <= config_.deadlineTurn) &&
+      (received.energyWinEmitTurn < 0 || delivery.emitTurn < received.energyWinEmitTurn)) {
+    received.energyWinEmitTurn = delivery.emitTurn;
+  }
   if (delivery.emitTurn < received.lastEmitTurn) {
     return; // an older emission that took longer: it says nothing newer
   }
@@ -806,6 +812,9 @@ void CampaignState::appendStoryState(std::vector<std::uint8_t> &out) const {
       appendI64(out, received.lastSenderProperSec);
       appendI64(out, received.lastSenderTechPoints);
       appendF64(out, received.lastSenderEnergyUnits);
+      if (config_.victoryEnergyUnits > 0.0 && !config_.colonies.empty()) {
+        appendI64(out, received.energyWinEmitTurn);
+      }
     }
   }
   appendU32(out, static_cast<std::uint32_t>(eventFired_.size()));
