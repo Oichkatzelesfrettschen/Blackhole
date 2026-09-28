@@ -13,7 +13,12 @@ explains the recorded surfaces. Registered tests are inventory, not execution.
   (`src/render/renderer_contract.h`) defaults to fragment dispatch of the Kerr
   tracer in the raytracer scene.
   Compute, CUDA, and Blender paths have separate build and runtime gates. Shader compilation
-  checks syntax and interfaces; image invariants and GPU parity need GPU runs.
+  checks syntax and interfaces. The [rendered-output lane](../validation/rendered-output-lane.md)
+  measures shipping pixels against analytic oracles: CI renders the Schwarzschild
+  critical-curve scene on Mesa llvmpipe, and `BLACKHOLE_RENDER_FULL=1` adds the
+  disk, Kerr, quality-tier, and backend scenes on a GL 4.6 GPU. The
+  [promotion record](../validation/default-renderer-promotion.md) compares the
+  default path with the legacy beauty tracer.
 - **Singularity: GOROROBA:** `game::CampaignSession` drives the canonical
   campaign scenario. `game::ConstellationSession` owns the multi-system contest.
   `campaign_sim` and campaign/constellation tests exercise deterministic
