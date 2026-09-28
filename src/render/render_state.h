@@ -269,6 +269,7 @@ struct RenderState {
     bool curveOverlayEnabled = true;
     bool curveOverlayWindowOpen = true;
     bool firstLayout = true;
+    bool sceneWindowFocusPending = false;
     bool diagnosticsVisible = false;
   } overlays;
 

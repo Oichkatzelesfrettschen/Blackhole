@@ -62,7 +62,9 @@ enum class WorkspaceKind { Simulator, ProperTime, Diagnostics };
 inline constexpr int K_WORKSPACE_SCHEMA_VERSION = 1;
 
 /** @brief Rebuilds the selected workspace in the main dockspace. */
-void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace);
+void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace,
+                 blackhole::RenderState::SceneMode sceneMode =
+                     blackhole::RenderState::SceneMode::Blackhole);
 
 } // namespace ui
 

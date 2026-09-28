@@ -37,9 +37,44 @@ def layout() -> dict[str, Any]:
     }
 
 
+def scene_layout(scene: str, name: str, dock_node_id: int, position: list[int]) -> dict[str, Any]:
+    captured = layout()
+    captured["scene"] = scene
+    captured["windows"].append(
+        {
+            "name": name,
+            "position": position,
+            "size": [400, 350],
+            "dock_node_id": dock_node_id,
+            "collapsed": False,
+            "visible": True,
+        }
+    )
+    return captured
+
+
 class WorkspaceLayoutChecks(unittest.TestCase):
     def test_valid_layout(self) -> None:
         self.assertEqual(validate(layout()), [])
+
+    def test_observer_scene_controls(self) -> None:
+        captured = scene_layout("observer", "Observer sky", 2, [0, 370])
+        self.assertEqual(validate(captured), [])
+        captured["windows"][-1]["visible"] = False
+        self.assertIn("scene control window is not visible: Observer sky", validate(captured))
+        captured["windows"][-1]["dock_node_id"] = 0
+        self.assertIn("scene control window is not docked: Observer sky", validate(captured))
+
+    def test_tesseract_scene_controls(self) -> None:
+        captured = scene_layout("tesseract", "Tesseract", 1, [0, 20])
+        self.assertEqual(validate(captured), [])
+        captured["windows"][-1]["size"] = [200, 100]
+        self.assertIn("undersized or collapsed decision window: Tesseract", validate(captured))
+
+    def test_unknown_scene_is_rejected(self) -> None:
+        captured = layout()
+        captured["scene"] = "other"
+        self.assertEqual(validate(captured), ["unknown scene: other"])
 
     def test_missing_and_small_window(self) -> None:
         changed = layout()

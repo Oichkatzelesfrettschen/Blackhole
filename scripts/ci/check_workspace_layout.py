@@ -17,6 +17,10 @@ MINIMUMS = {
     },
     "diagnostics": {"Viewport": (500, 300), "Settings": (300, 180), "Controls": (300, 180)},
 }
+SCENE_MINIMUMS = {
+    "observer": {"Observer sky": (300, 180)},
+    "tesseract": {"Tesseract": (300, 180)},
+}
 EDGE_TOLERANCE = 2.0
 OVERLAP_TOLERANCE = 4.0
 
@@ -30,7 +34,10 @@ def geometry(window: dict[str, Any]) -> tuple[float, float, float, float]:
 def validate(layout: dict[str, Any]) -> list[str]:
     errors = []
     workspace = layout["workspace"]
-    required = MINIMUMS[workspace]
+    scene = layout.get("scene", "blackhole")
+    if scene not in ("blackhole", "observer", "tesseract"):
+        return [f"unknown scene: {scene}"]
+    required = {**MINIMUMS[workspace], **SCENE_MINIMUMS.get(scene, {})}
     viewport_x, viewport_y, viewport_width, viewport_height = map(float, layout["viewport"])
     if viewport_width <= 0 or viewport_height <= 0 or not math.isfinite(float(layout["ui_scale"])):
         return ["invalid viewport or UI scale"]
@@ -40,6 +47,10 @@ def validate(layout: dict[str, Any]) -> list[str]:
             errors.append(f"missing visible decision window: {name}")
             continue
         window = windows[name]
+        if name in SCENE_MINIMUMS.get(scene, {}) and not window.get("visible", True):
+            errors.append(f"scene control window is not visible: {name}")
+        if name in SCENE_MINIMUMS.get(scene, {}) and not window["dock_node_id"]:
+            errors.append(f"scene control window is not docked: {name}")
         x, y, width, height = geometry(window)
         if window["collapsed"] or width < minimum[0] or height < minimum[1]:
             errors.append(f"undersized or collapsed decision window: {name}")
@@ -76,7 +87,8 @@ def normalized(layout: dict[str, Any]) -> tuple[Any, ...]:
         dock_id = window["dock_node_id"]
         group = dock_groups.setdefault(dock_id, len(dock_groups)) if dock_id else None
         windows.append((window["name"], group, window["collapsed"], window.get("visible", True)))
-    return (layout["workspace"], tuple(layout["viewport"]), layout["ui_scale"], tuple(windows))
+    return (layout["workspace"], layout.get("scene", "blackhole"),
+            tuple(layout["viewport"]), layout["ui_scale"], tuple(windows))
 
 
 def geometry_drift(layout: dict[str, Any], first: dict[str, Any]) -> list[str]:

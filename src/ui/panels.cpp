@@ -987,7 +987,9 @@ void renderTesseractProjectionControls(RenderState::TesseractGroup &tg) {
   constexpr std::array<const char *, 2> projectionItems = {"Perspective along w",
                                                            "Stereographic from S^3"};
   int projectionIndex = static_cast<int>(tg.projection);
-  if (ImGui::Combo("Projection", &projectionIndex, projectionItems.data(),
+  ImGui::TextUnformatted("Projection");
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  if (ImGui::Combo("##projection", &projectionIndex, projectionItems.data(),
                    static_cast<int>(projectionItems.size()))) {
     tg.projection = static_cast<RenderState::TesseractGroup::Projection>(projectionIndex);
   }
@@ -1004,7 +1006,9 @@ void renderTesseractLibraryControls(RenderState::TesseractGroup &tg) {
   tg.selection.featureIndex = std::min(tg.selection.featureIndex, features.size() - 1);
   // ImGui labels need null-terminated strings; the names are string_views.
   const std::string selectedName(features.at(tg.selection.featureIndex).name);
-  if (ImGui::BeginCombo("Selected feature", selectedName.c_str())) {
+  ImGui::TextUnformatted("Selected feature");
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  if (ImGui::BeginCombo("##selected-feature", selectedName.c_str())) {
     for (std::size_t featureIndex = 0; featureIndex < features.size(); ++featureIndex) {
       const bool selected = featureIndex == tg.selection.featureIndex;
       const std::string featureName(features.at(featureIndex).name);
@@ -1046,20 +1050,30 @@ void renderTesseractPanel(RenderState &rs) {
     return;
   }
   ImGui::SetNextWindowSize(ImVec2(360, 560), ImGuiCond_FirstUseEver);
+  if (rs.overlays.sceneWindowFocusPending) {
+    ImGui::SetNextWindowFocus();
+    rs.overlays.sceneWindowFocusPending = false;
+  }
   if (ImGui::Begin("Tesseract", nullptr, ImGuiWindowFlags_NoCollapse)) {
     const std::string_view label = blackhole::TESSERACT_SPECULATIVE_LABEL;
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.78f, 0.35f, 1.0f));
-    ImGui::TextUnformatted(label.data(), label.data() + label.size());
+    ImGui::BeginChild("Scene explanation", ImVec2(0, 56), ImGuiChildFlags_Borders,
+                      ImGuiWindowFlags_AlwaysVerticalScrollbar);
+    ImGui::TextWrapped("%.*s", static_cast<int>(label.size()), label.data());
+    ImGui::EndChild();
     ImGui::PopStyleColor();
+    ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
     renderTesseractRotationControls(rs.tesseract);
     renderTesseractProjectionControls(rs.tesseract);
     renderTesseractLibraryControls(rs.tesseract);
     renderTesseractAppearanceControls(rs.tesseract);
+    ImGui::PopItemWidth();
   }
   ImGui::End();
 }
 
-void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace) {
+void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace,
+                 RenderState::SceneMode sceneMode) {
   ImGui::DockBuilderRemoveNode(dockspaceId);
   ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
   ImGui::DockBuilderSetNodePos(dockspaceId, ImGui::GetMainViewport()->WorkPos);
@@ -1084,7 +1098,6 @@ void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace) {
   ImGui::DockBuilderDockWindow("Settings", dockLeftId);
   ImGui::DockBuilderDockWindow("Display", dockLeftId);
   ImGui::DockBuilderDockWindow("Background", dockLeftId);
-  ImGui::DockBuilderDockWindow("Tesseract", dockLeftId);
   ImGui::DockBuilderDockWindow("Controls", dockLeftDownId);
   ImGui::DockBuilderDockWindow("Performance", dockLeftDownId);
   ImGui::DockBuilderDockWindow("Wiregrid", dockLeftDownId);
@@ -1096,17 +1109,22 @@ void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace) {
   ImGui::DockBuilderDockWindow("Curve Overlay", dockLeftDownId);
   ImGui::DockBuilderDockWindow("Observer physics note", dockLeftDownId);
   ImGui::DockBuilderDockWindow("Observer from far away (schematic)", dockLeftDownId);
-  ImGui::DockBuilderDockWindow("Observer sky", dockLeftDownId);
   ImGui::DockBuilderDockWindow("Campaign", dockLeftId);
   ImGui::DockBuilderDockWindow("Campaign Intel", dockLeftId);
   ImGui::DockBuilderDockWindow("CampaignInbox", dockLeftId);
   ImGui::DockBuilderDockWindow("Technology", dockLeftId);
   ImGui::DockBuilderDockWindow("Strategic Map", dockLeftDownId);
+  if (sceneMode == RenderState::SceneMode::Tesseract) {
+    ImGui::DockBuilderDockWindow("Observer sky", dockLeftDownId);
+    ImGui::DockBuilderDockWindow("Tesseract", dockLeftId);
+  } else {
+    ImGui::DockBuilderDockWindow("Tesseract", dockLeftId);
+    ImGui::DockBuilderDockWindow("Observer sky", dockLeftDownId);
+  }
 
   ImGuiDockNode *viewportNode = ImGui::DockBuilderGetNode(dockMainId);
   viewportNode->LocalFlags |= static_cast<int>(ImGuiDockNodeFlags_NoDockingOverMe) |
                               static_cast<int>(ImGuiDockNodeFlags_NoDockingSplit);
-
   ImGui::DockBuilderFinish(dockspaceId);
 }
 
