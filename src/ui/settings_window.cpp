@@ -717,7 +717,8 @@ void renderComputeSettings(RenderState &rs) {
               static_cast<int>(blackhole::rendererName(rs.dispatch.contract.quality).size()),
               blackhole::rendererName(rs.dispatch.contract.quality).data());
   ImGui::Text("Budget: %d steps, %.3f step size",
-              blackhole::rendererStepBudget(rs.dispatch.contract, rs.dispatch.computeMaxSteps),
+              blackhole::rendererStepBudget(rs.dispatch.contract, rs.dispatch.computeMaxSteps,
+                                            rs.dispatch.computeStepSize),
               static_cast<double>(blackhole::rendererStepSize(rs.dispatch.contract,
                                                                 rs.dispatch.computeStepSize)));
   ImGui::Checkbox("Terminal map", &rs.terminalDiagnostics.showDebugView);
@@ -763,7 +764,7 @@ void renderComputeSettings(RenderState &rs) {
                        1.0f);
     ImGui::EndDisabled();
     if (rs.dispatch.contract.quality == blackhole::QualityTier::Reference) {
-      ImGui::TextDisabled("Reference tier fixes the 1000-step / 0.02 budget.");
+      ImGui::TextDisabled("Reference tier: step 0.02 over twice these controls' range.");
     }
     ImGui::BeginDisabled(rs.dispatch.contract.backend != blackhole::RenderBackend::Compute);
     ImGui::Checkbox("Compute Tiled", &rs.dispatch.computeTiled);

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -29,9 +30,11 @@
 #include <stb_image_write.h>
 
 #include <glm/ext/vector_float4.hpp>
+#include <glm/geometric.hpp>
 
 #include "cinematic.h" // K_CINEMATIC_KEYFRAMES / DURATION / FPS
 #include "input.h"     // InputManager, CameraState, CameraMode
+#include "render/camera_math.h"
 #include "physics/safe_limits.h"
 #include "platform/cli_options.h"
 #include "render/render_state.h"   // RenderState, WiregridParams
@@ -44,6 +47,21 @@
 using namespace gl;
 
 namespace blackhole {
+glm::vec3 referenceSceneAimTarget(std::string_view scene, const glm::vec3 &cameraPosition,
+                                  const glm::vec3 &focusTarget) {
+  if (scene != "D") {
+    return focusTarget;
+  }
+  const float distance = glm::length(cameraPosition - focusTarget);
+  const float impact = 3.0f * std::sqrt(3.0f);
+  const float lapseSquared = 1.0f - (2.0f / distance);
+  const float sineSquared = impact * impact /
+                            (distance * distance + (1.0f - lapseSquared) * impact * impact);
+  const float tangent = std::sqrt(sineSquared / (1.0f - sineSquared));
+  const glm::vec3 right = buildCameraBasis(cameraPosition, focusTarget, 0.0f)[0];
+  return focusTarget + right * (distance * tangent);
+}
+
 namespace {
 
 float compositionValue(const ShowcaseOrbitComposition *composition,
@@ -452,9 +470,9 @@ void applyReferenceSceneSetup(RenderState &rs, const platform::CliOptions &cli,
   rs.dispatch.computeStepSize = 0.04f;
   rs.physicsCore.blackHoleMass = 1.0f;
   rs.physicsCore.kerrSpin = 0.0f;
-  if (cli.referenceScene == "C+") {
+  if (cli.referenceScene == "C+" || cli.referenceScene == "Cd+") {
     rs.physicsCore.kerrSpin = 0.6f;
-  } else if (cli.referenceScene == "C-") {
+  } else if (cli.referenceScene == "C-" || cli.referenceScene == "Cd-") {
     rs.physicsCore.kerrSpin = -0.6f;
   }
   rs.physicsCore.enablePhotonSphere = false;
@@ -476,7 +494,8 @@ void applyReferenceSceneSetup(RenderState &rs, const platform::CliOptions &cli,
   SettingsManager::instance().get().backgroundEnabled = false;
   CameraState &camera = input.camera();
   camera = CameraState{.yaw = -90.0f, .pitch = inclined ? 30.0f : 0.0f,
-                       .roll = 0.0f, .distance = 30.0f, .fov = 30.0f};
+                       .roll = 0.0f, .distance = 30.0f,
+                       .fov = cli.referenceScene == "D" ? K_CRITICAL_REGION_FOV_DEGREES : 30.0f};
   rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
 }
 
@@ -563,21 +582,27 @@ void writeRendererMetadata(const RenderState &rs, const platform::CliOptions &cl
     throw std::runtime_error("Failed to open renderer metadata: " + metadataPath);
   }
   const RendererContract &contract = rs.dispatch.contract;
+  const CameraState &camera = InputManager::instance().camera();
+  const glm::vec3 cameraPosition = cameraPositionFromYawPitch(
+      camera.yaw, camera.pitch, camera.distance);
+  const glm::vec3 aimTarget = referenceSceneAimTarget(cli.referenceScene, cameraPosition,
+                                                       glm::vec3(0.0f));
   metadata << std::format(
       "{{\n  \"backend\": \"{}\",\n  \"geodesic_model\": \"{}\",\n"
       "  \"radiative_model\": \"{}\",\n  \"quality_tier\": \"{}\",\n"
       "  \"max_steps\": {},\n  \"step_size\": {:.9g},\n"
       "  \"scene\": \"{}\",\n  \"width\": {},\n  \"height\": {},\n"
       "  \"camera_distance\": {:.9g},\n  \"camera_pitch_degrees\": {:.9g},\n"
-      "  \"camera_fov_degrees\": {:.9g},\n  \"kerr_spin\": {:.9g},\n  \"schwarzschild_radius\": {:.9g},\n"
+      "  \"camera_fov_degrees\": {:.9g},\n"
+      "  \"camera_aim_target_world\": [{:.9g}, {:.9g}, {:.9g}],\n"
+      "  \"kerr_spin\": {:.9g},\n  \"schwarzschild_radius\": {:.9g},\n"
       "  \"isco_radius\": {:.9g},\n  \"radius_unit\": \"scene units; r_s = 2M\",\n",
       rendererName(contract.backend), rendererName(contract.geodesic),
       rendererName(contract.radiative), rendererName(contract.quality),
-      rendererStepBudget(contract, rs.dispatch.computeMaxSteps),
+      rendererStepBudget(contract, rs.dispatch.computeMaxSteps, rs.dispatch.computeStepSize),
       rendererStepSize(contract, rs.dispatch.computeStepSize),
       cli.referenceScene, rs.targets.renderWidth, rs.targets.renderHeight,
-      InputManager::instance().camera().distance, InputManager::instance().camera().pitch,
-      InputManager::instance().camera().fov,
+      camera.distance, camera.pitch, camera.fov, aimTarget.x, aimTarget.y, aimTarget.z,
       contract.geodesic == GeodesicModel::SchwarzschildReference ? 0.0f : rs.physicsCore.kerrSpin,
       rs.recording.recordCurRs, rs.recording.recordCurIsco);
   if (rs.terminalDiagnostics.valid) {

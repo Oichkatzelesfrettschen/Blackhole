@@ -97,6 +97,7 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
 
 /** @brief Square render-target extent, in pixels, of every --reference-scene capture. */
 inline constexpr int K_REFERENCE_SCENE_EXTENT = 160;
+inline constexpr float K_CRITICAL_REGION_FOV_DEGREES = 3.0f;
 
 /**
  * @brief True for the backlit reference scenes (A, C+, C-, D): disk off and a
@@ -105,6 +106,11 @@ inline constexpr int K_REFERENCE_SCENE_EXTENT = 160;
 [[nodiscard]] inline bool referenceSceneBacklit(std::string_view scene) {
   return scene == "A" || scene == "C+" || scene == "C-" || scene == "D";
 }
+
+/** @brief Aim scene D at the right Schwarzschild critical-curve edge. */
+[[nodiscard]] glm::vec3 referenceSceneAimTarget(std::string_view scene,
+                                                 const glm::vec3 &cameraPosition,
+                                                 const glm::vec3 &focusTarget);
 
 /** @brief Applies the fixed reference camera, source, and numerical controls. */
 void applyReferenceSceneSetup(RenderState &rs, const platform::CliOptions &cli,

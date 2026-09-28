@@ -21,6 +21,8 @@
 
 #include "../shader/include/ray_terminal.h"
 #include "physics/analytic_kerr_geodesic.h"
+#include "physics/disk_transfer.h"
+#include "physics/novikov_thorne.h"
 #include "render/render_output_metrics.h"
 #include "support/gl_compute_harness.h"
 
@@ -40,7 +42,10 @@ struct CapturedFrame {
   std::vector<std::uint8_t> terminals;
   blackhole::ImageMetrics rawMetrics;
   blackhole::ImageMetrics displayMetrics;
+  blackhole::DiskImageMetrics diskMetrics;
 };
+
+double criticalEdgeColumnError(const CapturedFrame &frame);
 
 std::filesystem::path artifactRoot() {
   const char *configured = std::getenv("BLACKHOLE_RENDER_ARTIFACTS");
@@ -153,7 +158,13 @@ void writeMetrics(const std::filesystem::path &path, const CapturedFrame &frame,
          << "],\n  \"display_range\": [" << display.minimum << ", " << display.maximum
          << "],\n  \"raw_hash\": " << raw.luminanceHash
          << ",\n  \"display_hash\": " << display.luminanceHash
-         << ",\n  \"terminal_hash\": " << raw.terminalHash << ",\n"
+         << ",\n  \"terminal_hash\": " << raw.terminalHash
+         << ",\n  \"disk_left_mean_luminance\": " << frame.diskMetrics.leftMeanLuminance
+         << ",\n  \"disk_right_mean_luminance\": " << frame.diskMetrics.rightMeanLuminance
+         << ",\n  \"disk_near_side_inner_edge_px\": "
+         << frame.diskMetrics.nearSideInnerEdgePixels
+         << ",\n  \"critical_edge_column_error_px\": "
+         << (scene == "D" ? criticalEdgeColumnError(frame) : 0.0) << ",\n"
          << "  \"radial_luminance\": [";
   for (std::size_t index = 0; index < raw.radialLuminance.size(); ++index) {
     output << (index == 0 ? "" : ", ") << raw.radialLuminance[index];
@@ -206,6 +217,8 @@ CapturedFrame capture(std::string_view scene, std::string_view backend = "fragme
       blackhole::measureImage(frame.raw, frame.terminals, frame.width, frame.height, anchor);
   frame.displayMetrics =
       blackhole::measureImage(frame.display, frame.terminals, frame.width, frame.height, anchor);
+  frame.diskMetrics = blackhole::measureDiskImage(frame.raw, frame.terminals,
+                                                  frame.width, frame.height);
   writeMetrics(directory / (stem + ".metrics.json"), frame, scene, backend, quality);
   return frame;
 }
@@ -323,6 +336,25 @@ int metadataInteger(const std::filesystem::path &path, std::string_view key) {
     }
   }
   throw std::runtime_error("metadata field missing: " + std::string(key));
+}
+
+// The oracle critical edge falls at the image center of scene D. A captured
+// run ends at the right edge of its rightmost horizon pixel; one pixel is the
+// quantization unit of this column measurement.
+double criticalEdgeColumnError(const CapturedFrame &frame) {
+  const int row = frame.height / 2;
+  int rightmostHorizon = -1;
+  for (int column = 0; column < frame.width; ++column) {
+    const auto index = static_cast<std::size_t>(row * frame.width + column);
+    if (frame.terminals[index] == BH_TERMINAL_HORIZON) {
+      rightmostHorizon = column;
+    }
+  }
+  if (rightmostHorizon < 0) {
+    return static_cast<double>(frame.width);
+  }
+  return std::abs(static_cast<double>(rightmostHorizon + 1) -
+                  static_cast<double>(frame.width) / 2.0);
 }
 
 bool contextAvailable() {
@@ -468,6 +500,38 @@ TEST(RenderedOutput, KerrSpinOrientation) {
   }
 }
 
+TEST(RenderedOutput, DiskRotationConvention) {
+  const double progradeIsco = blackhole::physics::NovikovThorneDisk::iscoRadius(0.6);
+  const double retrogradeIsco = blackhole::physics::NovikovThorneDisk::iscoRadius(-0.6);
+  ASSERT_GT(retrogradeIsco, progradeIsco);
+  ASSERT_GT(physics::keplerianOmega(progradeIsco, 0.6), 0.0);
+  ASSERT_GT(physics::keplerianOmega(retrogradeIsco, -0.6), 0.0);
+}
+
+TEST(RenderedOutput, DiskRotationAndRetrogradeInnerEdge) {
+  if (!fullSweep()) {
+    GTEST_SKIP() << "set BLACKHOLE_RENDER_FULL=1 for disk and spin sweeps";
+  }
+  if (!contextAvailable()) {
+    GTEST_SKIP() << "GL 4.6 context unavailable";
+  }
+  const auto positive = capture("Cd+");
+  const auto negative = capture("Cd-");
+  // The camera views physics x = -30. Screen right points to physics -y,
+  // where +phi motion recedes; the approaching disk occupies screen left.
+  for (const CapturedFrame *frame : {&positive, &negative}) {
+    ASSERT_GT(frame->diskMetrics.leftDiskPixels, 0u);
+    ASSERT_GT(frame->diskMetrics.rightDiskPixels, 0u);
+    EXPECT_GT(frame->diskMetrics.leftMeanLuminance,
+              frame->diskMetrics.rightMeanLuminance);
+    EXPECT_EQ(frame->rawMetrics.invalidFraction, 0.0);
+  }
+  ASSERT_GT(positive.diskMetrics.nearSideInnerEdgePixels, 0.0);
+  ASSERT_GT(negative.diskMetrics.nearSideInnerEdgePixels, 0.0);
+  EXPECT_GT(negative.diskMetrics.nearSideInnerEdgePixels,
+            positive.diskMetrics.nearSideInnerEdgePixels);
+}
+
 TEST(RenderedOutput, CriticalRegionExhaustion) {
   if (!fullSweep()) {
     GTEST_SKIP() << "set BLACKHOLE_RENDER_FULL=1 for disk and spin sweeps";
@@ -477,9 +541,19 @@ TEST(RenderedOutput, CriticalRegionExhaustion) {
   }
   const auto balanced = capture("D");
   const auto reference = capture("D", "fragment", "reference");
+  const double balancedEdgeError = criticalEdgeColumnError(balanced);
+  const double referenceEdgeError = criticalEdgeColumnError(reference);
   EXPECT_GT(metadataInteger(artifactRoot() / "D-fragment-reference.png.json", "max_steps"),
             metadataInteger(artifactRoot() / "D-fragment-balanced.png.json", "max_steps"))
       << "the reference tier must change the effective step budget";
   EXPECT_LE(reference.rawMetrics.exhaustedFraction, balanced.rawMetrics.exhaustedFraction);
+  EXPECT_LE(referenceEdgeError, balancedEdgeError);
+  EXPECT_TRUE(reference.rawMetrics.exhaustedFraction < balanced.rawMetrics.exhaustedFraction ||
+              referenceEdgeError < balancedEdgeError)
+      << "the reference tier must reduce max-step pixels or the center-row edge error: "
+      << "balanced=" << balancedEdgeError << " px, reference=" << referenceEdgeError << " px";
+  EXPECT_TRUE(reference.rawMetrics.terminalHash != balanced.rawMetrics.terminalHash ||
+              reference.rawMetrics.luminanceHash != balanced.rawMetrics.luminanceHash)
+      << "the zoomed critical region must distinguish the quality tiers";
   EXPECT_EQ(reference.rawMetrics.invalidFraction, 0.0);
 }
