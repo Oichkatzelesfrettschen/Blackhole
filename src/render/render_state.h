@@ -250,6 +250,7 @@ struct RenderState {
     bool curveOverlayLoaded = false;
     HudOverlay controlsOverlay;
     HudOverlay simulatorExplanation;
+    bool simulatorExplanationEnabled = true; ///< Draws the explanation lines into the scene.
     bool controlsOverlayReady = false;
     bool controlsOverlayConfigInit = false;
     bool controlsOverlayEnabled = true;

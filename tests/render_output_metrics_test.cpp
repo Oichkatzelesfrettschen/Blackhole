@@ -28,7 +28,10 @@ TEST(RenderOutputMetrics, SyntheticCircularCaptureAndLimb) {
     }
   }
   const auto metrics = blackhole::measureImage(luminance, terminals, width, height);
-  EXPECT_NEAR(metrics.boundaryRadius, 12.0, 0.5);
+  // Pixel centers within 12 of (32.5, 32.5) span 25 pixels edge to edge.
+  EXPECT_NEAR(metrics.boundaryRadius, 12.5, 1e-9);
+  EXPECT_NEAR(metrics.boundingWidth, 25.0, 1e-9);
+  EXPECT_NEAR(metrics.boundingCenterX, 0.0, 1e-9);
   EXPECT_NEAR(metrics.luminanceBoundaryRadius, 12.5, 1.0);
   EXPECT_NEAR(metrics.centerOffsetX, 0.0, 0.1);
   EXPECT_NEAR(metrics.centerOffsetY, 0.0, 0.1);
@@ -69,4 +72,32 @@ TEST(RenderOutputMetrics, HardMatteHasNoLocalizedEmissionLimb) {
   }
   const auto metrics = blackhole::measureImage(luminance, terminals, width, width);
   EXPECT_LE(metrics.limbContrast, 1e-6);
+}
+
+TEST(RenderOutputMetrics, LimbFollowsDisplacedShadow) {
+  // A shadow 10 pixels right of the image center keeps its ring in one radial
+  // bin of the centroid-centered profile.
+  constexpr int width = 81;
+  constexpr std::size_t pixels = static_cast<std::size_t>(width) * static_cast<std::size_t>(width);
+  std::vector<float> luminance(pixels, 0.1f);
+  std::vector<std::uint8_t> terminals(pixels, BH_TERMINAL_ESCAPE);
+  for (int y = 0; y < width; ++y) {
+    for (int x = 0; x < width; ++x) {
+      const double radius = std::hypot(x - 50.0, y - 40.0);
+      const auto index = (static_cast<std::size_t>(y) * static_cast<std::size_t>(width)) +
+                         static_cast<std::size_t>(x);
+      if (radius <= 12.0) {
+        terminals[index] = BH_TERMINAL_HORIZON;
+        luminance[index] = 0.0f;
+      } else if (radius < 14.0) {
+        luminance[index] = 0.8f;
+      }
+    }
+  }
+  const auto metrics = blackhole::measureImage(luminance, terminals, width, width);
+  EXPECT_NEAR(metrics.centerOffsetX, 10.0, 1e-9);
+  EXPECT_NEAR(metrics.boundingCenterX, 10.0, 1e-9);
+  EXPECT_GT(metrics.limbContrast, 0.5);
+  EXPECT_GE(metrics.limbWidth, 1.0);
+  EXPECT_LE(metrics.limbWidth, 3.0);
 }

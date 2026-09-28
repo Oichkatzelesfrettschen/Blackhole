@@ -1780,8 +1780,7 @@ int main(int argc, char **argv) {
         if (rs.background.galaxy != 0) {
           glDeleteTextures(1, &rs.background.galaxy);
         }
-        const bool silhouette = cli.referenceScene == "A" || cli.referenceScene == "D";
-        const std::uint8_t sky = silhouette ? 255 : 16;
+        const std::uint8_t sky = blackhole::referenceSceneBacklit(cli.referenceScene) ? 255 : 16;
         rs.background.galaxy = createSolidCubemap1x1(sky, sky, sky);
         rs.recording.referenceBackgroundReady = true;
       }

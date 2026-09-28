@@ -432,7 +432,9 @@ void applyReferenceSceneSetup(RenderState &rs, const platform::CliOptions &cli,
     glfwSwapInterval(0);
     rs.recording.referenceInitDone = true;
   }
-  const bool silhouette = cli.referenceScene == "A" || cli.referenceScene == "D";
+  const bool silhouette = referenceSceneBacklit(cli.referenceScene);
+  const bool schwarzschild = cli.referenceScene == "A" || cli.referenceScene == "D";
+  const bool inclined = cli.referenceScene != "A" && cli.referenceScene != "D";
   rs.scene.mode = RenderState::SceneMode::Blackhole;
   rs.dispatch.contract.backend = RenderBackend::Fragment;
   if (cli.referenceBackend == "compute") {
@@ -440,9 +442,8 @@ void applyReferenceSceneSetup(RenderState &rs, const platform::CliOptions &cli,
   } else if (cli.referenceBackend == "cuda") {
     rs.dispatch.contract.backend = RenderBackend::Cuda;
   }
-  rs.dispatch.contract.geodesic = silhouette
-                                      ? GeodesicModel::SchwarzschildReference
-                                      : GeodesicModel::KerrReference;
+  rs.dispatch.contract.geodesic = schwarzschild ? GeodesicModel::SchwarzschildReference
+                                                : GeodesicModel::KerrReference;
   rs.dispatch.contract.radiative = silhouette ? RadiativeModel::BackgroundOnly
                                               : RadiativeModel::ThinSurface;
   rs.dispatch.contract.quality = cli.referenceQuality == "reference"
@@ -463,6 +464,9 @@ void applyReferenceSceneSetup(RenderState &rs, const platform::CliOptions &cli,
   rs.disk.useNoiseTexture = false;
   rs.disk.noiseTextureReady = true;
   rs.wiregrid.wiregridEnabled = false;
+  // Reference captures measure scene pixels only, so no HUD text reaches them.
+  rs.overlays.simulatorExplanationEnabled = false;
+  rs.overlays.controlsOverlayEnabled = false;
   rs.post.bloomStrength = 0.0f;
   rs.post.tonemapFilmGrainStrength = 0.0f;
   rs.post.tonemapChromaticAberrationStrength = 0.0f;
@@ -471,7 +475,7 @@ void applyReferenceSceneSetup(RenderState &rs, const platform::CliOptions &cli,
   rs.display.depthFar = 90.0f;
   SettingsManager::instance().get().backgroundEnabled = false;
   CameraState &camera = input.camera();
-  camera = CameraState{.yaw = -90.0f, .pitch = silhouette ? 0.0f : 30.0f,
+  camera = CameraState{.yaw = -90.0f, .pitch = inclined ? 30.0f : 0.0f,
                        .roll = 0.0f, .distance = 30.0f, .fov = 30.0f};
   rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
 }
@@ -705,6 +709,17 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
       rs.targets.renderWidth <= 0 || rs.targets.renderHeight <= 0) {
     return;
   }
+#if BLACKHOLE_HAS_CUDA
+  // A CUDA reference frame exists only once CUDA-GL interop initialized; an
+  // export before that would record the cleared target as the CUDA image.
+  if (!cli.referenceScene.empty() && rs.dispatch.contract.backend == RenderBackend::Cuda &&
+      !rs.dispatch.cudaManager.isReady()) {
+    std::cerr << "CUDA backend is not ready; no reference frame exported\n";
+    rs.exporting.exportFailed = true;
+    rs.exporting.exportPerformed = true;
+    return;
+  }
+#endif
   if (!cli.exportFramePath.empty()) {
     std::vector<unsigned char> flipped;
     int w = 0;

@@ -5,12 +5,17 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <iterator>
 #include <numbers>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
+#include <glbinding/gl/enum.h>
+#include <glbinding/gl/functions.h>
 #include <gtest/gtest.h>
 #include <stdlib.h> // NOLINT(modernize-deprecated-headers) -- POSIX setenv declaration.
 #include <sys/types.h>
@@ -129,6 +134,8 @@ void writeMetrics(const std::filesystem::path &path, const CapturedFrame &frame,
          << ",\n  \"critical_radius_px\": " << raw.boundaryRadius
          << ",\n  \"critical_diameter_px\": " << raw.boundaryDiameter
          << ",\n  \"vertical_diameter_px\": " << raw.verticalDiameter
+         << ",\n  \"bounding_box_px\": [" << raw.boundingCenterX << ", " << raw.boundingCenterY
+         << ", " << raw.boundingWidth << ", " << raw.boundingHeight << "]"
          << ",\n  \"luminance_boundary_radius_px\": " << raw.luminanceBoundaryRadius
          << ",\n  \"luminance_boundary_diameter_px\": " << raw.luminanceBoundaryDiameter
          << ",\n  \"center_offset_px\": [" << raw.centerOffsetX << ", " << raw.centerOffsetY
@@ -159,7 +166,8 @@ void writeMetrics(const std::filesystem::path &path, const CapturedFrame &frame,
 }
 
 CapturedFrame capture(std::string_view scene, std::string_view backend = "fragment",
-                      std::string_view quality = "balanced") {
+                      std::string_view quality = "balanced",
+                      std::optional<blackhole::ProfileAnchor> anchor = std::nullopt) {
   const auto directory = artifactRoot();
   std::filesystem::create_directories(directory);
   const std::string stem =
@@ -195,9 +203,10 @@ CapturedFrame capture(std::string_view scene, std::string_view backend = "fragme
   } else {
     frame.terminals = loadTerminals(png.string() + ".terminals.pgm", frame.width, frame.height);
   }
-  frame.rawMetrics = blackhole::measureImage(frame.raw, frame.terminals, frame.width, frame.height);
+  frame.rawMetrics =
+      blackhole::measureImage(frame.raw, frame.terminals, frame.width, frame.height, anchor);
   frame.displayMetrics =
-      blackhole::measureImage(frame.display, frame.terminals, frame.width, frame.height);
+      blackhole::measureImage(frame.display, frame.terminals, frame.width, frame.height, anchor);
   writeMetrics(directory / (stem + ".metrics.json"), frame, scene, backend, quality);
   return frame;
 }
@@ -226,26 +235,52 @@ bool fullSweep() {
   return enabled != nullptr && std::string_view(enabled) == "1";
 }
 
+// Reference camera: distance 30 M, vertical field of view 30 degrees, and
+// yaw -90 degrees. buildCameraBasis then puts screen right along world +z,
+// which bhWorldToPhysics maps to physics -y. For a camera at azimuth 180
+// degrees that is the sky direction of photons with L_z < 0, so Bardeen's
+// alpha = -xi / sin(i) increases to the right on screen.
+constexpr double K_CAMERA_DISTANCE = 30.0;
+constexpr double K_CAMERA_FOV_DEGREES = 30.0;
+// K_REFERENCE_SCENE_EXTENT in render/record_mode.h; the scene B test asserts
+// the captured height against it.
+constexpr int K_IMAGE_EXTENT = 160;
+
+// Screen offset in pixels of a ray with impact vector (alpha, beta), through
+// the coordinate-direction camera model of blackhole::criticalRadiusPixels.
+double screenPixels(double component, double impact, int imageHeight) {
+  const double lapseSquared = 1.0 - (2.0 / K_CAMERA_DISTANCE);
+  const double sineSquared =
+      (impact * impact) /
+      ((K_CAMERA_DISTANCE * K_CAMERA_DISTANCE) + ((1.0 - lapseSquared) * impact * impact));
+  const double tangent = std::sqrt(sineSquared / (1.0 - sineSquared));
+  return (component / impact) * tangent * static_cast<double>(imageHeight) /
+         (2.0 * std::tan(K_CAMERA_FOV_DEGREES * std::numbers::pi / 360.0));
+}
+
 struct KerrScreenGeometry {
-  double center = 0.0;
-  double horizontalDiameter = 0.0;
-  double verticalDiameter = 0.0;
+  double centerX = 0.0; ///< Signed; + is screen right.
+  double width = 0.0;
+  double height = 0.0;
 };
 
+// Bardeen critical curve (M = 1) for a camera at inclination 60 degrees from
+// the spin axis, the reference pitch of 30 degrees above the disk plane.
 KerrScreenGeometry kerrScreenGeometry(double spin, int imageHeight) {
   const double magnitude = std::abs(spin);
-  const double innerOrbit = 2.0 * (1.0 + std::cos((2.0 / 3.0) * std::acos(-magnitude)));
-  const double outerOrbit = 2.0 * (1.0 + std::cos((2.0 / 3.0) * std::acos(magnitude)));
-  double minimum = 1.0e6;
-  double maximum = -1.0e6;
-  double maximumBeta = 0.0;
+  const double prograde = 2.0 * (1.0 + std::cos((2.0 / 3.0) * std::acos(-magnitude)));
+  const double retrograde = 2.0 * (1.0 + std::cos((2.0 / 3.0) * std::acos(magnitude)));
+  const double inner = std::min(prograde, retrograde);
+  const double outer = std::max(prograde, retrograde);
   const double inclination = std::numbers::pi / 3.0;
   const double sine = std::sin(inclination);
   const double cosine = std::cos(inclination);
   const double cotangent = cosine / sine;
-  for (int index = 0; index <= 1024; ++index) {
-    const double radius =
-        innerOrbit + ((outerOrbit - innerOrbit) * static_cast<double>(index) / 1024.0);
+  double left = 1.0e6;
+  double right = -1.0e6;
+  double top = 0.0;
+  for (int index = 0; index <= 4096; ++index) {
+    const double radius = inner + ((outer - inner) * static_cast<double>(index) / 4096.0);
     const auto impact = physics::criticalImpactParams(radius, spin);
     const double alpha = -impact.xi / sine;
     const double betaSquared = impact.eta + (spin * spin * cosine * cosine) -
@@ -253,20 +288,54 @@ KerrScreenGeometry kerrScreenGeometry(double spin, int imageHeight) {
     if (betaSquared < 0.0) {
       continue;
     }
-    minimum = std::min(minimum, alpha);
-    maximum = std::max(maximum, alpha);
-    maximumBeta = std::max(maximumBeta, std::sqrt(betaSquared));
+    const double beta = std::sqrt(betaSquared);
+    const double magnitudeImpact = std::hypot(alpha, beta);
+    left = std::min(left, screenPixels(alpha, magnitudeImpact, imageHeight));
+    right = std::max(right, screenPixels(alpha, magnitudeImpact, imageHeight));
+    top = std::max(top, screenPixels(beta, magnitudeImpact, imageHeight));
   }
-  const double scale =
-      static_cast<double>(imageHeight) / (60.0 * std::tan(std::numbers::pi / 12.0));
-  return {.center = ((minimum + maximum) / 2.0) * scale,
-          .horizontalDiameter = (maximum - minimum) * scale,
-          .verticalDiameter = 2.0 * maximumBeta * scale};
+  return {.centerX = (left + right) / 2.0, .width = right - left, .height = 2.0 * top};
+}
+
+// Display luminance spread over escaped pixels. A backlit scene has one sky
+// color, so any spread is overlay text or post-processing in the display bytes.
+double escapedDisplaySpread(const CapturedFrame &frame) {
+  double low = 1.0;
+  double high = 0.0;
+  for (std::size_t index = 0; index < frame.display.size(); ++index) {
+    if (frame.terminals[index] == BH_TERMINAL_ESCAPE) {
+      low = std::min(low, static_cast<double>(frame.display[index]));
+      high = std::max(high, static_cast<double>(frame.display[index]));
+    }
+  }
+  return high >= low ? high - low : 0.0;
+}
+
+// Integer value of a top-level numeric field in the exported renderer
+// metadata, which records the effective configuration the frame rendered with.
+int metadataInteger(const std::filesystem::path &path, std::string_view key) {
+  std::ifstream input(path);
+  const std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+  const std::string needle = "\"" + std::string(key) + "\": ";
+  const auto position = text.find(needle);
+  if (position == std::string::npos) {
+    throw std::runtime_error("metadata field missing: " + std::string(key));
+  }
+  return std::stoi(text.substr(position + needle.size()));
 }
 
 bool contextAvailable() {
   const bhtest::HiddenGlContext context;
   return context.available();
+}
+
+std::string glVendor() {
+  const bhtest::HiddenGlContext context;
+  if (!context.available()) {
+    return {};
+  }
+  const auto *vendor = reinterpret_cast<const char *>(gl::glGetString(gl::GL_VENDOR));
+  return vendor != nullptr ? std::string(vendor) : std::string();
 }
 
 } // namespace
@@ -278,7 +347,8 @@ TEST(RenderedOutput, SchwarzschildCriticalCurve) {
     GTEST_SKIP() << "GL 4.6 context unavailable";
   }
   const auto fragment = capture("A");
-  const double predicted = blackhole::criticalRadiusPixels(1.0, 30.0, 30.0, fragment.height);
+  const double predicted = blackhole::criticalRadiusPixels(1.0, K_CAMERA_DISTANCE,
+                                                           K_CAMERA_FOV_DEGREES, fragment.height);
   EXPECT_GT(fragment.rawMetrics.capturedFraction, 0.01);
   EXPECT_GT(fragment.rawMetrics.escapedFraction, 0.01);
   EXPECT_LE(fragment.rawMetrics.invalidFraction, 0.001);
@@ -288,9 +358,15 @@ TEST(RenderedOutput, SchwarzschildCriticalCurve) {
   EXPECT_LT(fragment.rawMetrics.maximum, 1.0e6);
   EXPECT_GE(fragment.displayMetrics.minimum, 0.0);
   EXPECT_LE(fragment.displayMetrics.maximum, 1.0);
-  EXPECT_NEAR(fragment.rawMetrics.boundaryRadius, predicted, 8.0);
-  EXPECT_NEAR(fragment.rawMetrics.luminanceBoundaryRadius, predicted, 8.0);
-  EXPECT_LE(fragment.rawMetrics.circularity, 0.1);
+  // Pixel-edge quantization bounds each extent to +-1 pixel about the curve,
+  // so the mean radius of two diameters lies within 1 pixel of the oracle.
+  EXPECT_NEAR(fragment.rawMetrics.boundaryRadius, predicted, 1.0);
+  // Radial bins are 1 pixel wide and centered half a pixel off the edge.
+  EXPECT_NEAR(fragment.rawMetrics.luminanceBoundaryRadius, predicted, 1.5);
+  EXPECT_LE(fragment.rawMetrics.circularity, 0.02);
+  EXPECT_NEAR(fragment.rawMetrics.centerOffsetX, 0.0, 0.5);
+  EXPECT_NEAR(fragment.rawMetrics.centerOffsetY, 0.0, 0.5);
+  EXPECT_LE(escapedDisplaySpread(fragment), 2.0 / 255.0) << "display bytes carry non-scene pixels";
   EXPECT_GT(fragment.displayMetrics.maximum - fragment.displayMetrics.minimum, 0.1);
   if (!::testing::Test::HasFailure()) {
     std::ofstream receipt(artifactRoot() / "rendered_output_validation.pass", std::ios::trunc);
@@ -302,18 +378,36 @@ TEST(RenderedOutput, SchwarzschildCriticalCurve) {
     const auto comparison = blackhole::compareImages(fragment.raw, compute.raw);
     writeDifference(fragment, compute, artifactRoot() / "A-fragment-compute-diff.pgm");
     writeComparison(fragment, compute, artifactRoot() / "A-fragment-compute-comparison.json");
-    EXPECT_LT(comparison.mae, 0.1) << "shared GLSL plumbing parity";
-#ifdef BH_RENDER_HAS_CUDA
-    int devices = 0;
-    if (cudaGetDeviceCount(&devices) == cudaSuccess && devices > 0) {
-      const auto cuda = capture("A", "cuda");
-      const auto cudaComparison = blackhole::compareImages(fragment.raw, cuda.raw);
-      writeDifference(fragment, cuda, artifactRoot() / "A-fragment-cuda-diff.pgm");
-      writeComparison(fragment, cuda, artifactRoot() / "A-fragment-cuda-comparison.json");
-      EXPECT_LT(cudaComparison.mae, 0.2) << "CUDA pixel plumbing parity";
-    }
-#endif
+    // Scene A's raw frame is 0 or 1 per pixel, so MAE is the fraction of
+    // pixels whose capture classification differs.
+    EXPECT_LT(comparison.mae, 0.01) << "shared GLSL plumbing parity";
   }
+}
+
+// CUDA writes the frame through CUDA-GL interop, which needs the GL context on
+// an NVIDIA device; under Mesa the desktop refuses a CUDA reference export.
+TEST(RenderedOutput, CudaMatchesFragment) {
+  if (!fullSweep()) {
+    GTEST_SKIP() << "set BLACKHOLE_RENDER_FULL=1 for backend comparisons";
+  }
+#ifdef BH_RENDER_HAS_CUDA
+  int devices = 0;
+  if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) {
+    GTEST_SKIP() << "no CUDA device";
+  }
+  const std::string vendor = glVendor();
+  if (vendor.find("NVIDIA") == std::string::npos) {
+    GTEST_SKIP() << "GL vendor '" << vendor << "' has no CUDA interop";
+  }
+  const auto fragment = capture("A");
+  const auto cuda = capture("A", "cuda");
+  const auto comparison = blackhole::compareImages(fragment.raw, cuda.raw);
+  writeDifference(fragment, cuda, artifactRoot() / "A-fragment-cuda-diff.pgm");
+  writeComparison(fragment, cuda, artifactRoot() / "A-fragment-cuda-comparison.json");
+  EXPECT_LT(comparison.mae, 0.01) << "CUDA pixel plumbing parity";
+#else
+  GTEST_SKIP() << "built without CUDA";
+#endif
 }
 
 TEST(RenderedOutput, EmittingDiskLimbAndEdge) {
@@ -323,10 +417,25 @@ TEST(RenderedOutput, EmittingDiskLimbAndEdge) {
   if (!contextAvailable()) {
     GTEST_SKIP() << "GL 4.6 context unavailable";
   }
-  const auto frame = capture("B");
-  EXPECT_GT(frame.rawMetrics.limbContrast, 0.01);
-  EXPECT_GE(frame.rawMetrics.limbWidth, 2.0);
-  EXPECT_LT(frame.rawMetrics.limbWidth, 20.0);
+  // At a = 0 the critical curve is the image-centered circle of scene A for
+  // any inclination, so the oracle anchors the profile the disk would bias.
+  const double critical = blackhole::criticalRadiusPixels(1.0, K_CAMERA_DISTANCE,
+                                                          K_CAMERA_FOV_DEGREES, K_IMAGE_EXTENT);
+  const auto frame =
+      capture("B", "fragment", "balanced", blackhole::ProfileAnchor{.radius = critical});
+  ASSERT_EQ(frame.height, K_IMAGE_EXTENT);
+  // The lensed disk images of order n >= 1 approach the critical curve from
+  // outside and narrow by e^-pi per order, so at this scale the first one is
+  // a ring about a pixel wide within a few pixels outside the curve. A hard
+  // matte steps from dark to disk with no local maximum and fails the
+  // contrast check.
+  EXPECT_GE(frame.rawMetrics.limbRadius, std::floor(critical));
+  EXPECT_LE(frame.rawMetrics.limbRadius, critical + 3.0);
+  EXPECT_GT(frame.rawMetrics.limbContrast,
+            0.1 * frame.rawMetrics.radialLuminance.at(
+                      static_cast<std::size_t>(frame.rawMetrics.limbRadius)));
+  EXPECT_GE(frame.rawMetrics.limbWidth, 1.0);
+  EXPECT_LE(frame.rawMetrics.limbWidth, 4.0);
   EXPECT_LT(frame.rawMetrics.centralToRing, 0.8);
   EXPECT_EQ(frame.rawMetrics.finiteFraction, 1.0);
 }
@@ -340,18 +449,20 @@ TEST(RenderedOutput, KerrSpinOrientation) {
   }
   const auto positive = capture("C+");
   const auto negative = capture("C-");
-  EXPECT_GT(positive.rawMetrics.capturedFraction, 0.0);
-  EXPECT_GT(negative.rawMetrics.capturedFraction, 0.0);
-  EXPECT_LT(positive.rawMetrics.centerOffsetX * negative.rawMetrics.centerOffsetX, 0.0);
   const auto predictedPositive = kerrScreenGeometry(0.6, positive.height);
   const auto predictedNegative = kerrScreenGeometry(-0.6, negative.height);
-  EXPECT_LT(predictedPositive.center * predictedNegative.center, 0.0);
-  EXPECT_NEAR(std::abs(positive.rawMetrics.centerOffsetX), std::abs(predictedPositive.center), 8.0);
-  EXPECT_NEAR(std::abs(negative.rawMetrics.centerOffsetX), std::abs(predictedNegative.center), 8.0);
-  EXPECT_NEAR(positive.rawMetrics.boundaryDiameter, predictedPositive.horizontalDiameter, 15.0);
-  EXPECT_NEAR(negative.rawMetrics.boundaryDiameter, predictedNegative.horizontalDiameter, 15.0);
-  EXPECT_NEAR(positive.rawMetrics.verticalDiameter, predictedPositive.verticalDiameter, 15.0);
-  EXPECT_NEAR(negative.rawMetrics.verticalDiameter, predictedNegative.verticalDiameter, 15.0);
+  ASSERT_GT(predictedPositive.centerX, 1.0) << "oracle: a > 0 shifts the shadow toward +alpha";
+  // Signed comparisons: a mirrored spin moves the shadow to the wrong side and
+  // fails here, where an absolute-value comparison would pass it.
+  for (const auto &[frame, predicted] :
+       {std::pair{&positive, predictedPositive}, std::pair{&negative, predictedNegative}}) {
+    EXPECT_GT(frame->rawMetrics.capturedFraction, 0.0);
+    EXPECT_NEAR(frame->rawMetrics.boundingCenterX, predicted.centerX, 1.0);
+    EXPECT_NEAR(frame->rawMetrics.boundingCenterY, 0.0, 1.0);
+    EXPECT_NEAR(frame->rawMetrics.boundingWidth, predicted.width, 1.5);
+    EXPECT_NEAR(frame->rawMetrics.boundingHeight, predicted.height, 1.5);
+    EXPECT_LE(frame->rawMetrics.invalidFraction, 0.001);
+  }
 }
 
 TEST(RenderedOutput, CriticalRegionExhaustion) {
@@ -363,6 +474,9 @@ TEST(RenderedOutput, CriticalRegionExhaustion) {
   }
   const auto balanced = capture("D");
   const auto reference = capture("D", "fragment", "reference");
+  EXPECT_GT(metadataInteger(artifactRoot() / "D-fragment-reference.png.json", "max_steps"),
+            metadataInteger(artifactRoot() / "D-fragment-balanced.png.json", "max_steps"))
+      << "the reference tier must change the effective step budget";
   EXPECT_LE(reference.rawMetrics.exhaustedFraction, balanced.rawMetrics.exhaustedFraction);
   EXPECT_EQ(reference.rawMetrics.invalidFraction, 0.0);
 }

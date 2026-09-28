@@ -228,7 +228,8 @@ void composeSceneOverlays(RenderState &rs, const InputManager &input, GLuint fin
   if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
     drawObserverDisclosureLabel(rs);
     drawObserverViewGuide(rs);
-  } else if (rs.scene.mode == RenderState::SceneMode::Blackhole) {
+  } else if (rs.scene.mode == RenderState::SceneMode::Blackhole &&
+             rs.overlays.simulatorExplanationEnabled) {
     drawSimulatorExplanation(rs);
   }
 
