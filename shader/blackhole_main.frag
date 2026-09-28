@@ -120,10 +120,10 @@ uniform float diskFluxPeak = 1.1458947e-4;
 uniform float diskTransferMode = 0.0; // 0 = Physical g-factor, 1 = Interstellar (g = 1)
 
 // Physics parameters
-uniform float schwarzschildRadius = 2.0; // r_s = 2GM/c² (default = 2 in geometric units)
+uniform float schwarzschildRadius = 2.0; // r_s = 2GM/c^2 (default = 2 in geometric units)
 // Derived radii computed from schwarzschildRadius using physics functions:
 // - photonSphereRadius = 1.5 * r_s via sch_photonSphereRadius()
-// - iscoRadius = 3.0 * r_s via sch_iscoRadius()
+// - iscoRadius arrives in scene units from the spin-dependent host calculation.
 // These are now computed in adiskColor() and traceColor() to avoid redundant uniforms
 uniform float enableRedshift = 0.0;      // Toggle gravitational redshift
 uniform float enablePhotonSphere = 0.0;  // Toggle photon sphere glow
@@ -149,15 +149,13 @@ uniform float wiregridScenePreserve = 1.0; // 1 = yield to scene luminance, 0 = 
 uniform vec4 wiregridColor = vec4(0.21, 0.62, 0.92, 0.16); // Base grid RGBA
 
 // Derived physics quantities: use sch_* functions from schwarzschild.glsl
-// These macros ensure iscoRadius and photonSphereRadius are computed from schwarzschildRadius
-// rather than being redundant uniforms (eliminates parameter synchronization issues)
-// Define the sch_* functions inline to avoid include conflicts with redshift.glsl
+// The photon-sphere reference is the Schwarzschild 3M radius.
 float sch_photonSphereRadius(float r_s) { return 1.5 * r_s; }
-float sch_iscoRadius(float r_s) { return 3.0 * r_s; }
-#define iscoRadius sch_iscoRadius(schwarzschildRadius)
+uniform float iscoRadius = 6.0;
 #define photonSphereRadius sch_photonSphereRadius(schwarzschildRadius)
 
 #include "include/interop_trace.glsl"
+#include "include/terminal_output.glsl"
 
 ///----
 /// Noise is sampled from a 3D texture (offline/precomputed).
@@ -173,7 +171,7 @@ float luminance(vec3 color) {
 }
 
 // Inlined accel() computation (Phase 8.2 optimization: eliminates function call overhead)
-// a = -1.5 * r_s * h² * pos / r⁵ where r = |pos|
+// a = -1.5 * r_s * h^2 * pos / r^5 where r = |pos|
 
 vec4 quadFromAxisAngle(vec3 axis, float angle) {
   vec4 qr;
@@ -237,7 +235,7 @@ float sqrLength(vec3 a) { return dot(a, a); }
 
 bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
   // Inner radius at ISCO (innermost stable circular orbit)
-  // For Schwarzschild: r_ISCO = 3 * r_s where r_s = 2GM/c²
+  // For Schwarzschild: r_ISCO = 3 * r_s where r_s = 2GM/c^2
   // iscoRadius is already in the same coordinate units as positions
   float innerRadius = iscoRadius;
   float outerRadius = iscoRadius * 4.0; // Outer edge at ~12 r_s for typical thin disk
@@ -408,13 +406,15 @@ bool adiskColor(vec3 pos, vec3 rayDir, inout vec3 color, inout float alpha) {
   return true;
 }
 
-vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
+vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos,
+                out int terminal) {
   vec3 color = vec3(0.0);
   float alpha = 1.0;
   vec3 origin = pos;
   lastPos = pos; // updated at each early-return; final pos = ray endpoint
 
   depthDistance = depthFar;
+  terminal = BH_TERMINAL_MAX_STEPS;
 
   float STEP_SIZE = 0.1;
   dir *= STEP_SIZE;
@@ -432,6 +432,10 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
   float r_ph = photonSphereRadius; // 1.5 * r_s
 
   for (int i = 0; i < 300; i++) {
+    if (bhIsInvalidVec3(pos) || bhIsInvalidVec3(dir)) {
+      terminal = BH_TERMINAL_NON_FINITE;
+      return vec3(0.0);
+    }
     lastPos = pos;
     float r = length(pos);
     if (r < minRadiusReached) {
@@ -447,7 +451,7 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
     if (renderBlackHole > 0.5) {
       // Apply gravitational lensing (geodesic bending)
       if (gravitationalLensing > 0.5) {
-        // Inlined accel: a = -1.5 * r_s * h² * pos / r⁵
+        // Inlined accel: a = -1.5 * r_s * h^2 * pos / r^5
         float r2 = dot(pos, pos);
         float r5 = r2 * r2 * r;
         vec3 acc = -1.5 * schwarzschildRadius * h2 * pos / r5;
@@ -455,9 +459,10 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
       }
 
       // Event horizon detection: r < r_s (Schwarzschild radius IS the event horizon)
-      // Note: r_s = 2GM/c² is the coordinate radius where g_tt = 0
+      // Note: r_s = 2GM/c^2 is the coordinate radius where g_tt = 0
       // The factor of 2 was already included in the definition of schwarzschildRadius
       if (r < schwarzschildRadius) {
+        terminal = BH_TERMINAL_HORIZON;
         if (debugPreRedshiftBackground > 0.5 || debugPreShapingBackground > 0.5 ||
             debugShaperInputs > 0.5 ||
             debugClosestApproachDirection > 0.5 || debugEscapedDirection > 0.5 ||
@@ -523,6 +528,7 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
           debugPostShapingBackground <= 0.5 &&
           adiskEnabled > 0.5) {
         if (adiskColor(pos, dir, color, alpha)) {
+          terminal = BH_TERMINAL_DISK_HIT;
           // Phase 8.2 Priority 3: Cache distance computation
           depthDistance = min(depthDistance, length(pos - origin));
         }
@@ -530,6 +536,11 @@ vec3 traceColor(vec3 pos, vec3 dir, out float depthDistance, out vec3 lastPos) {
     }
 
     pos += dir;
+  }
+
+  if (terminal == BH_TERMINAL_MAX_STEPS && length(pos) > depthFar &&
+      dot(pos, dir) > 0.0) {
+    terminal = BH_TERMINAL_ESCAPE;
   }
 
   // Sample background with parallax layers or fallback to cubemap
@@ -711,6 +722,7 @@ void main() {
                                                stokesBFieldAngle, stokesNeScale,
                                                terminalPos, terminal);
       vec3 interopColor = bhDisplayTerminal(stokesColor.rgb, terminal);
+      bhRecordTerminal(ivec2(gl_FragCoord.xy), ivec2(resolution), terminal);
       applyWiregridOverlay(interopColor, bhChartToBoyerLindquist(terminalPos, schwarzschildRadius));
       fragColor = vec4(interopColor, 1.0);
       return;
@@ -724,6 +736,7 @@ void main() {
                                          interopStepSize, rteOpacityScale,
                                          terminalPos, terminal);
       vec3 interopColor = bhDisplayTerminal(rteColor.rgb, terminal);
+      bhRecordTerminal(ivec2(gl_FragCoord.xy), ivec2(resolution), terminal);
       applyWiregridOverlay(interopColor, bhChartToBoyerLindquist(terminalPos, schwarzschildRadius));
       fragColor = vec4(interopColor, 1.0);
       return;
@@ -732,6 +745,7 @@ void main() {
     HitResult hit =
         bhTraceGeodesic(ray, schwarzschildRadius, depthFar, steps, interopStepSize);
     vec4 shaded = bhShadeHit(hit, hit.origin, schwarzschildRadius);
+    bhRecordTerminal(ivec2(gl_FragCoord.xy), ivec2(resolution), hit.terminal);
     float depthNormalized =
         clamp(length(hit.hitPoint - hit.origin) / max(depthFar, 0.0001), 0.0, 1.0);
     vec3 interopColor = shaded.rgb;
@@ -742,7 +756,9 @@ void main() {
 
   float depthDistance = depthFar;
   vec3 lastPos;
-  vec3 color = traceColor(pos, dir, depthDistance, lastPos);
+  int terminal;
+  vec3 color = traceColor(pos, dir, depthDistance, lastPos, terminal);
+  bhRecordTerminal(ivec2(gl_FragCoord.xy), ivec2(resolution), terminal);
   // The wiregrid reads Boyer-Lindquist angles about the physics +z axis.
   applyWiregridOverlay(color, bhWorldToPhysics(lastPos));
   float depthNormalized = clamp(depthDistance / depthFar, 0.0, 1.0);

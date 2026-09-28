@@ -13,6 +13,7 @@
 #define BLACKHOLE_RENDER_RENDER_STATE_H
 
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -38,6 +39,8 @@
 #include "render/gpu_timing.h"
 #include "render/noise_texture_cache.h"
 #include "render/observer_sky_view.h"
+#include "render/renderer_contract.h"
+#include "render/terminal_counts.h"
 #include "render/tesseract/so4.h"
 #include "render/tesseract/tesseract_geometry.h"
 #include "render/tesseract/tesseract_renderer.h"
@@ -318,13 +321,11 @@ struct RenderState {
 
   struct RteGroup {
       // D2: volumetric RTE
-    bool  rteVolumetricEnabled = false;
     float rteOpacityScale      = 0.5f;
   } rte;
 
   struct StokesGroup {
       // D4: polarized Stokes IQUV
-    bool  stokesEnabled        = false;
     float stokesBFieldAngle    = 0.0f;   // EVPA of projected B field [rad]
     float stokesNeScale        = 0.0f;   // Faraday rotation strength (0 = off)
   } stokes;
@@ -334,13 +335,6 @@ struct RenderState {
     float kerrSpin = 0.0f;
     bool enablePhotonSphere = false;
     bool enableRedshift = false;
-    // Fragment path: true traces Kerr null geodesics (kerr.glsl, the same
-    // integrator as the compute and CUDA paths) and shades the disk with the
-    // Page-Thorne flux and the orbiting-emitter g-factor (bhDiskEmission);
-    // false selects the legacy artistic tracer in blackhole_main.frag, which
-    // bends light with the Schwarzschild acceleration only and imitates spin
-    // with screen-space tinting.
-    bool physicalRayTracer = true;
   } physicsCore;
 
   struct HawkingGroup {
@@ -454,6 +448,15 @@ struct RenderState {
     gl::GLuint sceneFbo = 0;
   } targets;
 
+  struct TerminalDiagnosticsGroup {
+    gl::GLuint codesBuffer = 0;
+    gl::GLuint debugTexture = 0;
+    std::vector<std::uint32_t> codes;
+    TerminalCounts counts;
+    bool valid = false;
+    bool showDebugView = false;
+  } terminalDiagnostics;
+
   struct RecordingGroup {
       // --record-frames: cinematic recording state
     bool         recordInitDone    = false;
@@ -466,7 +469,7 @@ struct RenderState {
   } recording;
 
   struct DispatchGroup {
-    bool useComputeRaytracer = false;
+    RendererContract contract;
 #if BLACKHOLE_HAS_CUDA
     CudaRenderManager cudaManager;
     bool cudaVariantEnvApplied = false;

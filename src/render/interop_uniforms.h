@@ -24,7 +24,7 @@ struct InteropUniforms {
   glm::vec3 cameraPos{};
   glm::mat3 cameraBasis{1.0f};
   int maxSteps = 0;
-  // Carried for the compare CSV and the CUDA fill; never a GL uniform.
+  // Host-derived spin-dependent ISCO in scene units for GL and CUDA.
   float iscoRadius = 0.0f;
   // Every shared float uniform, generated from the registry: one table
   // row expands into this field, the fragment map write, and the

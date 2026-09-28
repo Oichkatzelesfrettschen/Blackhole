@@ -9,8 +9,9 @@ explains the recorded surfaces. Registered tests are inventory, not execution.
 ## Products
 
 - **Blackhole Simulator / Workbench:** `src/main.cpp` owns the desktop loop;
-  `src/render/render_state.h` owns renderer state. `RenderState` initializes
-  `useComputeRaytracer = false` for fragment dispatch in the raytracer scene.
+  `src/render/render_state.h` owns renderer state. `RendererContract`
+  (`src/render/renderer_contract.h`) defaults to fragment dispatch of the Kerr
+  tracer in the raytracer scene.
   Compute, CUDA, and Blender paths have separate build and runtime gates. Shader compilation
   checks syntax and interfaces; image invariants and GPU parity need GPU runs.
 - **Singularity: GOROROBA:** `game::CampaignSession` drives the canonical

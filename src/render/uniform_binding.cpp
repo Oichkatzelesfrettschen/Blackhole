@@ -24,6 +24,7 @@
 #include "physics/constants.h"
 #include "physics/hawking_uniforms.h"
 #include "render/interop_uniform_registry.h"
+#include "render/renderer_contract.h"
 #include "render/uniform_binding.h"
 
 #if BLACKHOLE_HAS_CUDA
@@ -50,6 +51,7 @@ void applyInteropUniforms(RenderToTextureInfo &rtti, const InteropUniforms &inte
   rtti.vec3Uniforms["cameraPos"] = interop.cameraPos;
   rtti.mat3Uniforms["cameraBasis"] = interop.cameraBasis;
   rtti.floatUniforms["interopMaxSteps"] = static_cast<float>(interop.maxSteps);
+  rtti.floatUniforms["iscoRadius"] = interop.iscoRadius;
   rtti.floatUniforms["interopParityMode"] = parityMode ? 1.0f : 0.0f;
 
   // Hawking radiation uniforms
@@ -81,6 +83,7 @@ void applyInteropComputeUniforms(GLuint program, const InteropUniforms &interop,
   glUniform3f(glGetUniformLocation(program, "cameraPos"), interop.cameraPos.x, interop.cameraPos.y,
               interop.cameraPos.z);
   glUniform1i(glGetUniformLocation(program, "interopMaxSteps"), interop.maxSteps);
+  glUniform1f(glGetUniformLocation(program, "iscoRadius"), interop.iscoRadius);
 }
 
 void bindComputeUniforms(GLuint program, const RenderState &rs, const FrameBindingInputs &in) {
@@ -110,7 +113,7 @@ void bindComputeUniforms(GLuint program, const RenderState &rs, const FrameBindi
 
   // D4: polarized Stokes IQUV (parity with fragment path)
   glUniform1f(glGetUniformLocation(program, "stokesEnabled"),
-              rs.stokes.stokesEnabled ? 1.0f : 0.0f);
+              rs.dispatch.contract.radiative == RadiativeModel::Stokes ? 1.0f : 0.0f);
   glUniform1f(glGetUniformLocation(program, "stokesBFieldAngle"),
               rs.stokes.stokesBFieldAngle);
   glUniform1f(glGetUniformLocation(program, "stokesNeScale"),
@@ -196,7 +199,8 @@ void bindFragmentUniforms(RenderToTextureInfo &rtti, const RenderState &rs,
   double const bhMassGrams = static_cast<double>(rs.physicsCore.blackHoleMass) * physics::M_SUN;
   // The interop branch of blackhole_main.frag is the physical Kerr tracer;
   // compare mode forces it so fragment and compute trace the same geodesics.
-  bool const physicalFragmentPath = in.compareActive || rs.physicsCore.physicalRayTracer;
+  bool const physicalFragmentPath =
+      in.compareActive || rs.dispatch.contract.geodesic != GeodesicModel::LegacyBeauty;
   // Same Hawking values the compute path receives through
   // HawkingRenderer::setShaderUniforms.
   applyInteropUniforms(rtti, interop, physicalFragmentPath,
@@ -214,7 +218,8 @@ void bindFragmentUniforms(RenderToTextureInfo &rtti, const RenderState &rs,
   rtti.floatUniforms["wiregridScenePreserve"] = rs.wiregrid.wiregridParams.scenePreserve;
   rtti.vec4Uniforms["wiregridColor"] = rs.wiregrid.wiregridColor;
   // D4: polarized Stokes IQUV
-  rtti.floatUniforms["stokesEnabled"]     = rs.stokes.stokesEnabled ? 1.0f : 0.0f;
+  rtti.floatUniforms["stokesEnabled"]     =
+      rs.dispatch.contract.radiative == RadiativeModel::Stokes ? 1.0f : 0.0f;
   rtti.floatUniforms["stokesBFieldAngle"] = rs.stokes.stokesBFieldAngle;
   rtti.floatUniforms["stokesNeScale"]     = rs.stokes.stokesNeScale;
   rtti.floatUniforms["gravitationalLensing"] = rs.disk.gravitationalLensing ? 1.0f : 0.0f;
@@ -317,7 +322,7 @@ void bindCudaLaunchParams(BH_LaunchParams &cp, const RenderState &rs,
   cp.rte_enabled       = (interop.rteEnabled > 0.5f) ? 1 : 0;
   cp.rte_opacity_scale = interop.rteOpacityScale;
   // D4: polarized Stokes IQUV
-  cp.stokes_enabled     = rs.stokes.stokesEnabled ? 1 : 0;
+  cp.stokes_enabled     = rs.dispatch.contract.radiative == RadiativeModel::Stokes ? 1 : 0;
   cp.stokes_b_field_angle = rs.stokes.stokesBFieldAngle;
   cp.stokes_ne_scale    = rs.stokes.stokesNeScale;
   // Legacy volumetric disk scale (GLSL adiskLit); the Kerr disk reads disk_brightness.

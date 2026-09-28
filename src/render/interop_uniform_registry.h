@@ -19,8 +19,8 @@
  *   - cameraPos (vec3), cameraBasis (mat3), maxSteps (int): typed
  *     specials whose two paths differ in call shape; they stay explicit
  *     beside the expansions.
- *   - iscoRadius: carried in the struct for the compare-CSV and CUDA
- *     fill, never uploaded as a GL uniform.
+ *   - iscoRadius: a typed special uploaded to both GL paths and the CUDA
+ *     launch parameters after the host computes the spin-dependent value.
  *   - The CUDA BH_LaunchParams fill: it applies semantic transforms
  *     (thresholds, bool packing), not mechanical copies, and its ABI is
  *     guarded separately by bh_device_launch_params_abi().

@@ -112,6 +112,9 @@
 #include "render/post_process.h"
 #include "render/record_mode.h"
 #include "render/render_state.h"
+#include "render/renderer_contract.h"
+#include "render/terminal_counts.h"
+#include "../shader/include/ray_terminal.h"
 #include "render/render_targets.h"
 #include "render/scene_overlays.h"
 #include "render/settings_sync.h"
@@ -215,6 +218,9 @@ using blackhole::hasExtension;
 // and RenderState live in src/render/render_state.h.
 using blackhole::K_BACKGROUND_LAYERS;
 using blackhole::RenderState;
+using blackhole::RenderBackend;
+using blackhole::rendererStepBudget;
+using blackhole::rendererStepSize;
 using blackhole::WiregridParams;
 
 /**
@@ -685,6 +691,10 @@ void dispatchComputeFrame(RenderState &rs, GLuint computeTarget, GLuint &compute
   glUseProgram(computeProgram);
   applyInteropComputeUniforms(computeProgram, interop, rs.targets.renderWidth,
                               rs.targets.renderHeight);
+  glUniform1f(glGetUniformLocation(computeProgram, "terminalWriteEnabled"),
+              computeTarget == rs.targets.texBlackhole ? 1.0f : 0.0f);
+  glUniform1f(glGetUniformLocation(computeProgram, "terminalDebugEnabled"),
+              rs.terminalDiagnostics.showDebugView ? 1.0f : 0.0f);
 
   // Apply Hawking radiation uniforms
   double const bhMass = static_cast<double>(rs.physicsCore.blackHoleMass) * physics::M_SUN;
@@ -748,12 +758,23 @@ void renderGlslFrame(RenderState &rs, RenderToTextureInfo &rtti, GLuint &compute
   } else {
     computeTarget = compareActive ? rs.targets.texBlackholeCompare : 0;
   }
+  auto &terminals = rs.terminalDiagnostics;
+  if (terminals.codesBuffer != 0) {
+    constexpr std::uint32_t unwrittenCode = BH_TERMINAL_OUTSIDE_DOMAIN;
+    glClearNamedBufferData(terminals.codesBuffer, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT,
+                           &unwrittenCode);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, terminals.codesBuffer);
+    glBindImageTexture(1, terminals.debugTexture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
+  }
   if (rs.timing.gpuTimers.initialized && fragmentTarget != 0) {
     rs.timing.gpuTimers.blackholeFragment.begin();
   }
   if (fragmentTarget != 0) {
     ZONE_SCOPED_N("Blackhole Fragment");
     rtti.targetTexture = fragmentTarget;
+    rtti.floatUniforms["terminalWriteEnabled"] =
+        fragmentTarget == rs.targets.texBlackhole ? 1.0f : 0.0f;
+    rtti.floatUniforms["terminalDebugEnabled"] = terminals.showDebugView ? 1.0f : 0.0f;
     // std::cout << "Rendering to texture..." << std::endl;
     renderToTexture(rtti);
   }
@@ -770,6 +791,16 @@ void renderGlslFrame(RenderState &rs, RenderToTextureInfo &rtti, GLuint &compute
   }
   if (rs.timing.gpuTimers.initialized && computeTarget != 0) {
     rs.timing.gpuTimers.blackholeCompute.end();
+  }
+  if (terminals.codesBuffer != 0 && !terminals.codes.empty()) {
+    glMemoryBarrier(GL_ALL_BARRIER_BITS);
+    glGetNamedBufferSubData(terminals.codesBuffer, 0,
+                            static_cast<GLsizeiptr>(terminals.codes.size() * sizeof(std::uint32_t)),
+                            terminals.codes.data());
+    terminals.counts = blackhole::foldTerminalCodes(terminals.codes);
+    terminals.valid = true;
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, 0);
+    glBindImageTexture(1, 0, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
   }
 
   CompareParityInputs parityInputs;
@@ -806,12 +837,14 @@ struct RenderDispatchOptions {
   float compareStepSize;
 };
 RenderDispatchOptions deriveRenderDispatch(RenderState &rs, const Settings &settings) {
+  blackhole::normalizeRendererContract(rs.dispatch.contract);
   bool const computeSupported = ShaderManager::instance().canUseComputeShaders();
-  bool const computeActive = rs.dispatch.useComputeRaytracer && computeSupported;
+  bool const computeActive = rs.dispatch.contract.backend == RenderBackend::Compute && computeSupported;
   bool const compareActive =
       rs.compare.compareComputeFragment && computeSupported && !K_APP_VARIANT_CUDA_ONLY;
   bool const compareBaselineActive = rs.compare.compareBaselineEnabled && compareActive;
-  bool const adiskEnabledEffective = rs.disk.adiskEnabled && !compareBaselineActive;
+  bool const adiskEnabledEffective = rs.disk.adiskEnabled && !compareBaselineActive &&
+      rs.dispatch.contract.radiative != blackhole::RadiativeModel::BackgroundOnly;
   bool const adiskParticleEffective = rs.disk.adiskParticle && !compareBaselineActive;
   bool const enableRedshiftEffective = rs.physicsCore.enableRedshift && !compareBaselineActive;
   bool const useNoiseTextureEffective = rs.disk.useNoiseTexture && !compareBaselineActive;
@@ -833,8 +866,8 @@ RenderDispatchOptions deriveRenderDispatch(RenderState &rs, const Settings &sett
   }
   rs.dispatch.computeMaxSteps = std::clamp(rs.dispatch.computeMaxSteps, 10, 1000);
   rs.dispatch.computeStepSize = std::clamp(rs.dispatch.computeStepSize, 0.001f, 2.0f);
-  int compareSteps = rs.dispatch.computeMaxSteps;
-  float compareStepSize = rs.dispatch.computeStepSize;
+  int compareSteps = rendererStepBudget(rs.dispatch.contract.quality, rs.dispatch.computeMaxSteps);
+  float compareStepSize = rendererStepSize(rs.dispatch.contract.quality, rs.dispatch.computeStepSize);
   if (rs.compare.compareOverridesEnabled) {
     if (rs.compare.compareMaxStepsOverride > 0) {
       compareSteps = rs.compare.compareMaxStepsOverride;
@@ -944,13 +977,16 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const Settings &setti
     rtti.width = rs.targets.renderWidth;
     rtti.height = rs.targets.renderHeight;
 
-    updateLuts(rs, rs.physicsCore.kerrSpin, rs.disk.adiskDensityV);
+    const float effectiveSpin =
+        rs.dispatch.contract.geodesic == blackhole::GeodesicModel::SchwarzschildReference
+            ? 0.0f : rs.physicsCore.kerrSpin;
+    updateLuts(rs, effectiveSpin, rs.disk.adiskDensityV);
     loadSpectralSynchHawkingLuts(rs);
 
     const double referenceMass = physics::M_SUN;
     const double referenceRs = physics::schwarzschildRadius(referenceMass);
     const double referenceRg = physics::G * referenceMass / physics::C2;
-    const double referenceA = static_cast<double>(rs.physicsCore.kerrSpin) * referenceRg;
+    const double referenceA = static_cast<double>(effectiveSpin) * referenceRg;
     // The disk orbits along +z; a negative kerrSpin makes that orbit counter-rotate.
     const double iscoRatio = physics::kerrIscoRadius(referenceMass, referenceA, true) / referenceRs;
 
@@ -961,10 +997,10 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const Settings &setti
     rs.recording.recordCurIsco = iscoRadius;
 #if BLACKHOLE_HAS_CUDA
     if (K_APP_VARIANT_CUDA_ONLY) {
-      rs.dispatch.cudaManager.setEnabled(true);
-      rs.dispatch.useComputeRaytracer = false;
+      rs.dispatch.contract.backend = RenderBackend::Cuda;
       rs.compare.compareComputeFragment = false;
     }
+    rs.dispatch.cudaManager.setEnabled(rs.dispatch.contract.backend == RenderBackend::Cuda);
 #endif
     const auto dispatch = deriveRenderDispatch(rs, settings);
     const auto computeActive = dispatch.computeActive;
@@ -995,14 +1031,14 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const Settings &setti
     interop.timeSec = frameTime;
     interop.schwarzschildRadius = schwarzschildRadius;
     interop.iscoRadius = iscoRadius;
-    interop.kerrSpin = rs.physicsCore.kerrSpin;
+    interop.kerrSpin = effectiveSpin;
     interop.depthFar = rs.display.depthFar;
     if (compareActive) {
       interop.maxSteps = compareSteps;
       interop.stepSize = compareStepSize;
     } else {
-      interop.maxSteps = rs.dispatch.computeMaxSteps;
-      interop.stepSize = rs.dispatch.computeStepSize;
+      interop.maxSteps = rendererStepBudget(rs.dispatch.contract.quality, rs.dispatch.computeMaxSteps);
+      interop.stepSize = rendererStepSize(rs.dispatch.contract.quality, rs.dispatch.computeStepSize);
     }
     interop.adiskEnabled = adiskEnabledEffective ? 1.0f : 0.0f;
     interop.enableRedshift = enableRedshiftEffective ? 1.0f : 0.0f;
@@ -1019,7 +1055,8 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const Settings &setti
     interop.grbTimeMin = rs.luts.grbTimeMin;
     interop.grbTimeMax = rs.luts.grbTimeMax;
     // Volumetric radiative transfer
-    interop.rteEnabled = rs.rte.rteVolumetricEnabled ? 1.0f : 0.0f;
+    interop.rteEnabled = rs.dispatch.contract.radiative == blackhole::RadiativeModel::VolumetricRte
+                             ? 1.0f : 0.0f;
     interop.rteOpacityScale = rs.rte.rteOpacityScale;
     interop.debugPreRedshiftBackground = rs.debug.debugPreRedshiftBackground ? 1.0f : 0.0f;
     interop.debugPreShapingBackground = rs.debug.debugPreShapingBackground ? 1.0f : 0.0f;
@@ -1035,7 +1072,7 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const Settings &setti
     // Page-Thorne flux peak at the rendered spin, the normalization of the
     // shaders' flux (the GLSL disk_profile isco_radius clamps to the same range).
     interop.diskFluxPeak = static_cast<float>(physics::pageThorneFluxPeak(
-        std::clamp(static_cast<double>(rs.physicsCore.kerrSpin), -0.9999, 0.9999)));
+        std::clamp(static_cast<double>(effectiveSpin), -0.9999, 0.9999)));
 
     // Per-frame derived transients shared by the fragment, CUDA, and
     // compute uniform binders (compare-baseline gating, LUT readiness); see
@@ -1223,6 +1260,7 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
                                       const Settings &settings, InputManager &input,
                                       const FrameCamera &frameCamera, float frameTime,
                                       float deltaTime, double currentTime, GLuint &computeProgram) {
+  rs.terminalDiagnostics.valid = false;
   if (rs.scene.mode == RenderState::SceneMode::ObserverSky) {
     // The observer's clock runs on wall time, which pause stops; its own sky
     // time scale replaces the global one, so the panel's rate is the rate. A
@@ -1454,6 +1492,12 @@ void renderWorkspacePanels(RenderState &rs, const Settings &settings, GLFWwindow
   }
 }
 
+GLuint viewportDisplayTexture(const RenderState &rs, GLuint finalTexture) {
+  return rs.terminalDiagnostics.showDebugView && rs.terminalDiagnostics.valid
+             ? rs.terminalDiagnostics.debugTexture
+             : finalTexture;
+}
+
 } // anonymous namespace
 
 int main(int argc, char **argv) {
@@ -1587,6 +1631,22 @@ int main(int argc, char **argv) {
     // environment overrides below replace them rather than being replaced.
     loadSettingsIntoRenderState(rs, settings);
     applyEnvironmentConfig(rs);
+    if (K_APP_VARIANT_CUDA_ONLY) {
+      rs.dispatch.contract.backend = RenderBackend::Cuda;
+    }
+    blackhole::normalizeRendererContract(rs.dispatch.contract);
+    std::printf("Renderer startup: %.*s / %.*s / %.*s / %.*s; %d steps, %.3f step size\n",
+                static_cast<int>(blackhole::rendererName(rs.dispatch.contract.backend).size()),
+                blackhole::rendererName(rs.dispatch.contract.backend).data(),
+                static_cast<int>(blackhole::rendererName(rs.dispatch.contract.geodesic).size()),
+                blackhole::rendererName(rs.dispatch.contract.geodesic).data(),
+                static_cast<int>(blackhole::rendererName(rs.dispatch.contract.radiative).size()),
+                blackhole::rendererName(rs.dispatch.contract.radiative).data(),
+                static_cast<int>(blackhole::rendererName(rs.dispatch.contract.quality).size()),
+                blackhole::rendererName(rs.dispatch.contract.quality).data(),
+                blackhole::rendererStepBudget(rs.dispatch.contract, rs.dispatch.computeMaxSteps),
+                static_cast<double>(blackhole::rendererStepSize(rs.dispatch.contract,
+                                                                 rs.dispatch.computeStepSize)));
 
     /* WHY: computeProgram is hoisted here (rather than a static local inside the
      * frame loop) so the hot-reload handler at the top of each frame can delete
@@ -1724,7 +1784,8 @@ int main(int argc, char **argv) {
       composeSceneOverlays(rs, input, finalTexture, grmhdReady);
 
       // Draw Final Texture to Viewport
-      ImGui::Image(static_cast<ImTextureID>(finalTexture), viewportSize, ImVec2(0, 1),
+      const GLuint viewportTexture = viewportDisplayTexture(rs, finalTexture);
+      ImGui::Image(static_cast<ImTextureID>(viewportTexture), viewportSize, ImVec2(0, 1),
                    ImVec2(1, 0));
 
       // Enable mouse/keyboard interaction when hovering the viewport

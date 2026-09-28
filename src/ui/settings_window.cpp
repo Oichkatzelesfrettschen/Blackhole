@@ -29,6 +29,8 @@
 #include "presentation_metadata.h"
 #include "physics/hawking_renderer.h"
 #include "render/render_state.h"
+#include "render/renderer_contract.h"
+#include "../../shader/include/ray_terminal.h"
 #include "schwarzschild.h"
 #include "settings.h"
 #include "shader_manager.h"
@@ -208,15 +210,14 @@ void renderVisualSettings(RenderState &rs, Settings &settings) {
 
   ImGui::Separator();
   ImGui::Text("Volumetric RTE (D2)");
-  ImGui::Checkbox("Volumetric RTE", &rs.rte.rteVolumetricEnabled);
-  if (rs.rte.rteVolumetricEnabled) {
+  ImGui::TextDisabled("Select the radiative model in Compute Raytracer.");
+  if (rs.dispatch.contract.radiative == blackhole::RadiativeModel::VolumetricRte) {
     ImGui::SliderFloat("RTE Opacity Scale", &rs.rte.rteOpacityScale, 0.0f, 5.0f);
   }
 
   ImGui::Separator();
   ImGui::Text("Polarized Stokes IQUV (D4)");
-  ImGui::Checkbox("Stokes Transport", &rs.stokes.stokesEnabled);
-  if (rs.stokes.stokesEnabled) {
+  if (rs.dispatch.contract.radiative == blackhole::RadiativeModel::Stokes) {
     ImGui::SliderFloat("B Field Angle (rad)", &rs.stokes.stokesBFieldAngle,
                        -std::numbers::pi_v<float>, std::numbers::pi_v<float>);
     ImGui::SliderFloat("Faraday Ne Scale", &rs.stokes.stokesNeScale, 0.0f, 5.0f);
@@ -436,11 +437,7 @@ void renderPhysicsSettings(RenderState &rs) {
                       "arXiv:1502.03808). The campaign clocks use the physics spin.");
   }
 
-  ImGui::Checkbox("Physical Kerr ray tracer", &rs.physicsCore.physicalRayTracer);
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("On: trace Kerr null geodesics (Carter constants, Mino-time leapfrog).\n"
-                      "Off: legacy artistic tracer (Schwarzschild bending, spin shown by tint).");
-  }
+  ImGui::TextDisabled("Select the geodesic model in Compute Raytracer.");
   const char *const diskTransferLabels[] = {"Physical", "Interstellar (film)"};
   ImGui::BeginDisabled(!kerrDiskShadingActive(rs));
   ImGui::Combo("Disk transfer", &rs.disk.diskTransferMode, diskTransferLabels, 2);
@@ -664,36 +661,122 @@ void renderComputeComparisonSettings(RenderState &rs) {
 }
 
 void renderComputeSettings(RenderState &rs) {
-  ImGui::Text("Compute Raytracer");
+  ImGui::Text("Renderer contract");
   bool const computeAvailable = ShaderManager::instance().canUseComputeShaders();
+  const char *const backendNames[] = {"Fragment", "Compute", "CUDA"};
+  int backend = static_cast<int>(rs.dispatch.contract.backend);
+  if (ImGui::Combo("Backend", &backend, backendNames, BLACKHOLE_HAS_CUDA ? 3 : 2)) {
+    rs.dispatch.contract.backend = static_cast<blackhole::RenderBackend>(backend);
+    if (backend != 0 && rs.dispatch.contract.geodesic == blackhole::GeodesicModel::LegacyBeauty) {
+      rs.dispatch.contract.geodesic = blackhole::GeodesicModel::KerrReference;
+    }
+  }
+  if (!computeAvailable && rs.dispatch.contract.backend == blackhole::RenderBackend::Compute) {
+    rs.dispatch.contract.backend = blackhole::RenderBackend::Fragment;
+  }
+  if (K_APP_VARIANT_CUDA_ONLY) {
+    rs.dispatch.contract.backend = blackhole::RenderBackend::Cuda;
+  }
+  const char *const geodesicNames[] = {"Legacy beauty (fragment only)", "Schwarzschild reference",
+                                       "Kerr reference"};
+  int geodesic = static_cast<int>(rs.dispatch.contract.geodesic);
+  if (ImGui::Combo("Geodesic model", &geodesic, geodesicNames, 3)) {
+    rs.dispatch.contract.geodesic = static_cast<blackhole::GeodesicModel>(geodesic);
+    if (geodesic == 0) {
+      rs.dispatch.contract.backend = blackhole::RenderBackend::Fragment;
+      rs.dispatch.contract.radiative = blackhole::RadiativeModel::ThinSurface;
+    }
+  }
+  if (K_APP_VARIANT_CUDA_ONLY &&
+      rs.dispatch.contract.geodesic == blackhole::GeodesicModel::LegacyBeauty) {
+    rs.dispatch.contract.geodesic = blackhole::GeodesicModel::KerrReference;
+    rs.dispatch.contract.backend = blackhole::RenderBackend::Cuda;
+  }
+  const char *const radiativeNames[] = {"Background only", "Thin surface", "Volumetric RTE", "Stokes"};
+  int radiative = static_cast<int>(rs.dispatch.contract.radiative);
+  ImGui::BeginDisabled(rs.dispatch.contract.geodesic == blackhole::GeodesicModel::LegacyBeauty);
+  if (ImGui::Combo("Radiative model", &radiative, radiativeNames, 4)) {
+    rs.dispatch.contract.radiative = static_cast<blackhole::RadiativeModel>(radiative);
+  }
+  ImGui::EndDisabled();
+  if (rs.dispatch.contract.geodesic == blackhole::GeodesicModel::LegacyBeauty) {
+    ImGui::TextDisabled("Legacy beauty uses its fixed disk shading and integration loop.");
+  }
+  const char *const qualityNames[] = {"Interactive", "Balanced", "Reference"};
+  int quality = static_cast<int>(rs.dispatch.contract.quality);
+  if (ImGui::Combo("Quality tier", &quality, qualityNames, 3)) {
+    rs.dispatch.contract.quality = static_cast<blackhole::QualityTier>(quality);
+  }
+  ImGui::Text("Effective: %.*s / %.*s / %.*s / %.*s",
+              static_cast<int>(blackhole::rendererName(rs.dispatch.contract.backend).size()),
+              blackhole::rendererName(rs.dispatch.contract.backend).data(),
+              static_cast<int>(blackhole::rendererName(rs.dispatch.contract.geodesic).size()),
+              blackhole::rendererName(rs.dispatch.contract.geodesic).data(),
+              static_cast<int>(blackhole::rendererName(rs.dispatch.contract.radiative).size()),
+              blackhole::rendererName(rs.dispatch.contract.radiative).data(),
+              static_cast<int>(blackhole::rendererName(rs.dispatch.contract.quality).size()),
+              blackhole::rendererName(rs.dispatch.contract.quality).data());
+  ImGui::Text("Budget: %d steps, %.3f step size",
+              blackhole::rendererStepBudget(rs.dispatch.contract, rs.dispatch.computeMaxSteps),
+              static_cast<double>(blackhole::rendererStepSize(rs.dispatch.contract,
+                                                                rs.dispatch.computeStepSize)));
+  ImGui::Checkbox("Terminal map", &rs.terminalDiagnostics.showDebugView);
+  ImGui::TextDisabled("Map: red capture, blue escape, amber disk, cyan max steps,");
+  ImGui::TextDisabled("magenta non-finite, white invariant failure.");
+  if (rs.terminalDiagnostics.valid) {
+    const auto &counts = rs.terminalDiagnostics.counts;
+    ImGui::Text("Terminals: capture %llu, escape %llu, disk %llu",
+                static_cast<unsigned long long>(counts[BH_TERMINAL_HORIZON]),
+                static_cast<unsigned long long>(counts[BH_TERMINAL_ESCAPE]),
+                static_cast<unsigned long long>(counts[BH_TERMINAL_DISK_HIT]));
+    ImGui::Text("Max steps %llu, non-finite %llu, invariant failure %llu",
+                static_cast<unsigned long long>(counts[BH_TERMINAL_MAX_STEPS]),
+                static_cast<unsigned long long>(counts[BH_TERMINAL_NON_FINITE]),
+                static_cast<unsigned long long>(counts[BH_TERMINAL_INVARIANT_FAILURE]));
+    ImGui::Text("Opaque medium %llu, outside domain %llu, running %llu",
+                static_cast<unsigned long long>(counts[BH_TERMINAL_OPAQUE_MEDIUM]),
+                static_cast<unsigned long long>(counts[BH_TERMINAL_OUTSIDE_DOMAIN]),
+                static_cast<unsigned long long>(counts[BH_TERMINAL_RUNNING]));
+  } else {
+    ImGui::TextDisabled("Terminal counts unavailable for this scene or backend.");
+  }
   if (!computeAvailable) {
     ImGui::TextDisabled("Compute shaders unavailable");
-    rs.dispatch.useComputeRaytracer = false;
+    if (rs.dispatch.contract.backend == blackhole::RenderBackend::Compute) {
+      rs.dispatch.contract.backend = blackhole::RenderBackend::Fragment;
+    }
     rs.compare.compareComputeFragment = false;
   }
   if (K_APP_VARIANT_CUDA_ONLY) {
-    rs.dispatch.useComputeRaytracer = false;
+    rs.dispatch.contract.backend = blackhole::RenderBackend::Cuda;
     rs.compare.compareComputeFragment = false;
     ImGui::TextDisabled("Compute/fragment comparison is disabled in BlackholeCUDA.");
   } else {
-    ImGui::Checkbox("Use Compute Raytracer", &rs.dispatch.useComputeRaytracer);
+    ImGui::TextDisabled("Backend selection controls compute dispatch.");
   }
-  if (rs.dispatch.useComputeRaytracer && !K_APP_VARIANT_CUDA_ONLY) {
-    ImGui::SliderInt("Compute Steps", &rs.dispatch.computeMaxSteps, 50, 600);
-    ImGui::SliderFloat("Compute Step Size", &rs.dispatch.computeStepSize, 0.01f, 1.0f);
+  if (rs.dispatch.contract.geodesic != blackhole::GeodesicModel::LegacyBeauty) {
+    ImGui::BeginDisabled(rs.dispatch.contract.quality == blackhole::QualityTier::Reference);
+    ImGui::SliderInt("Geodesic Steps", &rs.dispatch.computeMaxSteps, 50,
+                     rs.dispatch.contract.quality == blackhole::QualityTier::Interactive ? 300 : 1000);
+    ImGui::SliderFloat("Compute Step Size", &rs.dispatch.computeStepSize,
+                       rs.dispatch.contract.quality == blackhole::QualityTier::Interactive ? 0.1f : 0.01f,
+                       1.0f);
+    ImGui::EndDisabled();
+    if (rs.dispatch.contract.quality == blackhole::QualityTier::Reference) {
+      ImGui::TextDisabled("Reference tier fixes the 1000-step / 0.02 budget.");
+    }
+    ImGui::BeginDisabled(rs.dispatch.contract.backend != blackhole::RenderBackend::Compute);
     ImGui::Checkbox("Compute Tiled", &rs.dispatch.computeTiled);
     if (rs.dispatch.computeTiled) {
       ImGui::SliderInt("Compute Tile Size", &rs.dispatch.computeTileSize, 64, 1024);
     }
+    ImGui::EndDisabled();
   }
 #if BLACKHOLE_HAS_CUDA
   ImGui::Separator();
   ImGui::Text("CUDA Backend");
   {
-    bool cudaEnabled = rs.dispatch.cudaManager.isEnabled();
-    if (ImGui::Checkbox("Use CUDA Raytracer", &cudaEnabled)) {
-      rs.dispatch.cudaManager.setEnabled(cudaEnabled);
-    }
+    ImGui::TextDisabled("Backend selection controls CUDA dispatch.");
   }
   if (rs.dispatch.cudaManager.isEnabled()) {
     const char *const variantNames[] = {"FP32 Baseline", "FP32 Coarsened (2 ray/thread)",
@@ -957,7 +1040,8 @@ bool kerrDiskShadingActive(const RenderState &rs) {
 #else
   const bool cudaActive = false;
 #endif
-  return rs.physicsCore.physicalRayTracer || rs.dispatch.useComputeRaytracer ||
+  return rs.dispatch.contract.geodesic != blackhole::GeodesicModel::LegacyBeauty ||
+         rs.dispatch.contract.backend == blackhole::RenderBackend::Compute ||
          rs.compare.compareComputeFragment || cudaActive;
 }
 

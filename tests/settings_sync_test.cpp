@@ -18,6 +18,7 @@
 
 #include "input.h"
 #include "render/render_state.h"
+#include "render/renderer_contract.h"
 #include "render/settings_sync.h"
 #include "settings.h"
 #include "ui/settings_window.h"
@@ -140,11 +141,11 @@ TEST(SettingsSync, KerrDiskControlsFollowTheActiveTracer) {
   const auto rsStorage = std::make_unique<RenderState>();
   RenderState &rs = *rsStorage;
   EXPECT_TRUE(ui::kerrDiskShadingActive(rs)); // physical tracer is the default
-  rs.physicsCore.physicalRayTracer = false;
+  rs.dispatch.contract.geodesic = blackhole::GeodesicModel::LegacyBeauty;
   EXPECT_FALSE(ui::kerrDiskShadingActive(rs));
-  rs.dispatch.useComputeRaytracer = true;
+  rs.dispatch.contract.backend = blackhole::RenderBackend::Compute;
   EXPECT_TRUE(ui::kerrDiskShadingActive(rs));
-  rs.dispatch.useComputeRaytracer = false;
+  rs.dispatch.contract.backend = blackhole::RenderBackend::Fragment;
   rs.compare.compareComputeFragment = true;
   EXPECT_TRUE(ui::kerrDiskShadingActive(rs));
 }
@@ -156,11 +157,11 @@ TEST(SettingsSync, LegacyControlsFollowTheDisplayedTracer) {
   const auto rsStorage = std::make_unique<RenderState>();
   RenderState &rs = *rsStorage;
   EXPECT_FALSE(ui::legacyFragmentTracerActive(rs)); // physical tracer is the default
-  rs.physicsCore.physicalRayTracer = false;
+  rs.dispatch.contract.geodesic = blackhole::GeodesicModel::LegacyBeauty;
   EXPECT_TRUE(ui::legacyFragmentTracerActive(rs));
-  rs.dispatch.useComputeRaytracer = true;
+  rs.dispatch.contract.backend = blackhole::RenderBackend::Compute;
   EXPECT_FALSE(ui::legacyFragmentTracerActive(rs));
-  rs.dispatch.useComputeRaytracer = false;
+  rs.dispatch.contract.backend = blackhole::RenderBackend::Fragment;
   rs.compare.compareComputeFragment = true;
   EXPECT_FALSE(ui::legacyFragmentTracerActive(rs));
 }

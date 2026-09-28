@@ -35,6 +35,7 @@ maintaining separate release evidence.
 - [Octane Optimization](developer-guide/octane-optimization.md) -- tiered Octane quality/performance policy
 - [Sanitizers](developer-guide/sanitizers.md) -- ASan/TSan/UBSan workflows
 - [Compare Sweep](developer-guide/compare-sweep.md) -- compute/fragment parity sweeps
+- [Desktop Renderer Contract](renderer-contract.md) -- backend, model, quality, units, and geometry conventions
 - [API Docs](api-mainpage.md) -- Doxygen entry point for generated API documentation
 
 ## Physics

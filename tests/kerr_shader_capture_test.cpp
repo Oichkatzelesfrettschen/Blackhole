@@ -28,12 +28,16 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <numbers>
+#include <numeric>
 #include <ranges>
 #include <string>
 #include <vector>
 
 #include <glbinding/gl/enum.h>
+#include <glbinding/gl/bitfield.h>
+#include <glbinding/gl/boolean.h>
 #include <glbinding/gl/functions.h>
 #include <glbinding/gl/types.h>
 #include <gtest/gtest.h>
@@ -43,6 +47,7 @@
 #include "physics/kerr.h"
 #include "physics/page_thorne.h"
 #include "physics/stokes_transport.h"
+#include "render/terminal_counts.h"
 #include "support/gl_compute_harness.h"
 #include "../shader/include/ray_terminal.h"
 
@@ -774,6 +779,7 @@ void main() {
   result[1] = float(rteTerminal);
   result[2] = float(stokesTerminal);
 }
+
 )");
   GLuint ssbo = 0;
   glCreateBuffers(1, &ssbo);
@@ -787,6 +793,64 @@ void main() {
   EXPECT_EQ(out.at(1), static_cast<float>(BH_TERMINAL_ESCAPE));
   EXPECT_EQ(out.at(2), static_cast<float>(BH_TERMINAL_ESCAPE));
   glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
+TEST_F(KerrShaderCaptureTest, NearCriticalTerminalAttachmentSeparatesExhaustionAndEscape) {
+  constexpr int kWidth = 16;
+  constexpr int kHeight = 16;
+  constexpr auto kPixels = std::size_t{kWidth} * kHeight;
+  const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
+  const GLuint program = bhtest::createComputeProgram(comp.substr(0, comp.find("void main()")) + R"(
+void main() {
+  ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+  int index = pixel.y * 16 + pixel.x;
+  float alpha = 0.1776 + 0.02 * float(index % 128) / 127.0;
+  Ray ray;
+  ray.position = vec3(30.0, 0.0, 0.0);
+  ray.velocity = index < 128 ? vec3(-cos(alpha), sin(alpha), 0.0) : vec3(1.0, 0.0, 0.0);
+  ray.affineParameter = 0.0;
+  HitResult hit = bhTraceGeodesic(ray, 2.0, 100.0, 100, 0.1);
+  bhRecordTerminal(pixel, ivec2(16, 16), hit.terminal);
+}
+)");
+  GLuint codesBuffer = 0;
+  glCreateBuffers(1, &codesBuffer);
+  glNamedBufferData(codesBuffer, static_cast<GLsizeiptr>(kPixels * sizeof(std::uint32_t)),
+                    nullptr, GL_DYNAMIC_READ);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, codesBuffer);
+  GLuint debugTexture = 0;
+  glCreateTextures(GL_TEXTURE_2D, 1, &debugTexture);
+  glTextureStorage2D(debugTexture, 1, GL_RGBA8, kWidth, kHeight);
+  glBindImageTexture(1, debugTexture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
+  glUseProgram(program);
+  glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.0F);
+  glUniform1f(glGetUniformLocation(program, "adiskEnabled"), 0.0F);
+  glUniform1f(glGetUniformLocation(program, "terminalWriteEnabled"), 1.0F);
+  glUniform1f(glGetUniformLocation(program, "terminalDebugEnabled"), 1.0F);
+  glDispatchCompute(1, 1, 1);
+  glMemoryBarrier(GL_ALL_BARRIER_BITS);
+  std::vector<std::uint32_t> codes(kPixels);
+  glGetNamedBufferSubData(codesBuffer, 0,
+                          static_cast<GLsizeiptr>(kPixels * sizeof(std::uint32_t)), codes.data());
+  const auto counts = blackhole::foldTerminalCodes(codes);
+  EXPECT_GT(counts[BH_TERMINAL_MAX_STEPS], 0U);
+  EXPECT_GE(counts[BH_TERMINAL_ESCAPE], 128U);
+  const auto total = std::accumulate(counts.values.begin(), counts.values.end(), std::uint64_t{0});
+  EXPECT_EQ(total, kPixels);
+  std::vector<std::uint8_t> colors(kPixels * 4);
+  glGetTextureImage(debugTexture, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                    static_cast<GLsizei>(colors.size()), colors.data());
+  for (std::size_t index = 0; index < kPixels; ++index) {
+    if (codes.at(index) == BH_TERMINAL_MAX_STEPS) {
+      EXPECT_GT(colors.at((4 * index) + 1), colors.at(4 * index));
+    }
+    if (codes.at(index) == BH_TERMINAL_ESCAPE) {
+      EXPECT_GT(colors.at((4 * index) + 2), colors.at(4 * index));
+    }
+  }
+  glDeleteTextures(1, &debugTexture);
+  glDeleteBuffers(1, &codesBuffer);
   glDeleteProgram(program);
 }
 
