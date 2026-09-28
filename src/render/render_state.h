@@ -460,6 +460,9 @@ struct RenderState {
   } terminalDiagnostics;
 
   struct RecordingGroup {
+    // --reference-scene: fixed validation capture state
+    bool referenceInitDone = false;
+    bool referenceBackgroundReady = false;
       // --record-frames: cinematic recording state
     bool         recordInitDone    = false;
     int          recordFrameIndex  = 0; // assigned from recordStartFrame after construction

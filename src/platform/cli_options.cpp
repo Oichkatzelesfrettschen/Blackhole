@@ -20,6 +20,9 @@ void printCliUsage(const char *argv0) {
   std::printf("  --curve-tsv <path>       Load a 2-column TSV and plot it in ImGui.\n");
   std::printf("  --export-frame <path>    Render one frame, save as PNG, then exit.\n");
   std::printf("  --export-raw-frame <path> Export raw texBlackhole HDR RGB as PFM, then exit.\n");
+  std::printf("  --reference-scene <A|B|C+|C-|D>  Fixed camera and source model for rendered validation.\n");
+  std::printf("  --reference-backend <fragment|compute|cuda>  Reference render backend.\n");
+  std::printf("  --reference-quality <balanced|reference>  Numerical tier.\n");
   std::printf("  --record-frames <dir> N  Record N profile-driven frames as PNG into <dir>.\n");
   std::printf("                           N defaults to %d (3 min @ 60 fps).\n",
               K_CINEMATIC_FRAMES);
@@ -62,6 +65,18 @@ CliParseOutcome parseCliOptions(int argc, char **argv, CliOptions &out) {
     }
     if (arg == "--export-raw-frame" && i + 1 < argc) {
       out.exportRawFramePath = argv[++i];
+      continue;
+    }
+    if (arg == "--reference-scene" && i + 1 < argc) {
+      out.referenceScene = argv[++i];
+      continue;
+    }
+    if (arg == "--reference-backend" && i + 1 < argc) {
+      out.referenceBackend = argv[++i];
+      continue;
+    }
+    if (arg == "--reference-quality" && i + 1 < argc) {
+      out.referenceQuality = argv[++i];
       continue;
     }
     if (arg == "--record-frames" && i + 1 < argc) {

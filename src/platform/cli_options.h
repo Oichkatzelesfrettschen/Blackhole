@@ -22,6 +22,9 @@ struct CliOptions {
   std::string curveTsvPath;
   std::string exportFramePath;
   std::string exportRawFramePath;
+  std::string referenceScene;
+  std::string referenceBackend = "fragment";
+  std::string referenceQuality = "balanced";
   std::string recordFramesDir;
   std::string recordProfile = "cinematic";
   std::string recordComposition = "above-disk";

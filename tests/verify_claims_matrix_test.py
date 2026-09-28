@@ -82,12 +82,12 @@ class ClaimsMatrixTest(unittest.TestCase):
         claims, _ = self.assess(manifest=manifest)
         self.assertEqual(claims[0]["registration_status"], "partially-applicable")
 
-    def test_canonical_eht_shadow_is_mock_evidence(self):
+    def test_canonical_shadow_size_is_formula_evidence(self):
         manifest_path = VERIFIER_PATH.parents[1] / "docs" / "physics" / "claims_evidence.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         claim = next(entry for entry in manifest["claims"] if entry["id"] == "eht_observables")
-        shadow = next(entry for entry in claim["tests"] if entry["name"] == "eht_shadow_validation")
-        self.assertEqual(shadow["evidence_class"], "mock-observable")
+        shadow = next(entry for entry in claim["tests"] if entry["name"] == "analytic_shadow_size_validation")
+        self.assertEqual(shadow["evidence_class"], "formula-unit")
         self.assertNotEqual(claim["required_evidence_class"], "render-output")
 
     def test_repo_truth_records_executed_skips(self):

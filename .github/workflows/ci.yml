@@ -131,6 +131,7 @@ jobs:
           shellcheck -S error scripts/build.sh scripts/ci/run_stage.sh scripts/conan_init.sh scripts/conan_install.sh \
             scripts/ci/ci_replica.sh scripts/ci/cppcheck_ci.sh scripts/ci/tidy.sh \
             scripts/ci/check_ci_config.sh scripts/ci/without_host_headers.sh bench/ci_bench.sh
+          shellcheck -S error scripts/ci/render_output_probe.sh
           "$PYTHON" -m ruff check scripts/ci/
           "$PYTHON" -m ruff format --check scripts/ci/
       - name: Verify ASCII-only living docs
@@ -206,6 +207,14 @@ jobs:
             --output-on-failure --no-tests=error --parallel "$CTEST_PARALLEL_LEVEL" \
             ${exclude:+--exclude-regex "$exclude"} \
             --output-junit "$GITHUB_WORKSPACE/build/ci-reports/tests.xml"
+      - name: Install software OpenGL test display
+        if: matrix.preset == 'ci'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb mesa-utils libgl1-mesa-dri
+      - name: Render reference output with llvmpipe
+        if: matrix.preset == 'ci'
+        run: scripts/ci/render_output_probe.sh build/CI
       - name: Save compiled objects after build failures too
         if: always() && steps.compile.outcome != 'skipped' && steps.compiler-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -223,6 +232,7 @@ jobs:
           path: |
             build/ci-reports/
             build/CI*/Testing/Temporary/
+            build/CI/render-output-artifacts/
             build/CI*/CMakeFiles/CMakeConfigureLog.yaml
             build/CI*/compile_commands.json
           retention-days: 14

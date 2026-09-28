@@ -588,7 +588,9 @@ void updateRmlUiOverlay(RenderState &rs, GLFWwindow *window, int windowWidth, in
 
 void configureFrameBackground(RenderState &rs, const platform::CliOptions &cli) {
   if (!rs.background.baseTexturesLoaded) {
-    rs.background.galaxy = loadCubemap(resourcePath("assets/skybox_nebula_dark"));
+    if (cli.referenceScene.empty()) {
+      rs.background.galaxy = loadCubemap(resourcePath("assets/skybox_nebula_dark"));
+    }
     rs.background.colorMap = loadTexture2D(resourcePath("assets/color_map.png"));
     rs.background.baseTexturesLoaded = true;
   }
@@ -1515,8 +1517,35 @@ GLuint viewportDisplayTexture(const RenderState &rs, GLuint finalTexture) {
              : finalTexture;
 }
 
+bool referenceOptionsValid(const platform::CliOptions &cli) {
+  if (cli.referenceScene.empty()) {
+    return true;
+  }
+  const bool sceneValid = cli.referenceScene == "A" || cli.referenceScene == "B" ||
+                          cli.referenceScene == "C+" || cli.referenceScene == "C-" ||
+                          cli.referenceScene == "D";
+  const bool backendValid = cli.referenceBackend == "fragment" ||
+                            cli.referenceBackend == "compute" || cli.referenceBackend == "cuda";
+  const bool qualityValid = cli.referenceQuality == "balanced" ||
+                            cli.referenceQuality == "reference";
+  const bool exportValid = !cli.exportFramePath.empty() || !cli.exportRawFramePath.empty();
+  if (!sceneValid || !backendValid || !qualityValid || !exportValid) {
+    (void)std::fprintf(stderr, "Invalid reference scene, backend, quality, or missing export path\n");
+    return false;
+  }
+#if !BLACKHOLE_HAS_CUDA
+  if (cli.referenceBackend == "cuda") {
+    (void)std::fprintf(stderr, "CUDA reference backend is unavailable in this build\n");
+    return false;
+  }
+#endif
+  return true;
+}
+
 } // anonymous namespace
 
+// The entry point coordinates the desktop resource and frame lifecycles.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 int main(int argc, char **argv) {
   platform::installCrashHandlers();
   try {
@@ -1541,6 +1570,9 @@ int main(int argc, char **argv) {
         findShowcaseOrbitComposition(cli.recordComposition) == nullptr) {
       std::printf("Unknown showcase composition: %s\n", cli.recordComposition.c_str());
       platform::printCliUsage(argv[0]);
+      return 2;
+    }
+    if (!referenceOptionsValid(cli)) {
       return 2;
     }
 
@@ -1731,17 +1763,28 @@ int main(int argc, char **argv) {
       ImVec2 viewportSize = ImGui::GetContentRegionAvail();
 
       // Resize render targets to match viewport
-      if (viewportSize.x > 0 && viewportSize.y > 0 &&
-          (static_cast<int>(viewportSize.x) != rs.targets.renderWidth ||
-           static_cast<int>(viewportSize.y) != rs.targets.renderHeight)) {
-        recreateRenderTargets(rs, static_cast<int>(viewportSize.x),
-                              static_cast<int>(viewportSize.y));
+      const int targetWidth = cli.referenceScene.empty() ? static_cast<int>(viewportSize.x)
+                                                         : blackhole::K_REFERENCE_SCENE_EXTENT;
+      const int targetHeight = cli.referenceScene.empty() ? static_cast<int>(viewportSize.y)
+                                                          : blackhole::K_REFERENCE_SCENE_EXTENT;
+      if (targetWidth > 0 && targetHeight > 0 &&
+          (targetWidth != rs.targets.renderWidth || targetHeight != rs.targets.renderHeight)) {
+        recreateRenderTargets(rs, targetWidth, targetHeight);
       }
       ImGui::End();
       ImGui::PopStyleVar();
 
       updateRmlUiOverlay(rs, window, windowWidth, windowHeight);
       configureFrameBackground(rs, cli);
+      if (!cli.referenceScene.empty() && !rs.recording.referenceBackgroundReady) {
+        if (rs.background.galaxy != 0) {
+          glDeleteTextures(1, &rs.background.galaxy);
+        }
+        const bool silhouette = cli.referenceScene == "A" || cli.referenceScene == "D";
+        const std::uint8_t sky = silhouette ? 255 : 16;
+        rs.background.galaxy = createSolidCubemap1x1(sky, sky, sky);
+        rs.recording.referenceBackgroundReady = true;
+      }
       initializeExportDebugStage(rs);
       initializeWiregridEnvironment(rs);
       prepareFrameTextures(rs, cli, settings);
@@ -1776,6 +1819,7 @@ int main(int argc, char **argv) {
       // The compare sweep drives the geodesic integrator; another scene
       // cancels it and restores the live camera.
       updateComparePresetSweep(rs, input, ShaderManager::instance().canUseComputeShaders());
+      blackhole::applyReferenceSceneSetup(rs, cli, input, window);
 
       // --record-frames: drive camera and spin from the selected record path
       applyRecordCameraPath(rs, cli, input);
@@ -1883,7 +1927,7 @@ int main(int argc, char **argv) {
 #if BLACKHOLE_HAS_CUDA
     rs.dispatch.cudaManager.shutdown();
 #endif
-    cleanup(window, cli.recordFramesDir.empty());
+    cleanup(window, cli.recordFramesDir.empty() && cli.referenceScene.empty());
     return (exitCode != 0 || rs.exporting.exportFailed) ? 1 : 0;
 #if BLACKHOLE_HAS_CPPTRACE
   } catch (const cpptrace::exception &err) {

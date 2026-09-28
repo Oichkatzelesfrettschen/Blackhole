@@ -5333,6 +5333,41 @@ if(BUILD_TESTING)
     )
   endif()
 
+  add_executable(render_output_metrics_test
+    "${PROJECT_SOURCE_DIR}/tests/render_output_metrics_test.cpp")
+  target_include_directories(render_output_metrics_test PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  target_compile_options(render_output_metrics_test PRIVATE ${PROJECT_WARNINGS})
+  if(ENABLE_FAST_MATH)
+    target_compile_options(render_output_metrics_test PRIVATE -fno-fast-math)
+  endif()
+  target_link_libraries(render_output_metrics_test PRIVATE GTest::gtest GTest::gtest_main)
+  add_test(NAME render_output_metrics COMMAND render_output_metrics_test)
+  set_tests_properties(render_output_metrics PROPERTIES LABELS "render-output;unit" TIMEOUT 30)
+
+  if(TARGET Blackhole)
+    add_executable(rendered_output_test "${PROJECT_SOURCE_DIR}/tests/rendered_output_test.cpp")
+    target_include_directories(rendered_output_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests")
+    target_compile_definitions(rendered_output_test PRIVATE
+      GLFW_INCLUDE_NONE BH_SHADER_INCLUDE_DIR="${PROJECT_SOURCE_DIR}/shader/include"
+      BH_RENDER_APP_EXECUTABLE="$<TARGET_FILE:Blackhole>"
+      BH_RENDER_ARTIFACT_DIR="${PROJECT_BINARY_DIR}/render-output-artifacts")
+    target_compile_options(rendered_output_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(rendered_output_test PRIVATE -fno-fast-math)
+    endif()
+    target_link_libraries(rendered_output_test PRIVATE
+      blackhole_physics glfw glbinding::glbinding GTest::gtest GTest::gtest_main)
+    if(ENABLE_CUDA)
+      target_compile_definitions(rendered_output_test PRIVATE BH_RENDER_HAS_CUDA=1)
+      target_link_libraries(rendered_output_test PRIVATE CUDA::cudart)
+    endif()
+    add_dependencies(rendered_output_test Blackhole)
+    add_test(NAME rendered_output_validation COMMAND rendered_output_test)
+    set_tests_properties(rendered_output_validation PROPERTIES
+      LABELS "render-output;gpu;eht" TIMEOUT 600)
+  endif()
+
   # Double-precision Kerr reference trace for disk-hit rays, shared by the GL
   # and CUDA disk-transfer tests (tests/support/kerr_disk_reference.h).
   add_library(blackhole_test_kerr_reference STATIC
@@ -5926,23 +5961,23 @@ if(BUILD_TESTING)
     endif()
   endif()
 
-  # EHT shadow diameter validation tests (Phase 5.4)
-  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/eht_shadow_test.cpp")
-    add_executable(eht_shadow_test
-      "${PROJECT_SOURCE_DIR}/tests/eht_shadow_test.cpp"
+  # Analytic shadow-size checks use closed-form values without renderer output.
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/analytic_shadow_size_test.cpp")
+    add_executable(analytic_shadow_size_test
+      "${PROJECT_SOURCE_DIR}/tests/analytic_shadow_size_test.cpp"
     )
-    target_include_directories(eht_shadow_test PRIVATE
+    target_include_directories(analytic_shadow_size_test PRIVATE
       "${PROJECT_SOURCE_DIR}/src"
       "${PROJECT_SOURCE_DIR}/src/physics"
     )
-    target_compile_options(eht_shadow_test PRIVATE ${PROJECT_WARNINGS})
-    add_test(NAME eht_shadow_validation COMMAND eht_shadow_test)
-    set_tests_properties(eht_shadow_validation PROPERTIES
+    target_compile_options(analytic_shadow_size_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME analytic_shadow_size_validation COMMAND analytic_shadow_size_test)
+    set_tests_properties(analytic_shadow_size_validation PROPERTIES
       LABELS "physics;eht;imaging;phase5"
       TIMEOUT 30
     )
     if(SANITIZER_TEST_ENV)
-      set_tests_properties(eht_shadow_validation PROPERTIES
+      set_tests_properties(analytic_shadow_size_validation PROPERTIES
         ENVIRONMENT "${SANITIZER_TEST_ENV}"
       )
     endif()

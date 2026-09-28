@@ -422,6 +422,60 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
   return true;
 }
 
+void applyReferenceSceneSetup(RenderState &rs, const platform::CliOptions &cli,
+                              InputManager &input, GLFWwindow *window) {
+  if (cli.referenceScene.empty()) {
+    return;
+  }
+  if (!rs.recording.referenceInitDone) {
+    glfwSetWindowSize(window, K_REFERENCE_SCENE_EXTENT, K_REFERENCE_SCENE_EXTENT);
+    glfwSwapInterval(0);
+    rs.recording.referenceInitDone = true;
+  }
+  const bool silhouette = cli.referenceScene == "A" || cli.referenceScene == "D";
+  rs.scene.mode = RenderState::SceneMode::Blackhole;
+  rs.dispatch.contract.backend = RenderBackend::Fragment;
+  if (cli.referenceBackend == "compute") {
+    rs.dispatch.contract.backend = RenderBackend::Compute;
+  } else if (cli.referenceBackend == "cuda") {
+    rs.dispatch.contract.backend = RenderBackend::Cuda;
+  }
+  rs.dispatch.contract.geodesic = silhouette
+                                      ? GeodesicModel::SchwarzschildReference
+                                      : GeodesicModel::KerrReference;
+  rs.dispatch.contract.radiative = silhouette ? RadiativeModel::BackgroundOnly
+                                              : RadiativeModel::ThinSurface;
+  rs.dispatch.contract.quality = cli.referenceQuality == "reference"
+                                     ? QualityTier::Reference : QualityTier::Balanced;
+  rs.dispatch.computeMaxSteps = 500;
+  rs.dispatch.computeStepSize = 0.04f;
+  rs.physicsCore.blackHoleMass = 1.0f;
+  rs.physicsCore.kerrSpin = 0.0f;
+  if (cli.referenceScene == "C+") {
+    rs.physicsCore.kerrSpin = 0.6f;
+  } else if (cli.referenceScene == "C-") {
+    rs.physicsCore.kerrSpin = -0.6f;
+  }
+  rs.physicsCore.enablePhotonSphere = false;
+  rs.hawking.hawkingGlowEnabled = false;
+  rs.disk.adiskEnabled = !silhouette;
+  rs.disk.adiskParticle = false;
+  rs.disk.useNoiseTexture = false;
+  rs.disk.noiseTextureReady = true;
+  rs.wiregrid.wiregridEnabled = false;
+  rs.post.bloomStrength = 0.0f;
+  rs.post.tonemapFilmGrainStrength = 0.0f;
+  rs.post.tonemapChromaticAberrationStrength = 0.0f;
+  rs.post.tonemapVignetteStrength = 0.0f;
+  rs.post.toneExposure = 1.0f;
+  rs.display.depthFar = 90.0f;
+  SettingsManager::instance().get().backgroundEnabled = false;
+  CameraState &camera = input.camera();
+  camera = CameraState{.yaw = -90.0f, .pitch = silhouette ? 0.0f : 30.0f,
+                       .roll = 0.0f, .distance = 30.0f, .fov = 30.0f};
+  rs.camera.cameraModeIndex = static_cast<int>(CameraMode::Input);
+}
+
 float recordPathProgress(const platform::CliOptions &cli, int recordFrameIndex) {
   const int lastFrame = std::max(cli.recordStartFrame + cli.recordFramesTotal - 1, 1);
   return std::clamp(static_cast<float>(recordFrameIndex) / static_cast<float>(lastFrame), 0.0f,
@@ -497,7 +551,8 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
 
 namespace {
 
-void writeRendererMetadata(const RenderState &rs, const std::string &imagePath) {
+void writeRendererMetadata(const RenderState &rs, const platform::CliOptions &cli,
+                           const std::string &imagePath) {
   const std::string metadataPath = imagePath + ".json";
   std::ofstream metadata(metadataPath, std::ios::trunc);
   if (!metadata) {
@@ -508,12 +563,17 @@ void writeRendererMetadata(const RenderState &rs, const std::string &imagePath) 
       "{{\n  \"backend\": \"{}\",\n  \"geodesic_model\": \"{}\",\n"
       "  \"radiative_model\": \"{}\",\n  \"quality_tier\": \"{}\",\n"
       "  \"max_steps\": {},\n  \"step_size\": {:.9g},\n"
-      "  \"kerr_spin\": {:.9g},\n  \"schwarzschild_radius\": {:.9g},\n"
+      "  \"scene\": \"{}\",\n  \"width\": {},\n  \"height\": {},\n"
+      "  \"camera_distance\": {:.9g},\n  \"camera_pitch_degrees\": {:.9g},\n"
+      "  \"camera_fov_degrees\": {:.9g},\n  \"kerr_spin\": {:.9g},\n  \"schwarzschild_radius\": {:.9g},\n"
       "  \"isco_radius\": {:.9g},\n  \"radius_unit\": \"scene units; r_s = 2M\",\n",
       rendererName(contract.backend), rendererName(contract.geodesic),
       rendererName(contract.radiative), rendererName(contract.quality),
       rendererStepBudget(contract, rs.dispatch.computeMaxSteps),
       rendererStepSize(contract, rs.dispatch.computeStepSize),
+      cli.referenceScene, rs.targets.renderWidth, rs.targets.renderHeight,
+      InputManager::instance().camera().distance, InputManager::instance().camera().pitch,
+      InputManager::instance().camera().fov,
       contract.geodesic == GeodesicModel::SchwarzschildReference ? 0.0f : rs.physicsCore.kerrSpin,
       rs.recording.recordCurRs, rs.recording.recordCurIsco);
   if (rs.terminalDiagnostics.valid) {
@@ -562,7 +622,7 @@ void captureRecordFrame(RenderState &rs, const platform::CliOptions &cli) {
   if (stbi_write_png(framePath.c_str(), w, h, 3, flipped.data(), w * 3) == 0) {
     throw std::runtime_error("Failed to write recorded frame: " + framePath);
   }
-  writeRendererMetadata(rs, framePath);
+  writeRendererMetadata(rs, cli, framePath);
   if (rs.recording.recordFrameIndex == cli.recordStartFrame) {
     // The post settings this frame rendered with, so a capture records the
     // profile it actually used.
@@ -602,6 +662,9 @@ std::optional<std::pair<double, double>> observerCaptureClock(const platform::Cl
 
 double frameContentSeconds(const platform::CliOptions &cli, int recordFrameIndex,
                            double wallSeconds) {
+  if (!cli.referenceScene.empty()) {
+    return 0.0;
+  }
   return recordOutputSeconds(cli, recordFrameIndex).value_or(wallSeconds);
 }
 
@@ -651,7 +714,17 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
       if (stbi_write_png(cli.exportFramePath.c_str(), w, h, 3, flipped.data(), w * 3) == 0) {
         throw std::runtime_error("Failed to write exported frame: " + cli.exportFramePath);
       }
-      writeRendererMetadata(rs, cli.exportFramePath);
+      if (!cli.referenceScene.empty()) {
+        std::ofstream displayBytes(cli.exportFramePath + ".rgb.ppm",
+                                   std::ios::binary | std::ios::trunc);
+        displayBytes << "P6\n" << w << ' ' << h << "\n255\n";
+        displayBytes.write(reinterpret_cast<const char *>(flipped.data()),
+                           static_cast<std::streamsize>(flipped.size()));
+        if (!displayBytes) {
+          throw std::runtime_error("Failed to write display bytes: " + cli.exportFramePath);
+        }
+      }
+      writeRendererMetadata(rs, cli, cli.exportFramePath);
       std::printf("Exported frame: %s (%dx%d)\n", cli.exportFramePath.c_str(), w, h);
     }
   }
@@ -677,11 +750,30 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
     std::vector<float> raw;
     if (readTextureRGBA(rs.targets.texBlackhole, w, h, raw) &&
         writePfmRgb(cli.exportRawFramePath, raw, w, h)) {
-      writeRendererMetadata(rs, cli.exportRawFramePath);
+      writeRendererMetadata(rs, cli, cli.exportRawFramePath);
       std::printf("Exported raw frame: %s (%dx%d)\n", cli.exportRawFramePath.c_str(), w, h);
     } else {
       std::cerr << "Failed to export raw frame: " << cli.exportRawFramePath << '\n';
       rs.exporting.exportFailed = true;
+    }
+  }
+  if (!cli.referenceScene.empty() && rs.terminalDiagnostics.valid) {
+    const std::string mapPath = !cli.exportFramePath.empty()
+                                    ? cli.exportFramePath + ".terminals.pgm"
+                                    : cli.exportRawFramePath + ".terminals.pgm";
+    std::ofstream map(mapPath, std::ios::binary | std::ios::trunc);
+    const int width = rs.targets.renderWidth;
+    const int height = rs.targets.renderHeight;
+    map << "P5\n" << width << ' ' << height << "\n255\n";
+    for (int row = height - 1; row >= 0; --row) {
+      for (int column = 0; column < width; ++column) {
+        const auto index = (static_cast<std::size_t>(row) * static_cast<std::size_t>(width)) +
+                           static_cast<std::size_t>(column);
+        map.put(static_cast<char>(rs.terminalDiagnostics.codes.at(index)));
+      }
+    }
+    if (!map) {
+      throw std::runtime_error("Failed to write terminal map: " + mapPath);
     }
   }
   rs.exporting.exportPerformed = true;

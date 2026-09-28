@@ -7,6 +7,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -30,6 +31,7 @@ EVIDENCE_CLASSES = frozenset(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--require-render-passing", action="store_true")
     for name in ("source-dir", "build-dir", "manifest", "md-out", "json-out"):
         parser.add_argument(f"--{name}", required=True)
     return parser
@@ -223,9 +225,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Source directory: `{report['source_dir']}`",
         f"- Build directory: `{report['build_dir']}`",
         f"- Manifest: `{report['manifest']}`",
-        "- Evidence scope: source-file presence and configured CTest registration.",
+        "- Evidence scope: source-file presence, configured CTest registration, and optional rendered-output execution receipt.",
         "- Evidence classes are declared obligations, not proof of test semantics.",
-        "- Test execution and CUDA device execution are outside this verifier's scope.",
+        "- The receipt records the minimal rendered-output test; CUDA device execution remains separate.",
     ]
     if "verification_error" in report:
         lines += ["", f"Verification failed: {report['verification_error']}"]
@@ -253,6 +255,11 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"- Files present: `{claim['files_ok']}`",
             f"- Required tests registered: `{test_status}`",
         ]
+        if claim["required_evidence_class"] == "render-output":
+            lines.append(f"- Render execution: `{claim['execution_status']}`")
+            lines.append(
+                f"- Validated rendered evidence: `{', '.join(claim['validated_evidence']) or 'none'}`"
+            )
         for label, field in (
             ("Missing files", "missing_files"),
             ("Missing tests", "missing_tests"),
@@ -288,7 +295,7 @@ def main() -> int:
         "source_dir": str(source_dir),
         "build_dir": str(build_dir),
         "manifest": str(manifest_path),
-        "evidence_scope": "source-files-and-ctest-registration",
+        "evidence_scope": "source-files-ctest-registration-and-optional-render-receipt",
         "execution_status": "not-assessed",
     }
     failed = False
@@ -298,6 +305,29 @@ def main() -> int:
         options = parse_build_options(cache_bytes.decode("utf-8"))
         configured_tests = parse_ctest(build_dir)
         claims = assess_claims(json.loads(manifest_bytes), source_dir, configured_tests, options)
+        artifact_dir = pathlib.Path(
+            os.environ.get("BLACKHOLE_RENDER_ARTIFACTS", str(build_dir / "render-output-artifacts"))
+        )
+        receipt = artifact_dir / "rendered_output_validation.pass"
+        render_sources = (
+            source_dir / "tests/rendered_output_test.cpp",
+            source_dir / "src/render/render_output_metrics.h",
+            manifest_path,
+            build_dir / "rendered_output_test",
+            build_dir / "CMakeCache.txt",
+        )
+        render_passed = (
+            receipt.is_file()
+            and all(path.is_file() for path in render_sources)
+            and receipt.read_text(encoding="ascii") == "PASS\n"
+            and receipt.stat().st_mtime_ns
+            >= max(path.stat().st_mtime_ns for path in render_sources)
+        )
+        for claim in claims:
+            if claim["required_evidence_class"] == "render-output":
+                claim["execution_status"] = "passed" if render_passed else "pending"
+                claim["validated_evidence"] = claim["matching_evidence"] if render_passed else []
+        report["execution_status"] = "render-output-passed" if render_passed else "not-assessed"
         report.update(
             manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest(),
             cmake_cache_sha256=hashlib.sha256(cache_bytes).hexdigest(),
@@ -319,6 +349,12 @@ def main() -> int:
             or report["summary"]["missing_tests"]
             or report["summary"]["inadequate_evidence"]
         )
+        if args.require_render_passing and any(
+            claim["required_evidence_class"] == "render-output"
+            and claim["execution_status"] != "passed"
+            for claim in claims
+        ):
+            failed = True
     except (OSError, ValueError, RuntimeError) as error:
         report["verification_error"] = str(error)
         print(f"[FAIL] Physics claims verification: {error}", file=sys.stderr)
