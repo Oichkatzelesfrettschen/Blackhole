@@ -155,8 +155,10 @@ class ClaimsMatrixTest(unittest.TestCase):
         version = re.search(r"K_SAVE_FORMAT_VERSION\s*=\s*(\d+)", save_source)
         self.assertIsNotNone(version)
         self.assertEqual(game["save_schema_version"]["value"], int(version.group(1)))
-        render_source = (source_dir / "src/render/render_state.h").read_text(encoding="utf-8")
-        self.assertIn("useComputeRaytracer = false", render_source)
+        contract_source = (source_dir / "src/render/renderer_contract.h").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("RenderBackend backend = RenderBackend::Fragment;", contract_source)
         classifications = {
             "measured-fact",
             "local-inference",

@@ -4,6 +4,7 @@
  */
 
 #include "render/env_config.h"
+#include "render/renderer_contract.h"
 
 #include <algorithm>
 #include <cctype>
@@ -86,7 +87,7 @@ void applyCompareEnvironment(RenderState &rs) {
   if (!rs.compare.compareAutoInit) {
     const char *sweepEnv = std::getenv("BLACKHOLE_COMPARE_SWEEP");
     if (sweepEnv != nullptr && std::string(sweepEnv) == "1") {
-      rs.dispatch.useComputeRaytracer = true;
+      rs.dispatch.contract.backend = RenderBackend::Compute;
       rs.compare.compareComputeFragment = true;
       rs.compare.comparePresetSweep = true;
       rs.compare.compareWriteSummary = true;
@@ -153,7 +154,7 @@ void applyCompareEnvironment(RenderState &rs) {
     const char *interopEnv = std::getenv("BLACKHOLE_FORCE_INTEROP_FRAGMENT");
     if (interopEnv != nullptr && std::string(interopEnv) == "1") {
       rs.compare.compareComputeFragment = true;
-      rs.dispatch.useComputeRaytracer = false;
+      rs.dispatch.contract.backend = RenderBackend::Fragment;
 #if BLACKHOLE_HAS_CUDA
       if (!kAppVariantCudaOnly) {
         rs.dispatch.cudaManager.setEnabled(false);
@@ -420,7 +421,8 @@ void applyObserverEnvironment(RenderState &rs) {
 // =physical keeps the g-factor.
 void applyDiskEnvironment(RenderState &rs) {
   if (const char *tracerEnv = std::getenv("BLACKHOLE_PHYSICAL_TRACER")) {
-    rs.physicsCore.physicalRayTracer = std::string(tracerEnv) != "0";
+    rs.dispatch.contract.geodesic = std::string(tracerEnv) != "0"
+                                        ? GeodesicModel::KerrReference : GeodesicModel::LegacyBeauty;
   }
   const char *transferEnv = std::getenv("BLACKHOLE_DISK_TRANSFER");
   if (transferEnv == nullptr) {

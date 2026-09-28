@@ -6,8 +6,8 @@
       "maturity": "active-development",
       "active_default_renderer_contract": {
         "classification": "local-inference",
-        "value": "fragment raytracer selected when useComputeRaytracer is false",
-        "source": "src/render/render_state.h"
+        "value": "RendererContract defaults to the fragment backend with the Kerr reference geodesic model",
+        "source": "src/render/renderer_contract.h"
       },
       "output_validation_scenes_metrics": {
         "classification": "unvalidated-roadmap",

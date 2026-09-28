@@ -3977,6 +3977,13 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  add_executable(terminal_counts_test tests/terminal_counts_test.cpp)
+  target_include_directories(terminal_counts_test PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  target_link_libraries(terminal_counts_test PRIVATE GTest::gtest GTest::gtest_main)
+  target_compile_options(terminal_counts_test PRIVATE ${PROJECT_WARNINGS})
+  add_test(NAME terminal_counts COMMAND terminal_counts_test)
+  set_tests_properties(terminal_counts PROPERTIES LABELS "render;unit" TIMEOUT 30)
+
   # Observer-sky scene CPU side: observer clock, sky phase, camera geometry,
   # and the committed blackbody table (read relative to the source root).
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/observer_sky_view_test.cpp")

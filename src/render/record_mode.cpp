@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <format>
 #include <iostream>
 #include <optional>
@@ -34,6 +35,8 @@
 #include "physics/safe_limits.h"
 #include "platform/cli_options.h"
 #include "render/render_state.h"   // RenderState, WiregridParams
+#include "render/renderer_contract.h"
+#include "../../shader/include/ray_terminal.h"
 #include "render/tesseract/tesseract_renderer.h" // TESSERACT_RECORD_EXPOSURE
 #include "settings.h"              // SettingsManager
 #include "tools/compare_harness.h" // readTextureRGBA, writePfmRgb
@@ -259,8 +262,7 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.physicsCore.enableRedshift     = false;
     rs.physicsCore.enablePhotonSphere = false;
     rs.hawking.hawkingGlowEnabled = false;
-    rs.rte.rteVolumetricEnabled = false;
-    rs.stokes.stokesEnabled      = false;
+    rs.dispatch.contract.radiative = RadiativeModel::BackgroundOnly;
     rs.disk.useNoiseTexture    = false;
     rs.disk.noiseTextureReady  = true;
     rs.disk.adiskNoiseLOD      = 3.0f;
@@ -294,8 +296,7 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.physicsCore.enableRedshift     = true;
     rs.physicsCore.enablePhotonSphere = true;
     rs.hawking.hawkingGlowEnabled = false;
-    rs.rte.rteVolumetricEnabled = false;
-    rs.stokes.stokesEnabled      = false;
+    rs.dispatch.contract.radiative = RadiativeModel::BackgroundOnly;
     rs.disk.useNoiseTexture    = false;
     rs.disk.noiseTextureReady  = true;
     rs.disk.adiskNoiseLOD      = 3.0f;
@@ -353,8 +354,7 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
     rs.physicsCore.enableRedshift     = true;
     rs.physicsCore.enablePhotonSphere = true;
     rs.hawking.hawkingGlowEnabled = false;  // haze effect competes with disk shading
-    rs.rte.rteVolumetricEnabled = false; // volumetric fog washes out fine detail
-    rs.stokes.stokesEnabled      = false;
+    rs.dispatch.contract.radiative = RadiativeModel::ThinSurface;
     // Skip noise texture LUT generation in record mode: FastNoise2
     // SIMD code has a heap double-free at >= 128^3 on this system.
     // The disk looks clean without it.
@@ -399,12 +399,10 @@ bool applyRecordProfileSetup(RenderState &rs, const platform::CliOptions &cli, I
   if (cli.recordProfile != "showcase-orbit") {
     // isEnabled() gates the CUDA dispatch path (line ~4295). It is normally set
     // via the ImGui "Use CUDA Raytracer" checkbox; record mode must set it directly.
-    // useComputeRaytracer alone is insufficient -- it only controls the GLSL compute
-    // path, not the CUDA path.
-    rs.dispatch.cudaManager.setEnabled(true);
+    // Record profiles select the backend that renders the captured texture.
+    rs.dispatch.contract.backend = RenderBackend::Cuda;
   } else {
-    rs.dispatch.cudaManager.setEnabled(false);
-    rs.dispatch.useComputeRaytracer = false;
+    rs.dispatch.contract.backend = RenderBackend::Fragment;
     rs.compare.compareComputeFragment = false;
   }
 #endif
@@ -497,6 +495,49 @@ void applyRecordCameraPath(RenderState &rs, const platform::CliOptions &cli, Inp
   }
 }
 
+namespace {
+
+void writeRendererMetadata(const RenderState &rs, const std::string &imagePath) {
+  const std::string metadataPath = imagePath + ".json";
+  std::ofstream metadata(metadataPath, std::ios::trunc);
+  if (!metadata) {
+    throw std::runtime_error("Failed to open renderer metadata: " + metadataPath);
+  }
+  const RendererContract &contract = rs.dispatch.contract;
+  metadata << std::format(
+      "{{\n  \"backend\": \"{}\",\n  \"geodesic_model\": \"{}\",\n"
+      "  \"radiative_model\": \"{}\",\n  \"quality_tier\": \"{}\",\n"
+      "  \"max_steps\": {},\n  \"step_size\": {:.9g},\n"
+      "  \"kerr_spin\": {:.9g},\n  \"schwarzschild_radius\": {:.9g},\n"
+      "  \"isco_radius\": {:.9g},\n  \"radius_unit\": \"scene units; r_s = 2M\",\n",
+      rendererName(contract.backend), rendererName(contract.geodesic),
+      rendererName(contract.radiative), rendererName(contract.quality),
+      rendererStepBudget(contract, rs.dispatch.computeMaxSteps),
+      rendererStepSize(contract, rs.dispatch.computeStepSize),
+      contract.geodesic == GeodesicModel::SchwarzschildReference ? 0.0f : rs.physicsCore.kerrSpin,
+      rs.recording.recordCurRs, rs.recording.recordCurIsco);
+  if (rs.terminalDiagnostics.valid) {
+    const auto &counts = rs.terminalDiagnostics.counts;
+    metadata << std::format(
+        "  \"terminal_counts\": {{\"captured\": {}, \"escaped\": {}, \"disk_hit\": {}, "
+        "\"max_steps\": {}, \"non_finite\": {}, \"invariant_failure\": {}, "
+        "\"opaque_medium\": {}, \"outside_domain\": {}, \"running\": {}}}\n",
+        counts[BH_TERMINAL_HORIZON], counts[BH_TERMINAL_ESCAPE],
+        counts[BH_TERMINAL_DISK_HIT], counts[BH_TERMINAL_MAX_STEPS],
+        counts[BH_TERMINAL_NON_FINITE], counts[BH_TERMINAL_INVARIANT_FAILURE],
+        counts[BH_TERMINAL_OPAQUE_MEDIUM], counts[BH_TERMINAL_OUTSIDE_DOMAIN],
+        counts[BH_TERMINAL_RUNNING]);
+  } else {
+    metadata << "  \"terminal_counts\": null\n";
+  }
+  metadata << "}\n";
+  if (!metadata) {
+    throw std::runtime_error("Failed to write renderer metadata: " + metadataPath);
+  }
+}
+
+} // namespace
+
 void captureRecordFrame(RenderState &rs, const platform::CliOptions &cli) {
   // glfwSetWindowSize() is asynchronous; the resize callback fires in
   // glfwPollEvents(). Wait 15 warmup frames (~250ms) for the window and render
@@ -521,6 +562,7 @@ void captureRecordFrame(RenderState &rs, const platform::CliOptions &cli) {
   if (stbi_write_png(framePath.c_str(), w, h, 3, flipped.data(), w * 3) == 0) {
     throw std::runtime_error("Failed to write recorded frame: " + framePath);
   }
+  writeRendererMetadata(rs, framePath);
   if (rs.recording.recordFrameIndex == cli.recordStartFrame) {
     // The post settings this frame rendered with, so a capture records the
     // profile it actually used.
@@ -606,7 +648,10 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
     int h = 0;
     if (readTonemappedRgb(rs.targets.texTonemapped, rs.targets.renderWidth, rs.targets.renderHeight,
                           flipped, w, h)) {
-      stbi_write_png(cli.exportFramePath.c_str(), w, h, 3, flipped.data(), w * 3);
+      if (stbi_write_png(cli.exportFramePath.c_str(), w, h, 3, flipped.data(), w * 3) == 0) {
+        throw std::runtime_error("Failed to write exported frame: " + cli.exportFramePath);
+      }
+      writeRendererMetadata(rs, cli.exportFramePath);
       std::printf("Exported frame: %s (%dx%d)\n", cli.exportFramePath.c_str(), w, h);
     }
   }
@@ -632,6 +677,7 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
     std::vector<float> raw;
     if (readTextureRGBA(rs.targets.texBlackhole, w, h, raw) &&
         writePfmRgb(cli.exportRawFramePath, raw, w, h)) {
+      writeRendererMetadata(rs, cli.exportRawFramePath);
       std::printf("Exported raw frame: %s (%dx%d)\n", cli.exportRawFramePath.c_str(), w, h);
     } else {
       std::cerr << "Failed to export raw frame: " << cli.exportRawFramePath << '\n';

@@ -13,7 +13,10 @@
 
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <memory>
+#include <sstream>
+#include <string>
 #include <system_error>
 
 #include <gtest/gtest.h>
@@ -27,6 +30,7 @@
 #include "render/camera_math.h"
 #include "render/record_mode.h"
 #include "render/render_state.h"
+#include "render/renderer_contract.h"
 
 using blackhole::buildCameraBasis;
 using blackhole::cameraPositionFromYawPitch;
@@ -43,7 +47,58 @@ void expectVecNear(const glm::vec3 &actual, const glm::vec3 &expected, float tol
   EXPECT_NEAR(actual.z, expected.z, tol);
 }
 
+std::string sourceText(const char *relativePath) {
+  const auto root = std::filesystem::path(__FILE__).parent_path().parent_path();
+  const std::ifstream input(root / relativePath);
+  EXPECT_TRUE(input.good()) << relativePath;
+  std::ostringstream contents;
+  contents << input.rdbuf();
+  return contents.str();
+}
+
 } // namespace
+
+TEST(RendererContract, StartupAndReferenceBudget) {
+  const blackhole::RendererContract contract;
+  EXPECT_EQ(contract.backend, blackhole::RenderBackend::Fragment);
+  EXPECT_EQ(contract.geodesic, blackhole::GeodesicModel::KerrReference);
+  EXPECT_EQ(contract.radiative, blackhole::RadiativeModel::ThinSurface);
+  EXPECT_EQ(contract.quality, blackhole::QualityTier::Balanced);
+  EXPECT_EQ(blackhole::rendererStepBudget(blackhole::QualityTier::Reference, 300), 1000);
+  EXPECT_FLOAT_EQ(blackhole::rendererStepSize(blackhole::QualityTier::Reference, 0.1f), 0.02f);
+  EXPECT_EQ(blackhole::rendererStepBudget(blackhole::QualityTier::Interactive, 500), 300);
+  EXPECT_FLOAT_EQ(blackhole::rendererStepSize(blackhole::QualityTier::Interactive, 0.02f), 0.1f);
+  blackhole::RendererContract legacy = contract;
+  legacy.geodesic = blackhole::GeodesicModel::LegacyBeauty;
+  EXPECT_EQ(blackhole::rendererStepBudget(legacy, 1000), 300);
+  EXPECT_FLOAT_EQ(blackhole::rendererStepSize(legacy, 0.02f), 0.1f);
+  legacy.backend = blackhole::RenderBackend::Cuda;
+  blackhole::normalizeRendererContract(legacy);
+  EXPECT_EQ(legacy.geodesic, blackhole::GeodesicModel::KerrReference);
+}
+
+TEST(CameraMath, PhysicsFrameAndBackendProjectionContract) {
+  const std::string glslTrace = sourceText("shader/include/interop_trace.glsl");
+  const std::string glslKerr = sourceText("shader/include/kerr.glsl");
+  const std::string cudaPhysics = sourceText("src/cuda/device_physics.cuh");
+  EXPECT_NE(glslTrace.find("vec3(v.x, -v.z, v.y)"), std::string::npos);
+  EXPECT_NE(cudaPhysics.find("make_f3(v.x, -v.z, v.y)"), std::string::npos);
+  EXPECT_NE(glslTrace.find("vec3(v.x, v.z, -v.y)"), std::string::npos);
+  EXPECT_NE(cudaPhysics.find("make_f3(v.x, v.z, -v.y)"), std::string::npos);
+  EXPECT_NE(glslKerr.find("r * sinTheta * cos(phi)"), std::string::npos);
+  EXPECT_NE(glslKerr.find("r * sinTheta * sin(phi)"), std::string::npos);
+  EXPECT_NE(glslKerr.find("r * cos(theta)"), std::string::npos);
+  EXPECT_NE(cudaPhysics.find("r * sin_t * cos_p"), std::string::npos);
+  EXPECT_NE(cudaPhysics.find("r * sin_t * sin_p"), std::string::npos);
+  EXPECT_NE(cudaPhysics.find("r * cos_t"), std::string::npos);
+}
+
+TEST(CameraMath, SpinDependentIscoUniformContract) {
+  EXPECT_NE(sourceText("shader/blackhole_main.frag").find("uniform float iscoRadius"),
+            std::string::npos);
+  EXPECT_NE(sourceText("shader/geodesic_trace.comp").find("uniform float iscoRadius"),
+            std::string::npos);
+}
 
 // Yaw 0 looks down +Z; yaw 90 swings to +X; pitch 90 points straight up. Radius
 // scales the unit direction.

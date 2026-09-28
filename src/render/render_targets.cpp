@@ -7,7 +7,9 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 
+#include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
 #include <glbinding/gl/types.h>
 
@@ -30,6 +32,12 @@ void deleteTexture(GLuint &texture) {
 
 void recreateRenderTargets(RenderState &rs, int newWidth, int newHeight) {
   clearRenderToTextureCache();
+  if (rs.terminalDiagnostics.codesBuffer != 0) {
+    glDeleteBuffers(1, &rs.terminalDiagnostics.codesBuffer);
+    rs.terminalDiagnostics.codesBuffer = 0;
+  }
+  deleteTexture(rs.terminalDiagnostics.debugTexture);
+  rs.terminalDiagnostics.valid = false;
   deleteTexture(rs.targets.texBlackhole);
   deleteTexture(rs.targets.texBlackholeCompare);
   deleteTexture(rs.targets.texBrightness);
@@ -49,6 +57,20 @@ void recreateRenderTargets(RenderState &rs, int newWidth, int newHeight) {
   rs.targets.texBloomFinal = createColorTexture(newWidth, newHeight);
   rs.targets.texTonemapped = createColorTexture(newWidth, newHeight);
   rs.targets.texDepthEffects = createColorTexture(newWidth, newHeight);
+  const std::size_t pixelCount = static_cast<std::size_t>(newWidth) *
+                                 static_cast<std::size_t>(newHeight);
+  rs.terminalDiagnostics.codes.resize(pixelCount);
+  glCreateBuffers(1, &rs.terminalDiagnostics.codesBuffer);
+  glNamedBufferData(rs.terminalDiagnostics.codesBuffer,
+                    static_cast<GLsizeiptr>(pixelCount * sizeof(std::uint32_t)), nullptr,
+                    GL_DYNAMIC_READ);
+  glCreateTextures(GL_TEXTURE_2D, 1, &rs.terminalDiagnostics.debugTexture);
+  glTextureStorage2D(rs.terminalDiagnostics.debugTexture, 1, GL_RGBA8, newWidth, newHeight);
+  // glbinding declares texture parameters in the included generated functions header.
+  // NOLINTNEXTLINE(misc-include-cleaner)
+  gl::glTextureParameteri(rs.terminalDiagnostics.debugTexture, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  // NOLINTNEXTLINE(misc-include-cleaner)
+  gl::glTextureParameteri(rs.terminalDiagnostics.debugTexture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
   for (int i = 0; i < K_MAX_BLOOM_ITERATIONS; ++i) {
     auto const index = static_cast<std::size_t>(i);

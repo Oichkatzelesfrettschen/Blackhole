@@ -165,12 +165,11 @@ uniform float blackHoleMass = 1.989e33;  // [g]
 
 // ============================================================================
 // Derived physics macros
-// Same definitions as blackhole_main.frag lines 130-133.
+// The ISCO uniform follows the host's spin-dependent calculation.
 // ============================================================================
 
-float sch_iscoRadius(float r_s)         { return 3.0 * r_s; }
 float sch_photonSphereRadius(float r_s) { return 1.5 * r_s; }
-#define iscoRadius         sch_iscoRadius(schwarzschildRadius)
+uniform float iscoRadius = 6.0;
 #define photonSphereRadius sch_photonSphereRadius(schwarzschildRadius)
 
 // ============================================================================
@@ -180,6 +179,7 @@ float sch_photonSphereRadius(float r_s) { return 1.5 * r_s; }
 // ============================================================================
 
 #include "include/interop_trace.glsl"
+#include "include/terminal_output.glsl"
 
 // ============================================================================
 // Wiregrid overlay helper
@@ -242,6 +242,7 @@ void main() {
             interopMaxSteps, interopStepSize, rteOpacityScale,
             stokesBFieldAngle, stokesNeScale, terminalPos, terminal);
         vec3 col = bhDisplayTerminal(stokesColor.rgb, terminal);
+        bhRecordTerminal(gid, imgDims, terminal);
         applyWiregridOverlay(col, bhChartToBoyerLindquist(terminalPos, schwarzschildRadius));
         result = vec4(col, 1.0);
 
@@ -253,6 +254,7 @@ void main() {
             ray, schwarzschildRadius, depthFar,
             interopMaxSteps, interopStepSize, rteOpacityScale, terminalPos, terminal);
         vec3 col = bhDisplayTerminal(rteColor.rgb, terminal);
+        bhRecordTerminal(gid, imgDims, terminal);
         applyWiregridOverlay(col, bhChartToBoyerLindquist(terminalPos, schwarzschildRadius));
         result = vec4(col, 1.0);
 
@@ -261,6 +263,7 @@ void main() {
         HitResult hit = bhTraceGeodesic(
             ray, schwarzschildRadius, depthFar,
             interopMaxSteps, interopStepSize);
+        bhRecordTerminal(gid, imgDims, hit.terminal);
         vec4 shaded = bhShadeHit(hit, hit.origin, schwarzschildRadius);
         float depthNorm = clamp(
             length(hit.hitPoint - hit.origin) / max(depthFar, 0.0001),
