@@ -112,6 +112,7 @@ __launch_bounds__(256, 4)
   float const maxDist = fmaxf(d_max_dist, 1.01f * d_length(cam));
 
   HitResult result{};
+  result.terminal = RayTerminal::Running;
   result.hit_disk = false;
   result.hit_horizon = false;
   result.escaped = false;
@@ -232,6 +233,7 @@ __launch_bounds__(256, 4)
   }
 
 shade:;
+  d_classify_hit(result);
   float4 color16 = d_shade_hit(result, result.origin);
   if (d_wiregrid_enabled != 0) {
     float3 const hp = d_chart_to_boyer_lindquist(result.hit_point);

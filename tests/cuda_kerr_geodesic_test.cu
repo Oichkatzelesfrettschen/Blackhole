@@ -190,8 +190,11 @@ __global__ void check_disk_kernel(float3 old_pos, float3 new_pos, float *out) {
  * d_trace_geodesic_rte's loop with the disk off. */
 __global__ void exhaustion_sky_kernel(float3 cam, float3 dir, float *out) {
     float3 term;
-    float4 const rte = d_trace_geodesic_rte(cam, dir, &term);
-    float4 const pol = d_trace_geodesic_stokes(cam, dir, &term);
+    RayTerminal rte_terminal;
+    RayTerminal stokes_terminal;
+    float4 const rte = d_trace_geodesic_rte(cam, dir, &term, &rte_terminal);
+    float4 const pol = d_trace_geodesic_stokes(cam, dir, &term, &stokes_terminal);
+    HitResult const scalar = d_trace_geodesic(cam, dir);
     float const rs = d_rs;
     float const a = 0.5f * d_spin * rs;
     float r_h = d_kerr_outer_horizon(rs, a);
@@ -229,9 +232,12 @@ __global__ void exhaustion_sky_kernel(float3 cam, float3 dir, float *out) {
                                                  origin, rs, d_spin);
     float3 const sc = d_shape_escaped_background(make_f3(bc.x, bc.y, bc.z), min_r, closest, 0, -1, -1,
                                                  origin, rs, d_spin);
-    float const vals[13] = {rte.x, rte.y, rte.z, pol.x, pol.y, pol.z,
-                            sl.x, sl.y, sl.z, sc.x, sc.y, sc.z, exhausted ? 1.0f : 0.0f};
-    for (int k = 0; k < 13; ++k) {
+    float const vals[16] = {rte.x, rte.y, rte.z, pol.x, pol.y, pol.z,
+                            sl.x, sl.y, sl.z, sc.x, sc.y, sc.z, exhausted ? 1.0f : 0.0f,
+                            static_cast<float>(static_cast<int>(scalar.terminal)),
+                            static_cast<float>(static_cast<int>(rte_terminal)),
+                            static_cast<float>(static_cast<int>(stokes_terminal))};
+    for (int k = 0; k < 16; ++k) {
         out[k] = vals[k];
     }
 }
@@ -591,7 +597,7 @@ TEST(CudaKerrGeodesic, BudgetExhaustionSkyFollowsTheLastStep) {
     cudaMemcpyToSymbol(d_tex_galaxy, &sky_handle, sizeof(sky_handle));
 
     float *dOut = nullptr;
-    cudaMalloc(&dOut, 13 * sizeof(float));
+    cudaMalloc(&dOut, 16 * sizeof(float));
     int exhausted = 0;
     int chord_differs = 0;
     for (int i = 0; i < 16; ++i) {
@@ -599,12 +605,15 @@ TEST(CudaKerrGeodesic, BudgetExhaustionSkyFollowsTheLastStep) {
         exhaustion_sky_kernel<<<1, 1>>>(make_float3(30.0f, 0.0f, 0.0f),
                                         make_float3(-cosf(alpha), sinf(alpha), 0.0f), dOut);
         cudaDeviceSynchronize();
-        float out[13] = {};
+        float out[16] = {};
         cudaMemcpy(out, dOut, sizeof(out), cudaMemcpyDeviceToHost);
         if (out[12] < 0.5f) {
             continue;
         }
         ++exhausted;
+        EXPECT_EQ(out[13], static_cast<float>(BH_TERMINAL_MAX_STEPS));
+        EXPECT_EQ(out[14], static_cast<float>(BH_TERMINAL_MAX_STEPS));
+        EXPECT_EQ(out[15], static_cast<float>(BH_TERMINAL_MAX_STEPS));
         bool differs = false;
         for (int k = 0; k < 3; ++k) {
             EXPECT_NEAR(out[k], out[6 + k], 1e-5f) << "RTE ray " << i;
@@ -613,6 +622,16 @@ TEST(CudaKerrGeodesic, BudgetExhaustionSkyFollowsTheLastStep) {
         }
         chord_differs += differs ? 1 : 0;
     }
+    setF(d_max_dist, 31.0f);
+    exhaustion_sky_kernel<<<1, 1>>>(make_float3(30.0f, 0.0f, 0.0f),
+                                    make_float3(1.0f, 0.0f, 0.0f), dOut);
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+    float outward[16] = {};
+    ASSERT_EQ(cudaMemcpy(outward, dOut, sizeof(outward), cudaMemcpyDeviceToHost), cudaSuccess);
+    EXPECT_EQ(outward[13], static_cast<float>(BH_TERMINAL_ESCAPE));
+    EXPECT_EQ(outward[14], static_cast<float>(BH_TERMINAL_ESCAPE));
+    EXPECT_EQ(outward[15], static_cast<float>(BH_TERMINAL_ESCAPE));
+    setF(d_max_dist, 100.0f);
     cudaFree(dOut);
     unsigned long long const none = 0ULL;
     cudaMemcpyToSymbol(d_tex_galaxy, &none, sizeof(none));

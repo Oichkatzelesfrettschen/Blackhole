@@ -184,6 +184,7 @@ __launch_bounds__(128, 4)
   }
 
   HitResult hit0{};
+  hit0.terminal = RayTerminal::Running;
   hit0.hit_disk = hit0.hit_horizon = hit0.escaped = hit0.max_steps = false;
   hit0.hit_point = make_f3(0.0f, 0.0f, 0.0f);
   hit0.origin = cam;
@@ -394,6 +395,8 @@ __launch_bounds__(128, 4)
     return make_float4(c.x*inv_a + wg.x*alpha, c.y*inv_a + wg.y*alpha,
                        c.z*inv_a + wg.z*alpha, c.w);
   };
+  d_classify_hit(hit0);
+  d_classify_hit(hit1);
   dFramebuffer[idx0] = applyWG(d_shade_hit(hit0, hit0.origin), hit0);
   if (hasRay1) {
     dFramebuffer[idx1] = applyWG(d_shade_hit(hit1, hit1.origin), hit1);

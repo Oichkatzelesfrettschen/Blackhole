@@ -44,6 +44,7 @@
 #include "physics/page_thorne.h"
 #include "physics/stokes_transport.h"
 #include "support/gl_compute_harness.h"
+#include "../shader/include/ray_terminal.h"
 
 using namespace gl;
 
@@ -746,6 +747,45 @@ TEST_F(KerrShaderCaptureTest, RendererScheduleMatchesBardeenWithinTwoPercent) {
     }
     EXPECT_LT(maxStepRays, K_RAYS / 20) << "spin=" << spin;
   }
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+}
+
+TEST_F(KerrShaderCaptureTest, OutwardRayTerminatesAsEscape) {
+  const std::string comp = bhtest::readShaderInclude("geodesic_trace.comp");
+  const GLuint program = bhtest::createComputeProgram(comp.substr(0, comp.find("void main()")) + R"(
+layout(std430, binding = 1) buffer Output { float result[]; };
+void main() {
+  if (gl_GlobalInvocationID.x != 0 || gl_GlobalInvocationID.y != 0) {
+    return;
+  }
+  Ray ray;
+  ray.position = vec3(30.0, 0.0, 0.0);
+  ray.velocity = vec3(1.0, 0.0, 0.0);
+  ray.affineParameter = 0.0;
+  HitResult hit = bhTraceGeodesic(ray, 2.0, 31.0, 100, 0.1);
+  vec3 terminalPos;
+  int rteTerminal;
+  int stokesTerminal;
+  bhTraceGeodesicRTE(ray, 2.0, 31.0, 100, 0.1, 0.5, terminalPos, rteTerminal);
+  bhTraceGeodesicStokes(ray, 2.0, 31.0, 100, 0.1, 0.5, 0.0, 0.0,
+                        terminalPos, stokesTerminal);
+  result[0] = float(hit.terminal);
+  result[1] = float(rteTerminal);
+  result[2] = float(stokesTerminal);
+}
+)");
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 3), nullptr, GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
+  glUseProgram(program);
+  glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.0F);
+  glUniform1f(glGetUniformLocation(program, "adiskEnabled"), 0.0F);
+  const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, 3);
+  EXPECT_EQ(out.at(0), static_cast<float>(BH_TERMINAL_ESCAPE));
+  EXPECT_EQ(out.at(1), static_cast<float>(BH_TERMINAL_ESCAPE));
+  EXPECT_EQ(out.at(2), static_cast<float>(BH_TERMINAL_ESCAPE));
   glDeleteBuffers(1, &ssbo);
   glDeleteProgram(program);
 }
@@ -1817,13 +1857,20 @@ void main() {
   ray.affineParameter = 0.0;
   HitResult hit = bhTraceGeodesic(ray, 2.0, 100.0, 100, 0.1);
   vec3 terminalPos;
-  vec3 rte = bhTraceGeodesicRTE(ray, 2.0, 100.0, 100, 0.1, 0.5, terminalPos).rgb;
-  vec3 pol = bhTraceGeodesicStokes(ray, 2.0, 100.0, 100, 0.1, 0.5, 0.0, 0.0, terminalPos).rgb;
+  int rteTerminal;
+  int stokesTerminal;
+  vec3 rte = bhTraceGeodesicRTE(ray, 2.0, 100.0, 100, 0.1, 0.5,
+                                terminalPos, rteTerminal).rgb;
+  vec3 pol = bhTraceGeodesicStokes(ray, 2.0, 100.0, 100, 0.1, 0.5, 0.0, 0.0,
+                                  terminalPos, stokesTerminal).rgb;
   vec3 lastStep = bhBackgroundColorFromDir(normalize(hit.escapedDir)).rgb;
   vec3 chord = bhBackgroundColorFromDir(normalize(hit.hitPoint - hit.origin)).rgb;
   bool exhausted = (hit.debugFlags & BH_DEBUG_FLAG_MAXSTEPS) != 0 && !hit.hitHorizon;
-  int o = 13 * i;
+  int o = 16 * i;
   result[o] = exhausted ? 1.0 : 0.0;
+  result[o + 13] = float(hit.terminal);
+  result[o + 14] = float(rteTerminal);
+  result[o + 15] = float(stokesTerminal);
   for (int c = 0; c < 3; ++c) {
     result[o + 1 + c] = rte[c];
     result[o + 4 + c] = pol[c];
@@ -1836,7 +1883,7 @@ void main() {
   glBindTextureUnit(0, sky);
   GLuint ssbo = 0;
   glCreateBuffers(1, &ssbo);
-  constexpr std::size_t floats = 208; // 13 per ray, 16 rays
+  constexpr std::size_t floats = 256; // 16 fields per near-critical ray
   glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * floats), nullptr,
                     GL_DYNAMIC_DRAW);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo);
@@ -1844,16 +1891,19 @@ void main() {
   glUniform1i(glGetUniformLocation(program, "galaxy"), 0);
   glUniform1f(glGetUniformLocation(program, "kerrSpin"), 0.0F);
   glUniform1f(glGetUniformLocation(program, "adiskEnabled"), 0.0F);
-  glUniform1f(glGetUniformLocation(program, "bhDebugFlags"), 4.0F);
+  glUniform1f(glGetUniformLocation(program, "bhDebugFlags"), 0.0F);
   const std::vector<float> out = bhtest::runComputeProgram(program, ssbo, floats, 1);
   int exhausted = 0;
   int chordDiffers = 0;
   for (std::size_t i = 0; i < 16; ++i) {
-    const std::size_t o = 13 * i;
+    const std::size_t o = 16 * i;
     if (out.at(o) < 0.5F) {
       continue;
     }
     ++exhausted;
+    EXPECT_EQ(out.at(o + 13), static_cast<float>(BH_TERMINAL_MAX_STEPS));
+    EXPECT_EQ(out.at(o + 14), static_cast<float>(BH_TERMINAL_MAX_STEPS));
+    EXPECT_EQ(out.at(o + 15), static_cast<float>(BH_TERMINAL_MAX_STEPS));
     bool differs = false;
     for (std::size_t c = 0; c < 3; ++c) {
       EXPECT_NEAR(out.at(o + 1 + c), out.at(o + 7 + c), 1e-5F) << "RTE ray " << i << " c " << c;

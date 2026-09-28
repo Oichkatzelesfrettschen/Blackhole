@@ -540,6 +540,35 @@ TEST(KerrRaytracer, DefaultsCarryAnEscapingRayToTheEscapeRadius) {
   }
 }
 
+TEST(KerrRaytracer, NearCriticalBudgetFractionIsDistinctFromEscape) {
+  const double mass = 4.0e6 * physics::M_SUN;
+  const double metricLength = physics::G * mass / physics::C2;
+  const double schwarzschildRadius = physics::schwarzschildRadius(mass);
+  physics::KerrRaytracer tracer(mass, 0.0);
+  tracer.setStepSize(0.02 * schwarzschildRadius);
+  tracer.setEscapeRadius(20.0 * schwarzschildRadius);
+  tracer.setMaxSteps(1900);
+
+  int exhausted = 0;
+  int escaped = 0;
+  constexpr int rayCount = 32;
+  for (int rayIndex = 0; rayIndex < rayCount; ++rayIndex) {
+    const double impactOverMetricLength =
+        rayIndex == 0 ? 3.0 * std::numbers::sqrt3
+                      : 5.4 + (2.6 * static_cast<double>(rayIndex - 1) /
+                               static_cast<double>(rayCount - 2));
+    const auto result = tracer.trace(
+        physics::kerrEquatorialState(12.0 * schwarzschildRadius, 0.0, -1.0),
+        physics::kerrEquatorialConsts(impactOverMetricLength * metricLength, 1.0));
+    exhausted += result.status == physics::RayStatus::MaxSteps ? 1 : 0;
+    escaped += result.status == physics::RayStatus::ESCAPED ? 1 : 0;
+  }
+  EXPECT_GT(exhausted, 0);
+  EXPECT_GT(escaped, 0);
+  EXPECT_LT(exhausted, rayCount);
+  EXPECT_EQ(exhausted + escaped, rayCount);
+}
+
 TEST(KerrRaytracer, ResultIsMassScaleInvariantInSchwarzschildRadii) {
   // With the step and radii given in r_s, a dimensionally consistent tracer
   // takes the same number of steps at every mass and ends at the same r / r_s.
