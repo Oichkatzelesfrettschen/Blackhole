@@ -9,13 +9,18 @@
  * the black-hole camera distance alone, and Reset Camera returns both to
  * their defaults. These
  * cases run GL-free on a heap RenderState and restore the shared
- * InputManager singleton they change.
+ * InputManager singleton they change. tesseractSliceFrame places the eye's
+ * 4D point on the lattice's hash period, independent of how far it drifted.
  */
 
+#include <array>
+#include <cmath>
 #include <cstddef>
 #include <memory>
 #include <optional>
 
+#include <glm/ext/vector_double3.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <gtest/gtest.h>
 #include <imgui.h>
 
@@ -102,6 +107,70 @@ TEST_F(TesseractMotion, RecordedFramesIgnoreTheStep) {
   advanceTesseractMotion(*a, 0.0f, record);
   advanceTesseractMotion(*b, 0.2f, record);
   EXPECT_DOUBLE_EQ(orientationDistance(*a, *b), 0.0);
+}
+
+// A tilted slice frame: the default orientation at a nonzero phase.
+std::array<float, 16> tiltedRotation() {
+  auto rs = std::make_unique<RenderState>();
+  rs->tesseract.resetPhase = 1.3f;
+  advanceTesseractMotion(*rs, 0.0f, std::nullopt);
+  return blackhole::tesseract::toColumnMajor(
+      blackhole::tesseract::so4FromPair(rs->tesseract.orientation));
+}
+
+constexpr float SLICE_SCENE_SCALE = 1.3f;
+constexpr float SLICE_CELL = 12.0f;
+const glm::vec3 SLICE_EYE(0.4f, -0.3f, 8.0f);
+
+// Shifting the drift by whole hash periods along x, y, and z moves the wrapped
+// eye point by nothing, so the field the shaders read is unchanged.
+TEST(TesseractSliceFrame, DriftByWholePeriodsLeavesTheEyePoint) {
+  const std::array<float, 16> rotation = tiltedRotation();
+  const double period =
+      static_cast<double>(blackhole::TESSERACT_LATTICE_PERIOD_CELLS) * static_cast<double>(SLICE_CELL);
+  const glm::dvec3 drift(3.7, -1.2, 25.0);
+  const auto base =
+      blackhole::tesseractSliceFrame(rotation, SLICE_SCENE_SCALE, SLICE_CELL, SLICE_EYE, drift);
+  const auto shifted = blackhole::tesseractSliceFrame(
+      rotation, SLICE_SCENE_SCALE, SLICE_CELL, SLICE_EYE,
+      drift + glm::dvec3(5.0 * period, -3.0 * period, 700.0 * period));
+  for (std::size_t r = 0; r < 4; ++r) {
+    EXPECT_NEAR(base.eye.at(r), shifted.eye.at(r), 1e-6) << "component " << r;
+  }
+  for (std::size_t r = 0; r < 3; ++r) {
+    EXPECT_GE(base.eye.at(r), -0.5 * period);
+    EXPECT_LT(base.eye.at(r), 0.5 * period);
+  }
+}
+
+// The drift runs inside w = 0, so however far the eye drifts its w stays within
+// the camera offset of the hyperplane and the exp(-kappa |w|) cue cannot dim the
+// corridor; a drift through F would carry w with it.
+TEST(TesseractSliceFrame, LongDriftKeepsTheEyeNearTheWZeroHyperplane) {
+  const std::array<float, 16> rotation = tiltedRotation();
+  const auto still = blackhole::tesseractSliceFrame(rotation, SLICE_SCENE_SCALE, SLICE_CELL,
+                                                    SLICE_EYE, glm::dvec3(0.0));
+  const auto drifted = blackhole::tesseractSliceFrame(
+      rotation, SLICE_SCENE_SCALE, SLICE_CELL, SLICE_EYE, glm::dvec3(0.0, 0.0, -1.0e6));
+  EXPECT_DOUBLE_EQ(still.eye[3], drifted.eye[3]);
+  const glm::dvec3 eye(SLICE_EYE);
+  const double reach = std::sqrt((eye.x * eye.x) + (eye.y * eye.y) + (eye.z * eye.z)) +
+                       (2.0 * static_cast<double>(SLICE_CELL));
+  EXPECT_LT(std::abs(drifted.eye[3]), reach);
+}
+
+TEST(TesseractSliceFrame, AxesAreOrthonormal) {
+  const auto slice = blackhole::tesseractSliceFrame(tiltedRotation(), SLICE_SCENE_SCALE, SLICE_CELL,
+                                                    SLICE_EYE, glm::dvec3(0.0));
+  for (std::size_t i = 0; i < 3; ++i) {
+    for (std::size_t j = 0; j < 3; ++j) {
+      double dot = 0.0;
+      for (std::size_t r = 0; r < 4; ++r) {
+        dot += slice.axes.at(i).at(r) * slice.axes.at(j).at(r);
+      }
+      EXPECT_NEAR(dot, i == j ? 1.0 : 0.0, 1e-12) << i << ", " << j;
+    }
+  }
 }
 
 // Redirected zoom scales the tesseract view by the black-hole framing ratio
