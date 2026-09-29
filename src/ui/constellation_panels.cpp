@@ -370,6 +370,14 @@ void renderConstellationPanels(ConstellationUiState &uiState, blackhole::RenderS
   drawIntelligence(snapshot);
   drawObjectives(uiState, snapshot);
   drawBriefing(uiState);
+  // A fresh layout leaves each dock node on whichever tab it docked last;
+  // focusing opens the map and the order composer, Operations last so it holds
+  // keyboard focus.
+  if (renderState.overlays.sceneWindowFocusPending) {
+    ImGui::SetWindowFocus("System/Strategic Map");
+    ImGui::SetWindowFocus("Operations");
+    renderState.overlays.sceneWindowFocusPending = false;
+  }
   drawEventLog(uiState, snapshot, events);
   if (uiState.selectedSystem < snapshot.systems.size()) {
     renderState.physicsCore.kerrSpin =
