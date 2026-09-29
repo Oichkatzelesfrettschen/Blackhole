@@ -1,8 +1,8 @@
 /**
  * @file tesseract_geometry_test.cpp
  * @brief 4-cube complex counts and incidence, 4D->3D projection formulas,
- *        world-tube extrusion, lit-moment and pulse timing, the scene segment
- *        layout, and the row-major -> glm upload of an SO(4) matrix.
+ *        lit-moment and pulse timing, the rectilinear lattice's periodicity,
+ *        the palette hue, and the row-major -> glm upload of an SO(4) matrix.
  *
  * Float tolerances: 1e-6 covers single-precision products of O(1) values
  * (float epsilon 1.2e-7 times a few operations); 1e-5 covers the O(10)
@@ -13,9 +13,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <iterator>
 #include <set>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -24,6 +22,7 @@
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_int3.hpp>
 #include <glm/geometric.hpp>
 
 #include "render/tesseract/so4.h"
@@ -178,65 +177,6 @@ TEST(TesseractProjection, StereographicGuardsThePole) {
   EXPECT_NEAR(tess::projectStereographic(full).fade, 1.0f, 1e-5f);
 }
 
-TEST(LibraryOfTime, WorldTubeExtrudesAlongW) {
-  const glm::vec3 point(0.3f, -0.2f, 0.7f);
-  const float span = 10.0f;
-  const std::vector<glm::vec4> tube = tess::extrudeWorldTube(point, span, 11);
-  ASSERT_EQ(tube.size(), 11U);
-  for (std::size_t k = 0; k < tube.size(); ++k) {
-    EXPECT_EQ(glm::vec3(tube.at(k)), point);
-    EXPECT_NEAR(tube.at(k).w, static_cast<float>(k), TIME_TOL);
-  }
-  EXPECT_EQ(tube.front().w, 0.0f);
-  EXPECT_FLOAT_EQ(tube.back().w, span); // T * (k / last) at k = last, within 4 ulps
-  EXPECT_EQ(tess::extrudeWorldTube(point, span, 0).size(), 2U);
-}
-
-TEST(LibraryOfTime, FeatureNamesAreUniqueAndNonEmpty) {
-  std::set<std::string_view> names;
-  for (const auto &feature : tess::bedroomFeatures()) {
-    EXPECT_FALSE(feature.name.empty());
-    EXPECT_TRUE(names.insert(feature.name).second) << feature.name;
-  }
-}
-
-namespace {
-
-void expectSelectionTracksTube(const std::vector<tess::LibraryFeature> &features,
-                               const std::vector<tess::SegmentInstance> &segments,
-                               const tess::SceneSegmentOptions &options,
-                               std::size_t featureIndex) {
-  const tess::FeatureSelection selection{featureIndex};
-  const auto selected = tess::selectedTubeSegments(segments, selection);
-  ASSERT_EQ(selected.size(), options.tubeSamples - 1);
-  const auto tube = tess::extrudeWorldTube(features.at(featureIndex).position, options.timeSpan,
-                                           options.tubeSamples);
-  for (std::size_t segmentIndex = 0; segmentIndex < selected.size(); ++segmentIndex) {
-    EXPECT_EQ(selected.at(segmentIndex).a,
-              tess::libraryToTesseract(tube.at(segmentIndex), options.timeSpan));
-    EXPECT_EQ(selected.at(segmentIndex).b,
-              tess::libraryToTesseract(tube.at(segmentIndex + 1), options.timeSpan));
-  }
-  for (const float moment : {2.0f, 7.0f}) {
-    const auto marker = tess::selectedTubeMarker(features, selection, moment, options.timeSpan);
-    EXPECT_EQ(glm::vec3(marker), features.at(featureIndex).position);
-    EXPECT_FLOAT_EQ(marker.w, moment);
-  }
-}
-
-} // namespace
-
-TEST(LibraryOfTime, FeatureSelectionTracksWholeTubeAndLitMoment) {
-  const auto features = tess::bedroomFeatures();
-  tess::SceneSegmentOptions options;
-  options.timeSpan = 10.0f;
-  options.tubeSamples = 12;
-  const auto segments = tess::buildSceneSegments(options);
-  for (std::size_t featureIndex = 0; featureIndex < features.size(); ++featureIndex) {
-    expectSelectionTracksTube(features, segments, options, featureIndex);
-  }
-}
-
 TEST(LibraryOfTime, LibraryTimeMapsOntoTesseractW) {
   const float span = 8.0f;
   EXPECT_NEAR(tess::libraryToTesseract(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f), span).w, -1.0f, UNIT_TOL);
@@ -376,157 +316,57 @@ TEST(TesseractAnimation, RateChangeAfterLongRunMovesOnlyOneStep) {
   EXPECT_NEAR(tess::norm(orientation.right), 1.0, 1e-12);
 }
 
-tess::SegmentKind kindOf(const tess::SegmentInstance &seg) {
-  return tess::segmentKind(seg);
-}
-
-// Points on a tesseract edge keep three coordinates at +-1.
-void expectOnTesseractEdge(const tess::SegmentInstance &seg) {
-  const glm::vec4 mid = (seg.a + seg.b) * 0.5f;
-  const auto unitCoords = std::ranges::count_if(
-      components(mid), [](float c) { return std::abs(std::abs(c) - 1.0f) < UNIT_TOL; });
-  EXPECT_EQ(unitCoords, 3);
-}
-
-// A world-tube segment is parallel to w, runs forward in library time, and
-// stays inside the tesseract's w extent.
-void expectWorldTubeSegment(const tess::SegmentInstance &seg) {
-  EXPECT_EQ(glm::vec3(seg.a), glm::vec3(seg.b));
-  EXPECT_LT(seg.meta.x, seg.meta.y);
-  EXPECT_GE(seg.a.w, -1.0f - UNIT_TOL);
-  EXPECT_LE(seg.b.w, 1.0f + UNIT_TOL);
-}
-
-TEST(SceneSegments, LayoutCountsAndTags) {
-  tess::SceneSegmentOptions options;
-  options.timeSpan = 10.0f;
-  options.tubeSamples = 20;
-  options.edgeSubdivisions = 4;
-  const std::vector<tess::SegmentInstance> segments = tess::buildSceneSegments(options);
-  const std::size_t strands = tess::bedroomFeatures().size();
-  const std::size_t outline = tess::bedroomOutline().size();
-  const std::size_t edgePieces = std::size_t{32} * options.edgeSubdivisions;
-  const std::size_t tubePieces = strands * (options.tubeSamples - 1);
-  const std::size_t outlinePieces = outline * options.edgeSubdivisions;
-  EXPECT_EQ(strands, 13U);
-  EXPECT_EQ(outline, 12U);
-  EXPECT_EQ(segments.size(), edgePieces + tubePieces + outlinePieces);
-  static_assert(sizeof(tess::SegmentInstance) ==
-                std::size_t{4} * tess::SEGMENT_INSTANCE_ATTRIBUTES * sizeof(float));
-
-  std::array<std::size_t, 3> kindCounts{};
-  for (const tess::SegmentInstance &seg : segments) {
-    const tess::SegmentKind kind = kindOf(seg);
-    kindCounts.at(static_cast<std::size_t>(kind)) += 1;
-    if (kind == tess::SegmentKind::TesseractEdge) {
-      expectOnTesseractEdge(seg);
-    } else if (kind == tess::SegmentKind::WorldTube) {
-      expectWorldTubeSegment(seg);
-    }
-  }
-  EXPECT_EQ(kindCounts.at(0), edgePieces);
-  EXPECT_EQ(kindCounts.at(1), tubePieces);
-  EXPECT_EQ(kindCounts.at(2), outlinePieces);
-}
-
-// Every polyline caps its two true endpoints and nothing else: the 32 edges,
-// one world tube per strand, and the room outline links.
-TEST(SceneSegments, CapsOnlyPolylineEnds) {
-  tess::SceneSegmentOptions options;
-  options.tubeSamples = 20;
-  options.edgeSubdivisions = 4;
-  const std::vector<tess::SegmentInstance> segments = tess::buildSceneSegments(options);
-  // Open polylines: the 32 edges, one world tube per strand, and the shelf
-  // line; the window and desk loops are closed and cap nothing.
-  const std::size_t openPolylines = std::size_t{32} + tess::bedroomFeatures().size() + 1;
-  const auto capsA = std::ranges::count_if(
-      segments, [](const tess::SegmentInstance &s) { return tess::segmentCapped(s, false); });
-  const auto capsB = std::ranges::count_if(
-      segments, [](const tess::SegmentInstance &s) { return tess::segmentCapped(s, true); });
-  EXPECT_EQ(static_cast<std::size_t>(capsA), openPolylines);
-  EXPECT_EQ(static_cast<std::size_t>(capsB), openPolylines);
-  EXPECT_TRUE(tess::segmentCapped(segments.front(), false));
-}
-
-// The room outline runs as three polylines: the open shelf line and the
-// closed window and desk loops. Each corner is one segment's b and the next
-// segment's a, so under additive blending no two caps overlap there.
-TEST(SceneSegments, OutlineRunsJoinTheirCorners) {
-  const std::vector<tess::OutlinePolyline> lines = tess::outlinePolylines();
-  ASSERT_EQ(lines.size(), 3U);
-  EXPECT_EQ(lines.at(0).features, (std::vector<std::size_t>{0, 1, 2, 3, 4}));
-  EXPECT_FALSE(lines.at(0).closed);
-  EXPECT_EQ(lines.at(1).features, (std::vector<std::size_t>{5, 6, 7, 8, 5}));
-  EXPECT_TRUE(lines.at(1).closed);
-  EXPECT_EQ(lines.at(2).features, (std::vector<std::size_t>{9, 10, 11, 12, 9}));
-  EXPECT_TRUE(lines.at(2).closed);
-
-  tess::SceneSegmentOptions options;
-  options.edgeSubdivisions = 3;
-  std::vector<tess::SegmentInstance> outline;
-  std::ranges::copy_if(tess::buildSceneSegments(options), std::back_inserter(outline),
-                       [](const tess::SegmentInstance &s) {
-                         return tess::segmentKind(s) == tess::SegmentKind::LitSlice;
-                       });
-  const auto capped = std::ranges::count_if(outline, [](const tess::SegmentInstance &s) {
-    return tess::segmentCapped(s, false) || tess::segmentCapped(s, true);
-  });
-  // Only the shelf line's first and last pieces carry caps.
-  EXPECT_EQ(capped, 2);
-  const std::vector<tess::LibraryFeature> features = tess::bedroomFeatures();
-  for (std::size_t corner = 5; corner <= 12; ++corner) {
-    const glm::vec4 point(features.at(corner).position, 0.0f);
-    const auto starts = std::ranges::count_if(
-        outline, [&point](const tess::SegmentInstance &s) { return s.a == point; });
-    const auto ends = std::ranges::count_if(
-        outline, [&point](const tess::SegmentInstance &s) { return s.b == point; });
-    EXPECT_EQ(starts, 1) << corner;
-    EXPECT_EQ(ends, 1) << corner;
+TEST(TesseractLattice, LocalPositionIsPeriodicInEveryAxis) {
+  const float cellSize = 2.2f;
+  const glm::vec3 p(0.7f, -1.4f, 3.05f);
+  const glm::vec3 base = tess::latticeLocalPosition(p, cellSize);
+  for (const glm::vec3 &shift :
+       {glm::vec3(cellSize, 0.0f, 0.0f), glm::vec3(0.0f, -3.0f * cellSize, 0.0f),
+        glm::vec3(0.0f, 0.0f, 5.0f * cellSize), glm::vec3(2.0f * cellSize, -cellSize, cellSize)}) {
+    const glm::vec3 shifted = tess::latticeLocalPosition(p + shift, cellSize);
+    EXPECT_NEAR(shifted.x, base.x, UNIT_TOL);
+    EXPECT_NEAR(shifted.y, base.y, UNIT_TOL);
+    EXPECT_NEAR(shifted.z, base.z, UNIT_TOL);
   }
 }
 
-// Interior neighbors carry the bits of the adjacent segments' own endpoints,
-// so both segments of a joint compute its miter from identical inputs; a
-// capped end repeats its own point.
-TEST(SceneSegments, NeighborsMatchAdjacentEndpoints) {
-  tess::SceneSegmentOptions options;
-  options.tubeSamples = 20;
-  options.edgeSubdivisions = 4;
-  const std::vector<tess::SegmentInstance> segments = tess::buildSceneSegments(options);
-  // The segment before an uncapped a ends at a and starts at prev; the one
-  // after an uncapped b starts at b and ends at next (closed loops wrap).
-  for (std::size_t i = 0; i < segments.size(); ++i) {
-    const tess::SegmentInstance &seg = segments.at(i);
-    if (tess::segmentCapped(seg, false)) {
-      EXPECT_EQ(seg.prev, seg.a) << i;
-    } else {
-      EXPECT_TRUE(std::ranges::any_of(segments, [&seg](const tess::SegmentInstance &other) {
-        return other.b == seg.a && other.a == seg.prev;
-      })) << i;
-    }
-    if (tess::segmentCapped(seg, true)) {
-      EXPECT_EQ(seg.next, seg.b) << i;
-    } else {
-      EXPECT_TRUE(std::ranges::any_of(segments, [&seg](const tess::SegmentInstance &other) {
-        return other.a == seg.b && other.b == seg.next;
-      })) << i;
-    }
+TEST(TesseractLattice, LocalPositionStaysWithinHalfTheCell) {
+  const float cellSize = 1.7f;
+  for (int step = 0; step < 51; ++step) {
+    const float coordinate = -9.3f + (0.37f * static_cast<float>(step));
+    const glm::vec3 local =
+        tess::latticeLocalPosition(glm::vec3(coordinate, -coordinate, 2.0f * coordinate), cellSize);
+    EXPECT_LE(std::abs(local.x), (0.5f * cellSize) + UNIT_TOL);
+    EXPECT_LE(std::abs(local.y), (0.5f * cellSize) + UNIT_TOL);
+    EXPECT_LE(std::abs(local.z), (0.5f * cellSize) + UNIT_TOL);
   }
 }
 
-TEST(SceneSegments, TagRoundTripsKindAndCaps) {
-  for (const auto kind : {tess::SegmentKind::TesseractEdge, tess::SegmentKind::WorldTube,
-                          tess::SegmentKind::LitSlice}) {
-    for (const bool capA : {false, true}) {
-      for (const bool capB : {false, true}) {
-        tess::SegmentInstance seg;
-        seg.meta.z = tess::packSegmentTag(kind, capA, capB);
-        EXPECT_EQ(tess::segmentKind(seg), kind);
-        EXPECT_EQ(tess::segmentCapped(seg, false), capA);
-        EXPECT_EQ(tess::segmentCapped(seg, true), capB);
-      }
-    }
-  }
+TEST(TesseractLattice, CellIndexAndLocalPositionReconstructThePoint) {
+  const float cellSize = 1.4f;
+  const glm::vec3 p(4.9f, -2.05f, 0.3f);
+  const glm::ivec3 index = tess::latticeCellIndex(p, cellSize);
+  const glm::vec3 local = tess::latticeLocalPosition(p, cellSize);
+  const glm::vec3 rebuilt = local + (cellSize * glm::vec3(index));
+  EXPECT_NEAR(rebuilt.x, p.x, UNIT_TOL);
+  EXPECT_NEAR(rebuilt.y, p.y, UNIT_TOL);
+  EXPECT_NEAR(rebuilt.z, p.z, UNIT_TOL);
+}
+
+TEST(TesseractPalette, StrandColorHueIsAmber) {
+  // Acceptance check 2 of docs/plans/tesseract-interstellar-visuals.md: the
+  // strand palette's circular hue must fall in the amber/gold band, not the
+  // retired ribbon pass's blue.
+  const float hue = tess::hueDegrees(tess::strandColor());
+  EXPECT_GE(hue, 25.0f);
+  EXPECT_LE(hue, 50.0f);
+}
+
+TEST(TesseractPalette, HueOfPrimariesAndAchromaticInput) {
+  EXPECT_NEAR(tess::hueDegrees(glm::vec3(1.0f, 0.0f, 0.0f)), 0.0f, UNIT_TOL);
+  EXPECT_NEAR(tess::hueDegrees(glm::vec3(0.0f, 1.0f, 0.0f)), 120.0f, UNIT_TOL);
+  EXPECT_NEAR(tess::hueDegrees(glm::vec3(0.0f, 0.0f, 1.0f)), 240.0f, UNIT_TOL);
+  EXPECT_EQ(tess::hueDegrees(glm::vec3(0.4f, 0.4f, 0.4f)), 0.0f);
 }
 
 TEST(So4Upload, ColumnMajorCopyMatchesGlmMatrixVectorProduct) {

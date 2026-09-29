@@ -4154,17 +4154,18 @@ if(BUILD_TESTING)
     endif()
   endif()
 
-  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_ribbon_gl_test.cpp")
-    # Live-GL radiance of subdivided tesseract ribbons through the real
-    # shaders. Skips without a GL 4.6 context.
-    add_executable(tesseract_ribbon_gl_test "${PROJECT_SOURCE_DIR}/tests/tesseract_ribbon_gl_test.cpp")
-    target_link_libraries(tesseract_ribbon_gl_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
-    target_compile_definitions(tesseract_ribbon_gl_test PRIVATE
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_raymarch_gl_test.cpp")
+    # Live-GL capture checks that the lattice raymarch covers most of the
+    # frame with amber-hued lit surfaces, not a thin wireframe. Skips without
+    # a GL 4.6 context.
+    add_executable(tesseract_raymarch_gl_test "${PROJECT_SOURCE_DIR}/tests/tesseract_raymarch_gl_test.cpp")
+    target_link_libraries(tesseract_raymarch_gl_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_definitions(tesseract_raymarch_gl_test PRIVATE
       BH_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
     )
-    target_compile_options(tesseract_ribbon_gl_test PRIVATE ${PROJECT_WARNINGS})
-    add_test(NAME tesseract_ribbon_gl COMMAND tesseract_ribbon_gl_test)
-    set_tests_properties(tesseract_ribbon_gl PROPERTIES LABELS "render;gpu;tesseract" TIMEOUT 60)
+    target_compile_options(tesseract_raymarch_gl_test PRIVATE ${PROJECT_WARNINGS})
+    add_test(NAME tesseract_raymarch_gl COMMAND tesseract_raymarch_gl_test)
+    set_tests_properties(tesseract_raymarch_gl PROPERTIES LABELS "render;gpu;tesseract" TIMEOUT 60)
   endif()
 
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_exposure_gl_test.cpp")
