@@ -10,6 +10,7 @@
 #include <cmath>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <future>
 #include <iostream>
 #include <numeric>
@@ -62,6 +63,9 @@ GLint uniformLocation(GLuint program, const char *name) {
  * vertex array; the read and draw framebuffer bindings, which
  * glBindFramebuffer(GL_FRAMEBUFFER) sets together; and the program.
  */
+constexpr std::array<int, 2> EMANATION_UNITS{TESSERACT_EMANATION_UNIT,
+                                             TESSERACT_EMANATION_DENSITY_UNIT};
+
 struct SavedGlState {
   GLboolean blendEnabled = GL_FALSE;
   GLboolean depthTestEnabled = GL_FALSE;
@@ -77,7 +81,7 @@ struct SavedGlState {
   GLint readFramebuffer = 0;
   GLint program = 0;
   GLint activeTexture = 0;
-  GLint emanationBinding = 0;
+  std::array<GLint, 2> emanationBindings{}; ///< Units TESSERACT_EMANATION_UNIT and _DENSITY_UNIT.
 
   void capture() {
     blendEnabled = glIsEnabled(GL_BLEND);
@@ -93,11 +97,13 @@ struct SavedGlState {
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFramebuffer);
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFramebuffer);
     glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-    // The pass binds one texture unit; glBindTextureUnit leaves the active
+    // The pass binds two texture units; glBindTextureUnit leaves the active
     // unit alone, but reading a unit's binding goes through it.
     glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture);
-    glActiveTexture(static_cast<GLenum>(static_cast<int>(GL_TEXTURE0) + TESSERACT_EMANATION_UNIT));
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &emanationBinding);
+    for (std::size_t i = 0; i < EMANATION_UNITS.size(); ++i) {
+      glActiveTexture(static_cast<GLenum>(static_cast<int>(GL_TEXTURE0) + EMANATION_UNITS.at(i)));
+      glGetIntegerv(GL_TEXTURE_BINDING_2D, &emanationBindings.at(i));
+    }
     glActiveTexture(static_cast<GLenum>(activeTexture));
   }
 
@@ -121,8 +127,10 @@ struct SavedGlState {
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(drawFramebuffer));
     glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(readFramebuffer));
     glUseProgram(static_cast<GLuint>(program));
-    glBindTextureUnit(static_cast<GLuint>(TESSERACT_EMANATION_UNIT),
-                      static_cast<GLuint>(emanationBinding));
+    for (std::size_t i = 0; i < EMANATION_UNITS.size(); ++i) {
+      glBindTextureUnit(static_cast<GLuint>(EMANATION_UNITS.at(i)),
+                        static_cast<GLuint>(emanationBindings.at(i)));
+    }
   }
 };
 
@@ -174,6 +182,10 @@ void TesseractRenderer::shutdown() {
   if (emanationTexture_ != 0) {
     glDeleteTextures(1, &emanationTexture_);
     emanationTexture_ = 0;
+  }
+  if (emanationDensity_ != 0) {
+    glDeleteTextures(1, &emanationDensity_);
+    emanationDensity_ = 0;
   }
   emanationStrut_ = 0;
   emanationDmz_ = 0;
@@ -279,6 +291,7 @@ void TesseractRenderer::uploadEmanation(int strut, const tesseract::EmanationTab
   glPixelStorei(GL_UNPACK_ALIGNMENT, 2);
   glTextureSubImage2D(emanationTexture_, 0, 0, 0, TESSERACT_EMANATION_SIZE,
                       TESSERACT_EMANATION_SIZE, GL_RED_INTEGER, GL_SHORT, table.value.data());
+  uploadEmanationDensity(table);
   glPixelStorei(GL_UNPACK_ALIGNMENT, unpackAlignment);
   emanationStrut_ = strut;
   emanationDmz_ = table.dmzCount;
@@ -291,6 +304,33 @@ void TesseractRenderer::uploadEmanation(int strut, const tesseract::EmanationTab
   emanationFill_ = table.totalPossible == 0
                        ? 0.0f
                        : static_cast<float>(table.dmzCount) / static_cast<float>(table.totalPossible);
+}
+
+void TesseractRenderer::uploadEmanationDensity(const tesseract::EmanationTable &table) {
+  constexpr int edge = TESSERACT_EMANATION_DENSITY_SIZE;
+  if (emanationDensity_ == 0) {
+    glCreateTextures(GL_TEXTURE_2D, 1, &emanationDensity_);
+    glTextureStorage2D(emanationDensity_, TESSERACT_EMANATION_DENSITY_LEVELS, GL_RG8, edge, edge);
+    glTextureParameteri(emanationDensity_, GL_TEXTURE_MIN_FILTER,
+                        static_cast<GLint>(GL_LINEAR_MIPMAP_LINEAR));
+    glTextureParameteri(emanationDensity_, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(GL_LINEAR));
+    glTextureParameteri(emanationDensity_, GL_TEXTURE_WRAP_S, static_cast<GLint>(GL_CLAMP_TO_EDGE));
+    glTextureParameteri(emanationDensity_, GL_TEXTURE_WRAP_T, static_cast<GLint>(GL_CLAMP_TO_EDGE));
+  }
+  // Red marks a positive (warm) filled cell and green a negative (cool) one;
+  // the texels past the 510-cell table stay empty.
+  std::vector<std::uint8_t> texels(static_cast<std::size_t>(edge) * edge * 2, 0);
+  for (int row = 0; row < TESSERACT_EMANATION_SIZE; ++row) {
+    for (int col = 0; col < TESSERACT_EMANATION_SIZE; ++col) {
+      const int v = table.at(row, col);
+      const std::size_t texel = (static_cast<std::size_t>(row) * edge) + static_cast<std::size_t>(col);
+      texels.at((2 * texel) + (v > 0 ? 0 : 1)) = v != 0 ? 255 : 0;
+    }
+  }
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  glTextureSubImage2D(emanationDensity_, 0, 0, 0, edge, edge, GL_RG, GL_UNSIGNED_BYTE,
+                      texels.data());
+  glGenerateTextureMipmap(emanationDensity_);
 }
 
 TesseractRenderer::EmanationTrail TesseractRenderer::updateEmanationTrail(
@@ -361,6 +401,7 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   bakeEmanation(std::clamp(inputs.emanationStrut, 1, TESSERACT_EMANATION_MAX_STRUT),
                 inputs.emanationBakeBlocking);
   glBindTextureUnit(static_cast<GLuint>(TESSERACT_EMANATION_UNIT), emanationTexture_);
+  glBindTextureUnit(static_cast<GLuint>(TESSERACT_EMANATION_DENSITY_UNIT), emanationDensity_);
 
   glNamedFramebufferTexture(fbo_, GL_COLOR_ATTACHMENT0, inputs.targetTexture, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo_);

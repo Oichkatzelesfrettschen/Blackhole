@@ -175,6 +175,13 @@ inline constexpr std::size_t TESSERACT_EMANATION_TRAIL_INTS =
     2 * static_cast<std::size_t>(TESSERACT_EMANATION_TRAIL);
 /// Texture unit the pass binds the emanation texture to (binding in tesseract.frag).
 inline constexpr int TESSERACT_EMANATION_UNIT = 3;
+/// Texture unit of the fill-density mip chain (binding in tesseract_panes.frag).
+inline constexpr int TESSERACT_EMANATION_DENSITY_UNIT = 4;
+/// Edge of the density texture: the table padded to a power of two, so every
+/// mip texel averages whole 2^k blocks of cells.
+inline constexpr int TESSERACT_EMANATION_DENSITY_SIZE = 512;
+/// Mip levels of the density texture, 512 down to 1.
+inline constexpr int TESSERACT_EMANATION_DENSITY_LEVELS = 10;
 
 /**
  * @brief Owner of the tesseract pass GL objects.
@@ -240,6 +247,9 @@ private:
   void bakeEmanation(int strut, bool blocking);
   /// Uploads @p table as the texture and derives the walk and fill of @p strut.
   void uploadEmanation(int strut, const tesseract::EmanationTable &table);
+  /// Uploads the filled fractions of @p table (red positive, green negative)
+  /// and their mip chain, which a page shows where its cells are sub-pixel.
+  void uploadEmanationDensity(const tesseract::EmanationTable &table);
 
   /// Walk cells (level-10 row, column pairs) and lead value the shaders read.
   struct EmanationTrail {
@@ -257,6 +267,7 @@ private:
   gl::GLuint vao_ = 0;
   gl::GLuint fbo_ = 0;
   gl::GLuint emanationTexture_ = 0;
+  gl::GLuint emanationDensity_ = 0;
   int emanationStrut_ = 0;
   std::size_t emanationDmz_ = 0;
   float emanationFill_ = 0.0f; ///< Filled fraction of the addressable cells.

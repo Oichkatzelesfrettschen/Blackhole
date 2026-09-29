@@ -27,8 +27,11 @@
  * holding the strut, so a distant page shows a coarse table and an
  * approaching page opens the central cross of each level in turn until it
  * shows level 10; the texture stays level 10 and the shader maps indices
- * (emanationExpand). A page whose finest reachable level is still finer than
- * EMANATION_BLUR_START cells per pixel fades out. A xor-triple walk over the
+ * (emanationExpand). Where even the lowest level holding the strut is finer
+ * than EMANATION_BLUR_START cells per pixel (every strut above 255 is a
+ * level-10 strut), the page crossfades to the mip of the level-10 table's
+ * filled fraction at blocks of about EMANATION_CELL_PIXELS, so a distant page
+ * shows the table's block structure rather than going dark. A xor-triple walk over the
  * filled cells (xorTripleWalk) marks its lead cell and trail on the nearest
  * pages.
  */
@@ -56,11 +59,18 @@ uniform float emanationTrailPhase; // Fraction of the lead step elapsed.
 // Level-10 emanation table, signed values in tone-row order, 0 = not filled.
 // Binding matches TESSERACT_EMANATION_UNIT in tesseract_renderer.h.
 layout(binding = 3) uniform isampler2D emanationTable;
+// Filled fractions of the level-10 table (red positive, green negative) on a
+// 512-texel power-of-two pad, with their mip chain; binding matches
+// TESSERACT_EMANATION_DENSITY_UNIT.
+layout(binding = 4) uniform sampler2D emanationDensity;
+const float EMANATION_DENSITY_SIZE = 512.0;
 
 // The lattice pass stops marching at this many cells.
 const float MAX_MARCH_CELLS = 24.0;
 
 const int EMANATION_TOP_LEVEL = 10;
+// Tone-row positions per axis of the level-10 table, 2^9 - 2.
+const int TESSERACT_TABLE_CELLS = 510;
 // Planes tested per ray, nearest first.
 const int EMANATION_PLANES = 6;
 // Fraction of plane tiles that hold a page, and the inset of a page from each
@@ -258,6 +268,8 @@ vec3 emanationPanes(vec3 rayDir, float tEnd, float fogDistance) {
   float first = dir > 0.0 ? floor(u0) + 1.0 : ceil(u0) - 1.0;
   float grazing = smoothstep(0.03, 0.3, incidence);
   float pageEdge = 1.0 - (2.0 * EMANATION_PAGE_INSET);
+  // Equal mean page energy across struts: sparse tables glow brighter per cell.
+  float sparsity = clamp(EMANATION_REFERENCE_FILL / max(emanationFill, 0.01), 0.15, 3.0);
   vec3 sum = vec3(0.0);
   vec3 trail = vec3(0.0);
   int pages = 0;
@@ -291,7 +303,19 @@ vec3 emanationPanes(vec3 rayDir, float tEnd, float fogDistance) {
     float cellsPerPixel = displaySize / pagePixels;
     float resolved = 1.0 - smoothstep(EMANATION_BLUR_START, EMANATION_BLUR_END, cellsPerPixel);
     float edgePixels = min(min(pageUv.x, pageUv.y), min(1.0 - pageUv.x, 1.0 - pageUv.y)) * pagePixels;
-    vec3 light = (emanationGlow(uv, level, fold, cellsPerPixel) * resolved) +
+    // Unresolved cells: the filled fraction over blocks of about
+    // EMANATION_CELL_PIXELS, scaled so a table of any fill reads at the
+    // contrast of an EMANATION_REFERENCE_FILL table (a level-10 strut fills
+    // about 1% of its cells), times the area a lit square covers.
+    float blockLod = log2(max(float(TESSERACT_TABLE_CELLS) * EMANATION_CELL_PIXELS / pagePixels, 1.0));
+    vec2 fill = textureLod(emanationDensity, pageUv * (float(TESSERACT_TABLE_CELLS) / EMANATION_DENSITY_SIZE),
+                           blockLod).rg;
+    float squareArea = 4.0 * EMANATION_CELL_HALF * EMANATION_CELL_HALF;
+    fill = min(fill * (EMANATION_REFERENCE_FILL / max(emanationFill, 0.001)), vec2(1.0));
+    vec3 blocks = ((fill.r * mix(EMANATION_WARM_LOW, EMANATION_WARM_HIGH, 0.5)) +
+                   (fill.g * mix(EMANATION_COOL_LOW, EMANATION_COOL_HIGH, 0.5))) * squareArea;
+    vec3 light = (emanationGlow(uv, level, fold, cellsPerPixel) * sparsity * resolved) +
+                 (blocks * (1.0 - resolved)) +
                  (EMANATION_FRAME_COLOR * exp(-edgePixels / EMANATION_FRAME_PIXELS));
     // A page closer than a fraction of a cell would fill the frame with one table cell.
     float nearFade = smoothstep(0.25, 0.7, t / cellSize);
@@ -302,9 +326,7 @@ vec3 emanationPanes(vec3 rayDir, float tEnd, float fogDistance) {
     }
     ++pages;
   }
-  // Equal mean page energy across struts: sparse tables glow brighter per cell.
-  float sparsity = clamp(EMANATION_REFERENCE_FILL / max(emanationFill, 0.01), 0.15, 3.0);
-  return (sum * (EMANATION_GAIN * sparsity) + (trail * EMANATION_TRAIL_GAIN)) * (emanationGain * strandGlow);
+  return (sum * EMANATION_GAIN + (trail * EMANATION_TRAIL_GAIN)) * (emanationGain * strandGlow);
 }
 
 void main() {
