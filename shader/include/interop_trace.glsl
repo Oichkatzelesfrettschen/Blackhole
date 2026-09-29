@@ -262,6 +262,16 @@ float bhDiskInnerRadius(float r_s) {
   return 0.5 * isco_radius(kerrSpin) * r_s;
 }
 
+// Accretion-disk outer edge in units of r_s; the CUDA twin is
+// D_DISK_OUTER_RADIUS_RS in device_physics.cuh. The Page-Thorne flux falls as
+// r^-3, so an edge far outside the emitting region adds an opaque surface
+// several decades dimmer than the inner disk that hides the sky behind it.
+const float BH_DISK_OUTER_RADIUS_RS = 20.0;
+
+float bhDiskOuterRadius(float r_s) {
+  return BH_DISK_OUTER_RADIUS_RS * r_s;
+}
+
 // Escape radius for a ray starting at pos. A ray escapes only once it is
 // outside both the scene radius and the camera's own radius and moving
 // outward; a camera placed beyond maxDistance otherwise escapes every ray at
@@ -340,7 +350,7 @@ HitResult bhTraceGeodesic(Ray ray, float r_s, float maxDistance, int maxSteps,
   }
 
   float r_disk_in = bhDiskInnerRadius(r_s);
-  float r_disk_out = 100.0 * r_s;
+  float r_disk_out = bhDiskOuterRadius(r_s);
 
   float rsMetric = bhMetricRadius(r_s);
   float aTrace = bhMetricSpin(kerrTraceSpin(a));
@@ -737,7 +747,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
 
   float r_disk_in  = bhDiskInnerRadius(r_s);
-  float r_disk_out = 100.0 * r_s;
+  float r_disk_out = bhDiskOuterRadius(r_s);
   // Gaussian vertical scale height for thin-disk density model (H/r ~ 0.1)
   float h_disk = max(0.1 * r_s, BH_EPSILON);
 
@@ -864,7 +874,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
 
   float r_disk_in  = bhDiskInnerRadius(r_s);
-  float r_disk_out = 100.0 * r_s;
+  float r_disk_out = bhDiskOuterRadius(r_s);
   float h_disk     = max(0.1 * r_s, BH_EPSILON);
 
   // Thermal synchrotron intrinsic linear polarization fraction (~0.75 at Theta_e >> 1)

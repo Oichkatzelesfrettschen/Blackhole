@@ -94,9 +94,9 @@ struct WiregridParams {
 };
 
 /// Default depthFar in scene units: beyond the default camera's distance plus
-/// the disk's 200-unit (100 r_s) outer radius, so depth cues normalize a disk
-/// hit below 1 and reserve the far end for the sky, and the gizmo far plane
-/// holds the whole disk.
+/// the disk's 40-unit (20 r_s) outer radius with room for saved cameras
+/// farther out, so depth cues normalize a disk hit below 1 and reserve the far
+/// end for the sky, and the gizmo far plane holds the whole disk.
 inline constexpr float K_DEFAULT_DEPTH_FAR = 500.0f;
 
 
@@ -250,7 +250,9 @@ struct RenderState {
     bool curveOverlayLoaded = false;
     HudOverlay controlsOverlay;
     HudOverlay simulatorExplanation;
-    bool simulatorExplanationEnabled = true; ///< Draws the explanation lines into the scene.
+    /// Draws the explanation lines into the scene; off by default so the
+    /// rendered image carries no burned-in text.
+    bool simulatorExplanationEnabled = false;
     bool controlsOverlayReady = false;
     bool controlsOverlayConfigInit = false;
     bool controlsOverlayEnabled = true;

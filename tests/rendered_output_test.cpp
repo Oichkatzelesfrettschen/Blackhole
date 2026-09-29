@@ -374,6 +374,38 @@ std::string glVendor() {
 }
 #endif
 
+// Renders the desktop's first frame from an empty working directory, so the
+// app starts from fresh Settings: the default camera, sky, and exposure.
+CapturedFrame captureDefaultScene() {
+  const auto directory = artifactRoot() / "default-scene";
+  std::filesystem::remove_all(directory);
+  std::filesystem::create_directories(directory);
+  const auto png = directory / "default.png";
+  const auto pfm = directory / "default.pfm";
+  const pid_t child = fork();
+  if (child < 0) {
+    throw std::runtime_error("fork failed");
+  }
+  if (child == 0) {
+    setenv("BLACKHOLE_WINDOW_HIDDEN", "1", 1);
+    if (chdir(directory.c_str()) != 0) {
+      _exit(126);
+    }
+    execl(BH_RENDER_APP_EXECUTABLE, BH_RENDER_APP_EXECUTABLE, "--export-frame", png.c_str(),
+          "--export-raw-frame", pfm.c_str(), "--export-size", "320", "180",
+          static_cast<char *>(nullptr));
+    _exit(127);
+  }
+  int status = 0;
+  if (waitpid(child, &status, 0) != child || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+    throw std::runtime_error("desktop default-scene render failed");
+  }
+  CapturedFrame frame;
+  frame.raw = loadPfm(pfm, frame.width, frame.height);
+  frame.terminals = loadTerminals(png.string() + ".terminals.pgm", frame.width, frame.height);
+  return frame;
+}
+
 } // namespace
 
 // The capture verifies geometry, terminal classes, and image range together.
@@ -557,4 +589,39 @@ TEST(RenderedOutput, CriticalRegionExhaustion) {
               reference.rawMetrics.luminanceHash != balanced.rawMetrics.luminanceHash)
       << "the zoomed critical region must distinguish the quality tiers";
   EXPECT_EQ(reference.rawMetrics.invalidFraction, 0.0);
+}
+
+// The fresh desktop frame shows the disk as a lit band rather than a dark
+// surface over the sky. Under the record exposure rule (render/record_mode.h)
+// a disk pixel below 1% of the disk's 99th-percentile raw luminance displays
+// as black, so such pixels mark disk area that hides the sky while showing no
+// emission; a disk edge far beyond the emitting radii makes them the majority.
+// The disk also leaves most of the frame to the sky and the shadow.
+TEST(RenderedOutput, DefaultSceneDiskStaysLit) {
+  if (!contextAvailable()) {
+    GTEST_SKIP() << "GL 4.6 context unavailable";
+  }
+  const CapturedFrame frame = captureDefaultScene();
+  std::vector<float> disk;
+  std::size_t captured = 0;
+  for (std::size_t index = 0; index < frame.terminals.size(); ++index) {
+    if (frame.terminals.at(index) == BH_TERMINAL_DISK_HIT) {
+      disk.push_back(frame.raw.at(index));
+    } else if (frame.terminals.at(index) == BH_TERMINAL_HORIZON) {
+      ++captured;
+    }
+  }
+  ASSERT_FALSE(disk.empty());
+  EXPECT_GT(captured, 0U) << "the default camera must show the shadow";
+  const double diskFraction =
+      static_cast<double>(disk.size()) / static_cast<double>(frame.terminals.size());
+  EXPECT_LE(diskFraction, 0.35) << "the disk must leave most of the frame to sky and shadow";
+  std::vector<float> sorted = disk;
+  const auto rank = static_cast<std::ptrdiff_t>((sorted.size() * 99U) / 100U);
+  std::nth_element(sorted.begin(), sorted.begin() + rank, sorted.end());
+  const float bright = sorted.at(static_cast<std::size_t>(rank));
+  const auto dark =
+      std::ranges::count_if(disk, [bright](float value) { return value < (0.01f * bright); });
+  const double darkFraction = static_cast<double>(dark) / static_cast<double>(disk.size());
+  EXPECT_LE(darkFraction, 0.05) << "disk pixels below 1% of L99 display as an unlit surface";
 }

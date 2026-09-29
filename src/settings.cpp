@@ -77,7 +77,7 @@ void assignLegacyVsync(Settings &settings, const std::string &value) {
 
 // Preserve file-order matching and the legacy vsync alias while binding each
 // persisted key to the type of its Settings member.
-constexpr std::array<SettingBinding, 85> K_SETTING_BINDINGS{{
+constexpr std::array<SettingBinding, 86> K_SETTING_BINDINGS{{
     {.key = "\"windowWidth\"", .assign = assignSetting<&Settings::windowWidth>},
     {.key = "\"windowHeight\"", .assign = assignSetting<&Settings::windowHeight>},
     {.key = "\"fullscreen\"", .assign = assignSetting<&Settings::fullscreen>},
@@ -166,10 +166,31 @@ constexpr std::array<SettingBinding, 85> K_SETTING_BINDINGS{{
     {.key = "\"adiskNoiseLOD\"", .assign = assignSetting<&Settings::adiskNoiseLOD>},
     {.key = "\"adiskNoiseScale\"", .assign = assignSetting<&Settings::adiskNoiseScale>},
     {.key = "\"adiskSpeed\"", .assign = assignSetting<&Settings::adiskSpeed>},
-    {.key = "\"workspaceSchemaVersion\"", .assign = assignSetting<&Settings::workspaceSchemaVersion>},
+    {.key = "\"workspaceSchemaVersion\"",
+     .assign = assignSetting<&Settings::workspaceSchemaVersion>},
+    {.key = "\"presentationSchemaVersion\"",
+     .assign = assignSetting<&Settings::presentationSchemaVersion>},
     {.key = "\"workspaceKind\"", .assign = assignSetting<&Settings::workspaceKind>},
     {.key = "\"advancedControls\"", .assign = assignSetting<&Settings::advancedControls>},
 }};
+
+// Replaces the presentation fields (camera pose, sky, exposure) with fresh
+// defaults and stamps the current presentation version; K_PRESENTATION_SCHEMA_VERSION
+// names the fields and when load applies this.
+void applyDefaultPresentation(Settings &settings) {
+  const Settings fresh;
+  settings.cameraYaw = fresh.cameraYaw;
+  settings.cameraPitch = fresh.cameraPitch;
+  settings.cameraRoll = fresh.cameraRoll;
+  settings.cameraDistance = fresh.cameraDistance;
+  settings.backgroundEnabled = fresh.backgroundEnabled;
+  settings.backgroundId = fresh.backgroundId;
+  settings.backgroundIntensity = fresh.backgroundIntensity;
+  settings.backgroundParallaxStrength = fresh.backgroundParallaxStrength;
+  settings.backgroundDriftStrength = fresh.backgroundDriftStrength;
+  settings.toneExposure = fresh.toneExposure;
+  settings.presentationSchemaVersion = K_PRESENTATION_SCHEMA_VERSION;
+}
 
 } // namespace
 
@@ -188,7 +209,7 @@ bool SettingsManager::load(const std::string &filepath) {
 
   std::string line;
   bool swapIntervalParsed = false;
-  bool toneExposureParsed = false;
+  bool presentationParsed = false;
   while (std::getline(file, line)) {
     line = trim(line);
     if (line.empty() || line.at(0) == '{' || line.at(0) == '}') {
@@ -208,11 +229,11 @@ bool SettingsManager::load(const std::string &filepath) {
     if (binding != K_SETTING_BINDINGS.end()) {
       binding->assign(settings_, value);
       swapIntervalParsed = swapIntervalParsed || binding->key == "\"swapInterval\"";
-      toneExposureParsed = toneExposureParsed || binding->key == "\"toneExposure\"";
+      presentationParsed = presentationParsed || binding->key == "\"presentationSchemaVersion\"";
     }
   }
-  if (!toneExposureParsed) {
-    settings_.toneExposure = K_LEGACY_TONE_EXPOSURE;
+  if (!presentationParsed || settings_.presentationSchemaVersion < K_PRESENTATION_SCHEMA_VERSION) {
+    applyDefaultPresentation(settings_);
   }
 
   return true;
@@ -233,6 +254,7 @@ bool SettingsManager::save(const std::string &filepath) {
 
   file << "{\n";
   file << "  \"workspaceSchemaVersion\": " << settings_.workspaceSchemaVersion << ",\n";
+  file << "  \"presentationSchemaVersion\": " << settings_.presentationSchemaVersion << ",\n";
   file << "  \"workspaceKind\": " << settings_.workspaceKind << ",\n";
   file << "  \"advancedControls\": " << writeBool(settings_.advancedControls) << ",\n";
 

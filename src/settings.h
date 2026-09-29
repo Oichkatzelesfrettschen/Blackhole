@@ -14,34 +14,40 @@
  * All fields correspond to JSON keys written and read by SettingsManager.
  * Defaults represent a sensible out-of-the-box experience at 1920x1080.
  */
-/// Default camera pose: 120 r_s from the hole (scene units, r_s = 2), outside
-/// the disk's 100 r_s outer edge, and 10 degrees above the disk plane, where
-/// the thin disk reads as a band, its far side lenses into an arc over the
-/// shadow, and the sky shows above the band. A settings file with saved
-/// camera keys keeps its camera.
-inline constexpr float K_DEFAULT_CAMERA_DISTANCE = 240.0f;
-inline constexpr float K_DEFAULT_CAMERA_PITCH_DEG = 10.0f;
+/// Default camera pose: 75 r_s from the hole (scene units, r_s = 2), outside
+/// the disk's BH_DISK_OUTER_RADIUS_RS = 20 r_s outer edge, and 5 degrees above
+/// the disk plane, where the thin disk reads as a band across the shadow, its
+/// far side lenses into an arc over the shadow and its underside into an arc
+/// below it, and the lensed star field rings the hole. A settings file at the
+/// current K_PRESENTATION_SCHEMA_VERSION keeps its saved camera.
+inline constexpr float K_DEFAULT_CAMERA_DISTANCE = 150.0f;
+inline constexpr float K_DEFAULT_CAMERA_PITCH_DEG = 5.0f;
 
 /// Tone-map exposure of fresh settings: the record exposure rule
 /// (render/record_mode.h) at the default camera, diskBrightness 0.25, and
-/// gamma 2.5. The raw disk's 99th-percentile luminance there is 0.1742, and
-/// ACES^-1(0.9^2.5) / 0.1742 = 0.855 / 0.1742 = 4.9.
+/// gamma 2.5. The raw disk's 99th-percentile luminance there is 0.167, and
+/// ACES^-1(0.9^2.5) / 0.167 = 0.855 / 0.167 = 5.1; 4.9 lies within the
+/// percentile's frame-to-frame spread.
 inline constexpr float K_DEFAULT_TONE_EXPOSURE = 4.9f;
 
-/// Exposure of a settings file that has no toneExposure key, written before
-/// the exposure was saved: the fixed startup exposure of that time, so such a
-/// file keeps its look.
-inline constexpr float K_LEGACY_TONE_EXPOSURE = 1.0f;
+/// Version of the presentation defaults: camera pose, sky, and exposure. A
+/// settings file written at an older version (or with no
+/// presentationSchemaVersion key) takes those fields from fresh Settings once
+/// on load and keeps every other saved field. Bump it whenever a default below
+/// changes how a fresh frame looks.
+inline constexpr int K_PRESENTATION_SCHEMA_VERSION = 1;
 
 /// Background intensity of fresh settings: the rule's sky target at
-/// K_DEFAULT_TONE_EXPOSURE. The default sky (nasa_pia22085) has raw
-/// 99th-percentile luminance 0.591 at intensity 1 from the default camera,
-/// linear in the intensity, and ACES^-1(0.8^2.5) / (4.9 * 0.591) =
-/// 0.438 / 2.90 = 0.15 puts it at display 0.8.
-inline constexpr float K_DEFAULT_BACKGROUND_INTENSITY = 0.15f;
+/// K_DEFAULT_TONE_EXPOSURE for the default backdrop (jwst_carina_cosmic_cliffs,
+/// off by default so the star-field cubemap shows). Its raw 99th-percentile
+/// luminance is 0.347 at intensity 1 above the disk from the default camera,
+/// linear in the intensity, and ACES^-1(0.8^2.5) / (4.9 * 0.347) = 0.26 puts it
+/// at display 0.8.
+inline constexpr float K_DEFAULT_BACKGROUND_INTENSITY = 0.26f;
 
 struct Settings {
   int workspaceSchemaVersion = 0;
+  int presentationSchemaVersion = K_PRESENTATION_SCHEMA_VERSION;
   int workspaceKind = 0;
   bool advancedControls = false;
   // === DISPLAY ===
@@ -113,11 +119,13 @@ struct Settings {
   int bloomIterations = 8;
 
   // === BACKGROUND ===
-  bool backgroundEnabled = true;
-  std::string backgroundId = "nasa_pia22085";
+  // The equirect backdrop is off by default: the star-field cubemap is the sky.
+  // A sky at infinity has no parallax, so parallax and drift start at zero.
+  bool backgroundEnabled = false;
+  std::string backgroundId = "jwst_carina_cosmic_cliffs";
   float backgroundIntensity = K_DEFAULT_BACKGROUND_INTENSITY;
-  float backgroundParallaxStrength = 0.0006f;
-  float backgroundDriftStrength = 0.01f;
+  float backgroundParallaxStrength = 0.0f;
+  float backgroundDriftStrength = 0.0f;
 
   // === CAMERA ===
   float cameraYaw = 0.0f;
