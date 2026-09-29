@@ -10,6 +10,7 @@
  * (S = 1 or 3) has Trip_8 = 255 * 254 / 6 = 10795 box-kites, 259080 cells.
  */
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <map>
@@ -142,11 +143,9 @@ int positionOf(const EmanationTable &table, int lo) {
 // Positions in @p newTable of every low label of @p oldTable, shifted by @p offset.
 std::vector<int> embeddedPositions(const EmanationTable &oldTable, const EmanationTable &newTable,
                                    int offset) {
-  std::vector<int> positions;
-  positions.reserve(oldTable.tone.lo.size());
-  for (const int lo : oldTable.tone.lo) {
-    positions.push_back(positionOf(newTable, lo + offset));
-  }
+  std::vector<int> positions(oldTable.tone.lo.size());
+  std::ranges::transform(oldTable.tone.lo, positions.begin(),
+                         [&](int lo) { return positionOf(newTable, lo + offset); });
   return positions;
 }
 

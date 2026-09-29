@@ -338,11 +338,8 @@ inline std::vector<int> skyRegimeStruts(int n) {
     }
     smallest.try_emplace(regimeAddress(n, s), s);
   }
-  std::vector<int> struts;
-  struts.reserve(smallest.size());
-  for (const auto &entry : smallest) {
-    struts.push_back(entry.second);
-  }
+  std::vector<int> struts(smallest.size());
+  std::ranges::transform(smallest, struts.begin(), [](const auto &entry) { return entry.second; });
   std::ranges::sort(struts);
   return struts;
 }

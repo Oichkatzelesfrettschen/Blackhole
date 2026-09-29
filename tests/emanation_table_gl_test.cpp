@@ -16,7 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
-#include <iterator>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -150,9 +150,10 @@ struct MapAnswer {
 // emanation-map and emanation-display markers) in a compute shader over
 // @p queries, so the GPU code is compared with the CPU model of the table.
 std::vector<MapAnswer> runShaderMaps(const std::vector<MapQuery> &queries) {
-  std::ifstream file(std::string(BH_SOURCE_DIR) + "/shader/tesseract_panes.frag");
-  const std::string source((std::istreambuf_iterator<char>(file)),
-                           std::istreambuf_iterator<char>());
+  const std::ifstream file(std::string(BH_SOURCE_DIR) + "/shader/tesseract_panes.frag");
+  std::ostringstream contents;
+  contents << file.rdbuf();
+  const std::string source = contents.str();
   const std::string maps = shaderSection(source, "emanation-map");
   const std::string display = shaderSection(source, "emanation-display");
   EXPECT_FALSE(maps.empty());

@@ -266,11 +266,11 @@ void TesseractRenderer::uploadEmanation(int strut, const tesseract::EmanationTab
   emanationStrut_ = strut;
   emanationDmz_ = table.dmzCount;
   emanationWalk_ = tesseract::xorTripleWalk(table, tesseract::EMANATION_WALK_LENGTH);
-  emanationWalkValues_.clear();
-  emanationWalkValues_.reserve(emanationWalk_.size());
-  for (const tesseract::WalkCell &cell : emanationWalk_) {
-    emanationWalkValues_.push_back(table.at(cell.row, cell.col));
-  }
+  emanationWalkValues_.resize(emanationWalk_.size());
+  std::ranges::transform(emanationWalk_, emanationWalkValues_.begin(),
+                         [&table](const tesseract::WalkCell &cell) {
+                           return table.at(cell.row, cell.col);
+                         });
   emanationFill_ = table.totalPossible == 0
                        ? 0.0f
                        : static_cast<float>(table.dmzCount) / static_cast<float>(table.totalPossible);
