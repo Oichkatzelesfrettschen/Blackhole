@@ -33,6 +33,8 @@ void printCliUsage(const char *argv0) {
   std::printf("  --reference-quality <balanced|reference>  Numerical tier.\n");
   std::printf("  --renderer-geodesic <legacy-beauty|schwarzschild-reference|kerr-reference>  Startup geodesic.\n");
   std::printf("  --renderer-backend <fragment|compute|cuda>  Startup backend.\n");
+  std::printf("  --renderer-radiative <background-only|thin-surface|volumetric-rte|stokes>"
+              "  Startup radiative model.\n");
   std::printf("  --export-frames N       Export on settled frame N, then exit (default: frame 5, exit 6).\n");
   std::printf("  --export-size W H       Set export render dimensions.\n");
   std::printf("  --export-exposure X     Set export exposure without changing saved settings.\n");
@@ -147,6 +149,13 @@ CliParseOutcome parseCliOptions(int argc, char **argv, CliOptions &out) {
       out.rendererBackend = argv[++i];
       if (out.rendererBackend == "fragment" || out.rendererBackend == "compute" ||
           out.rendererBackend == "cuda") {
+        continue;
+      }
+    }
+    if (arg == "--renderer-radiative" && i + 1 < argc) {
+      out.rendererRadiative = argv[++i];
+      if (out.rendererRadiative == "background-only" || out.rendererRadiative == "thin-surface" ||
+          out.rendererRadiative == "volumetric-rte" || out.rendererRadiative == "stokes") {
         continue;
       }
     }

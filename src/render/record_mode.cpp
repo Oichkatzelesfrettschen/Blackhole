@@ -481,6 +481,8 @@ void applyReferenceSceneSetup(RenderState &rs, const platform::CliOptions &cli,
   rs.physicsCore.enablePhotonSphere = false;
   rs.hawking.hawkingGlowEnabled = false;
   rs.disk.adiskEnabled = !silhouette;
+  // The oracles describe the smooth Page-Thorne disk.
+  rs.disk.diskTurbulence = 0.0f;
   rs.disk.adiskParticle = false;
   rs.disk.useNoiseTexture = false;
   rs.disk.noiseTextureReady = true;
@@ -614,6 +616,7 @@ void writeRendererMetadata(const RenderState &rs, const platform::CliOptions &cl
       "  \"source_revision\": \"{}\",\n  \"scene_mode\": \"{}\",\n"
       "  \"tracer_spin\": {:.9g},\n  \"lut_spin\": {:.9g},\n"
       "  \"lut_spin_clamped\": {},\n  \"disk_transfer_mode\": \"{}\",\n"
+      "  \"disk_turbulence\": {:.9g},\n"
       "  \"requested_backend\": \"{}\",\n  \"effective_backend\": \"{}\",\n"
       "  \"requested_geodesic_model\": \"{}\",\n"
       "  \"effective_geodesic_model\": \"{}\",\n"
@@ -627,18 +630,19 @@ void writeRendererMetadata(const RenderState &rs, const platform::CliOptions &cl
       "  \"observer_look_latitude_degrees\": {:.9g},\n"
       "  \"observer_spin_deficit\": {:.17g},\n  \"observer_radius_offset\": {:.17g},\n",
       captureSourceRevision(), identity.sceneMode, identity.tracerSpin, identity.lutSpin,
-      identity.lutSpinClamped, identity.diskTransferMode,
-      cli.rendererBackend.empty() ? rendererName(contract.backend) : std::string_view(cli.rendererBackend),
+      identity.lutSpinClamped, identity.diskTransferMode, rs.disk.diskTurbulence,
+      cli.rendererBackend.empty() ? rendererName(contract.backend)
+                                  : std::string_view(cli.rendererBackend),
       rendererName(contract.backend),
-      cli.rendererGeodesic.empty() ? rendererName(contract.geodesic) : std::string_view(cli.rendererGeodesic),
+      cli.rendererGeodesic.empty() ? rendererName(contract.geodesic)
+                                   : std::string_view(cli.rendererGeodesic),
       rendererName(contract.geodesic), rs.dispatch.computeMaxSteps, identity.effectiveSteps,
       rs.dispatch.computeStepSize, identity.effectiveStepSize, rs.post.tonemappingEnabled,
       rs.post.toneExposure, rs.post.gamma, rs.post.bloomStrength, rs.post.bloomThreshold,
       rs.post.tonemappingEnabled && rs.post.tonemapFilmGrainStrength > 0.0f,
       rs.post.tonemappingEnabled && rs.post.tonemapVignetteStrength > 0.0f,
       rs.post.tonemappingEnabled && rs.post.tonemapChromaticAberrationStrength > 0.0f,
-      rs.observerView.fovDeg,
-      rs.observerView.lookLongitudeDeg, rs.observerView.lookLatitudeDeg,
+      rs.observerView.fovDeg, rs.observerView.lookLongitudeDeg, rs.observerView.lookLatitudeDeg,
       rs.observerView.epsilon, rs.observerView.x);
   if (rs.terminalDiagnostics.valid) {
     const auto &counts = rs.terminalDiagnostics.counts;

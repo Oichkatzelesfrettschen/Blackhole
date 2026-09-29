@@ -90,6 +90,7 @@ uniform float diskPeakTemperature = 6500.0;
 uniform float diskBrightness      = 1.0;
 uniform float diskFluxPeak        = 1.1458947e-4;
 uniform float diskTransferMode    = 0.0; // 0 = Physical g-factor, 1 = Interstellar (g = 1)
+uniform float diskTurbulence      = 0.0; // log-normal width of the disk emissivity texture
 // Scene toggles shared with blackhole_main.frag (bhHoleRendered,
 // bhMetricRadius in interop_trace.glsl).
 uniform float gravitationalLensing = 1.0;

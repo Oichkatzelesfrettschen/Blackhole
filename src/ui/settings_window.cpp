@@ -454,6 +454,13 @@ void renderPhysicsSettings(RenderState &rs) {
   ImGui::SliderFloat("Disk brightness", &rs.disk.diskBrightness, 0.01f, 100.0f, "%.2f",
                      ImGuiSliderFlags_Logarithmic);
   kerrTracerControlTooltip();
+  ImGui::SliderFloat("Disk turbulence", &rs.disk.diskTurbulence, 0.0f, 1.2f, "%.2f");
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    ImGui::SetTooltip("Log-normal texture on the disk emissivity with mean 1, orbiting at the\n"
+                      "Keplerian rate and sheared into spirals; it stands in for turbulent\n"
+                      "density the thin-disk model averages away. 0 is the smooth\n"
+                      "Novikov-Thorne disk. Fragment and compute paths only.");
+  }
   ImGui::EndDisabled();
 
   // Physics visualization toggles

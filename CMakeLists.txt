@@ -5484,6 +5484,34 @@ if(BUILD_TESTING)
     )
   endif()
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/disk_turbulence_shader_test.cpp")
+    # Shipped shader/include/disk_turbulence.glsl in a compute dispatch: mean
+    # 1 and an exact sigma = 0 path. Skips without GL 4.6.
+    add_executable(disk_turbulence_shader_test
+      "${PROJECT_SOURCE_DIR}/tests/disk_turbulence_shader_test.cpp"
+    )
+    target_include_directories(disk_turbulence_shader_test PRIVATE
+      "${PROJECT_SOURCE_DIR}/tests"
+      "${PROJECT_SOURCE_DIR}/src"
+    )
+    target_compile_definitions(disk_turbulence_shader_test PRIVATE
+      GLFW_INCLUDE_NONE
+      BH_SHADER_INCLUDE_DIR="${PROJECT_SOURCE_DIR}/shader/include"
+    )
+    target_compile_options(disk_turbulence_shader_test PRIVATE ${PROJECT_WARNINGS})
+    target_link_libraries(disk_turbulence_shader_test PRIVATE
+      glfw
+      glbinding::glbinding
+      GTest::gtest
+      GTest::gtest_main
+    )
+    add_test(NAME disk_turbulence_shader COMMAND disk_turbulence_shader_test)
+    set_tests_properties(disk_turbulence_shader PROPERTIES
+      LABELS "physics;gpu;disk"
+      TIMEOUT 60
+    )
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/verified_physics_test.cpp")
     add_executable(verified_physics_test
       "${PROJECT_SOURCE_DIR}/tests/verified_physics_test.cpp"

@@ -7,6 +7,7 @@
 #include "include/stokes_transport.glsl"
 #include "include/disk_profile.glsl"
 #include "include/disk_transfer.glsl"
+#include "include/disk_turbulence.glsl"
 #include "include/ray_terminal.h"
 
 const float BH_EPSILON = 1e-6;
@@ -450,11 +451,21 @@ vec3 bhHorizonShade(float r, float r_s) {
                           hawkingSpectrumLUT, useHawkingLUTs);
 }
 
+// Turbulence factor at a disk point p (physics frame, disk in xy): the
+// log-normal width is the diskTurbulence uniform and the pattern's clock is
+// the time uniform read as coordinate time in GM/c^3 (disk_turbulence.glsl).
+float bhDiskTurbulence(vec3 p, float r_s) {
+  float M = max(0.5 * r_s, BH_EPSILON);
+  return bhDiskTurbulenceFactor(length(p.xy) / M, atan(p.y, p.x), kerrSpin, time,
+                                diskTurbulence);
+}
+
 vec4 bhDiskColorFromHit(HitResult hit, float r_s) {
   float r = length(hit.hitPoint.xy);
   vec3 chroma;
   float intensity;
   bhDiskEmission(r, hit.photonLambda, r_s, chroma, intensity);
+  intensity *= bhDiskTurbulence(hit.hitPoint, r_s);
 
   if (useSpectralLUT > 0.5) {
     float rNorm = r / max(r_s, BH_EPSILON);
@@ -674,7 +685,8 @@ void bhDiskPiece(vec3 p0, vec3 p1, float ta, float tb, float h, float r_s, float
   }
   vec3 weighted = mix(p0, p1, mix(ta, tb, moments.y));
   vec3 color;
-  float radial = bhDiskRadialEmission(length(weighted.xy), photonLambda, r_s, color);
+  float radial = bhDiskRadialEmission(length(weighted.xy), photonLambda, r_s, color) *
+                 bhDiskTurbulence(weighted, r_s);
   rhoSum += column;
   jSum += radial * column;
   colorSum += color * (radial * column);
