@@ -62,6 +62,12 @@ inline constexpr float K_REFERENCE_STEP_SIZE = 0.02f;
 inline constexpr float K_REFERENCE_MIN_AFFINE_RANGE = 40.0f;
 inline constexpr int K_REFERENCE_MAX_STEPS = 20000;
 
+/// Accretion-disk outer edge in units of r_s. BH_DISK_OUTER_RADIUS_RS
+/// (shader/include/interop_trace.glsl) and D_DISK_OUTER_RADIUS_RS
+/// (src/cuda/device_physics.cuh) carry the same value, and
+/// settings_persistence_test reads both sources to hold them equal.
+inline constexpr float K_DISK_OUTER_RADIUS_RS = 20.0f;
+
 // Near-critical rays exhaust a budget by running out of affine range, not by
 // step error, so the reference tier covers twice the selected range (and at
 // least K_REFERENCE_MIN_AFFINE_RANGE) at the finer K_REFERENCE_STEP_SIZE. A

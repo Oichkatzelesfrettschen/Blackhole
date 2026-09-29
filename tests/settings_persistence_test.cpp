@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include "render/renderer_contract.h"
 #include "settings.h"
 
 namespace {
@@ -124,16 +125,24 @@ TEST_F(SettingsPersistence, FreshSettingsCarryTheRuleExposureAndSkyIntensity) {
   EXPECT_TRUE(readText(output).contains("\"toneExposure\": 4.9,"));
 }
 
-TEST_F(SettingsPersistence, LegacyFileWithoutExposureKeepsItsLook) {
-  const auto input = testDirectory() / "legacy-exposure.json";
+TEST_F(SettingsPersistence, FileBeforeThePresentationSchemaTakesTheDefaultPresentation) {
+  const auto input = testDirectory() / "legacy-presentation.json";
   std::ofstream stream(input);
-  stream << "\"backgroundIntensity\": 1,\n\"gamma\": 2.5\n";
+  stream << "\"backgroundEnabled\": true,\n\"backgroundId\": \"nasa_pia22085\",\n"
+         << "\"backgroundIntensity\": 1,\n\"cameraDistance\": 240,\n\"gamma\": 2.25\n";
   stream.close();
   ASSERT_TRUE(stream);
   auto &manager = SettingsManager::instance();
   ASSERT_TRUE(manager.load(input.string()));
-  EXPECT_EQ(manager.get().toneExposure, K_LEGACY_TONE_EXPOSURE);
-  EXPECT_EQ(manager.get().backgroundIntensity, 1.0f);
+  const Settings fresh;
+  EXPECT_EQ(manager.get().presentationSchemaVersion, K_PRESENTATION_SCHEMA_VERSION);
+  EXPECT_EQ(manager.get().toneExposure, K_DEFAULT_TONE_EXPOSURE);
+  EXPECT_EQ(manager.get().backgroundEnabled, fresh.backgroundEnabled);
+  EXPECT_EQ(manager.get().backgroundId, fresh.backgroundId);
+  EXPECT_EQ(manager.get().backgroundIntensity, K_DEFAULT_BACKGROUND_INTENSITY);
+  EXPECT_EQ(manager.get().cameraDistance, K_DEFAULT_CAMERA_DISTANCE);
+  // Fields outside the presentation set keep their saved values.
+  EXPECT_EQ(manager.get().gamma, 2.25f);
 }
 
 TEST_F(SettingsPersistence, SavedExposureRoundTrips) {
@@ -156,20 +165,42 @@ TEST_F(SettingsPersistence, FileWithoutCameraKeysTakesTheDefaultCamera) {
   ASSERT_TRUE(manager.load(input.string()));
   EXPECT_EQ(manager.get().cameraDistance, K_DEFAULT_CAMERA_DISTANCE);
   EXPECT_EQ(manager.get().cameraPitch, K_DEFAULT_CAMERA_PITCH_DEG);
-  // The default camera sits outside the disk's 100 r_s = 200 unit outer edge.
-  EXPECT_GT(K_DEFAULT_CAMERA_DISTANCE, 200.0f);
+  // The default camera sits outside the disk's 20 r_s = 40 unit outer edge.
+  EXPECT_GT(K_DEFAULT_CAMERA_DISTANCE, 2.0f * blackhole::K_DISK_OUTER_RADIUS_RS);
 }
 
 TEST_F(SettingsPersistence, SavedCameraKeysKeepTheirValues) {
   const auto input = testDirectory() / "saved-camera.json";
   std::ofstream stream(input);
-  stream << "\"cameraYaw\": 0,\n\"cameraPitch\": -6,\n\"cameraDistance\": 15\n";
+  stream << "\"presentationSchemaVersion\": " << K_PRESENTATION_SCHEMA_VERSION
+         << ",\n\"cameraYaw\": 0,\n\"cameraPitch\": -6,\n\"cameraDistance\": 15\n";
   stream.close();
   ASSERT_TRUE(stream);
   auto &manager = SettingsManager::instance();
   ASSERT_TRUE(manager.load(input.string()));
   EXPECT_EQ(manager.get().cameraDistance, 15.0f);
   EXPECT_EQ(manager.get().cameraPitch, -6.0f);
+}
+
+// Reads the numeric literal that follows `name` in a source file.
+float sourceConstant(const std::filesystem::path &path, const std::string &name) {
+  const std::string text = readText(path);
+  const auto at = text.find(name);
+  if (at == std::string::npos) {
+    ADD_FAILURE() << name << " not found in " << path;
+    return 0.0f;
+  }
+  const auto digits = text.find_first_of("0123456789", at + name.size());
+  return std::stof(text.substr(digits));
+}
+
+TEST(DiskOuterRadius, ShaderAndCudaMatchTheHostConstant) {
+  const std::filesystem::path root = BH_SOURCE_DIR;
+  EXPECT_EQ(sourceConstant(root / "shader/include/interop_trace.glsl",
+                           "const float BH_DISK_OUTER_RADIUS_RS ="),
+            blackhole::K_DISK_OUTER_RADIUS_RS);
+  EXPECT_EQ(sourceConstant(root / "src/cuda/device_physics.cuh", "#define D_DISK_OUTER_RADIUS_RS"),
+            blackhole::K_DISK_OUTER_RADIUS_RS);
 }
 
 } // namespace

@@ -3849,6 +3849,8 @@ if(BUILD_TESTING)
 
   add_executable(settings_persistence_test tests/settings_persistence_test.cpp src/settings.cpp)
   target_include_directories(settings_persistence_test PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  target_compile_definitions(settings_persistence_test PRIVATE
+    BH_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
   target_compile_options(settings_persistence_test PRIVATE ${PROJECT_WARNINGS})
   target_link_libraries(settings_persistence_test PRIVATE GTest::gtest_main)
   add_test(NAME settings_persistence COMMAND settings_persistence_test)

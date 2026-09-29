@@ -834,7 +834,7 @@ void exportFrameOnce(RenderState &rs, const platform::CliOptions &cli) {
       rs.exporting.exportFailed = true;
     }
   }
-  if (!cli.referenceScene.empty() && rs.terminalDiagnostics.valid) {
+  if (rs.terminalDiagnostics.valid) {
     const std::string mapPath = !cli.exportFramePath.empty()
                                     ? cli.exportFramePath + ".terminals.pgm"
                                     : cli.exportRawFramePath + ".terminals.pgm";

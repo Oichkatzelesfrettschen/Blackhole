@@ -45,6 +45,9 @@ __device__ __forceinline__ void d_set_terminal(RayTerminal *output, RayTerminal 
 #define D_EPSILON       1.0e-6f                 /**< @brief Small guard value for division and comparisons. */
 #define D_PHOTON_SPHERE 1.5f                    /**< @brief Photon sphere radius in units of rs (= 3M/2M = 1.5). */
 #define D_ISCO_RATIO    3.0f                    /**< @brief ISCO radius ratio (Schwarzschild: r_ISCO = 3*rs). */
+#define D_DISK_OUTER_RADIUS_RS                                                                     \
+  20.0f /**< @brief Accretion-disk outer edge in units of rs; BH_DISK_OUTER_RADIUS_RS in           \
+           interop_trace.glsl. */
 
 /* Synchrotron G(x) LUT domain -- shared with the C++ generator through
  * shader/include/synchrotron_lut_domain.h. */
@@ -1100,7 +1103,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
         float r_horizon = d_kerr_outer_horizon(rs, a);
         if (r_horizon <= D_EPSILON) r_horizon = rs;
         float r_disk_in = d_isco;
-        float r_disk_out = 100.0f * rs; /* bhTraceGeodesic and the inline kernels use 100 rs */
+        float r_disk_out = D_DISK_OUTER_RADIUS_RS * rs;
 
         float const a_trace = d_kerr_trace_spin(a);
         KerrConsts c;
@@ -1153,7 +1156,7 @@ __device__ __forceinline__ HitResult d_trace_geodesic(float3 cam_pos, float3 ray
         float3 pos = cam_pos;
         float3 vel = ray_dir;
         float r_disk_in = d_isco;
-        float r_disk_out = 100.0f * rs;
+        float r_disk_out = D_DISK_OUTER_RADIUS_RS * rs;
 
         for (int step = 0; step < max_steps; ++step) {
             float3 old_pos = pos;
@@ -2244,7 +2247,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
     if (r_horizon <= D_EPSILON) { r_horizon = rs; }
 
     float const r_disk_in   = d_isco;
-    float const r_disk_out  = 100.0f * rs;
+    float const r_disk_out = D_DISK_OUTER_RADIUS_RS * rs;
     float const h_disk      = fmaxf(0.1f * rs, D_EPSILON);
     float const dt          = d_step_size;
     float const max_dist    = d_max_dist;
@@ -2575,7 +2578,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     if (r_horizon <= D_EPSILON) { r_horizon = rs; }
 
     float const r_disk_in   = d_isco;
-    float const r_disk_out  = 100.0f * rs;
+    float const r_disk_out = D_DISK_OUTER_RADIUS_RS * rs;
     float const h_disk      = fmaxf(0.1f * rs, D_EPSILON);
     float const dt          = d_step_size;
     float const max_dist    = d_max_dist;

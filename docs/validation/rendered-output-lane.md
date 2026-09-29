@@ -137,6 +137,24 @@ The image test writes a pass receipt only after the scene A assertions pass.
 only with a receipt newer than the test sources, binary, and manifest; CTest
 registration alone records a pending execution status.
 
+## Default scene
+
+`DefaultSceneDiskStaysLit` renders the desktop's first frame from an empty
+working directory, so fresh `Settings` supply the camera (75 r_s out, 5
+degrees above the disk plane), the star-field cubemap sky, and the exposure.
+It reads the per-pixel terminal map and requires the disk to cover at most
+35% of the frame, the shadow to be present, and at most 5% of disk pixels to
+fall below 1% of the disk's 99th-percentile raw luminance, which the record
+exposure rule displays as black. An opaque disk edge far outside the emitting
+radii fails the last check: the disk then hides the sky while its outer
+annulus shows no emission. The disk outer edge is `K_DISK_OUTER_RADIUS_RS`
+(20 r_s) in `render/renderer_contract.h`, and `settings_persistence_test`
+holds the GLSL and CUDA copies equal to it. A settings file written before
+`K_PRESENTATION_SCHEMA_VERSION` takes the default camera, sky, and exposure
+once on load. Fresh-settings frames at the earlier and the current
+defaults: [before](figures/default-scene-before.jpg),
+[after](figures/default-scene-after.jpg).
+
 ## Scope
 
 EHT images constrain a broad asymmetric emission ring and central brightness

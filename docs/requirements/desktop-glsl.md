@@ -81,7 +81,7 @@ Notes:
   requested headless resolution.
 - `showcase-orbit` now supports named framing presets:
   - `above-disk` (the default): 120 r_s out and 10 degrees above the plane,
-    outside the disk's 100 r_s outer edge, so the thin disk band, the lensed
+    outside the disk's 20 r_s outer edge, so the thin disk band, the lensed
     far side over the shadow, and the sky all show
   - `inside-disk`: another name for `wide-right`
   - `centered`
