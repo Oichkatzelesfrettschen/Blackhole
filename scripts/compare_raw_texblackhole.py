@@ -49,6 +49,7 @@ def _capture(
     stage: str,
     *,
     interop_fragment: bool = False,
+    backend: str | None = None,
 ) -> None:
     env = os.environ.copy()
     env.setdefault("BLACKHOLE_WINDOW_HIDDEN", "1")
@@ -66,6 +67,8 @@ def _capture(
         "--export-raw-frame",
         str(output),
     ]
+    if backend is not None:
+        cmd += ["--renderer-backend", backend]
     subprocess.run(cmd, env=env, check=True)
 
 
@@ -325,7 +328,11 @@ def main() -> int:
         choices=["legacy", "interop-fragment"],
         help="Capture the default legacy traceColor lane or force the geodesic fragment parity lane.",
     )
-    parser.add_argument("--cuda-binary", default="build/Release/BlackholeCUDA")
+    parser.add_argument(
+        "--cuda-binary",
+        default="build/CUDA/Release/Blackhole",
+        help="Blackhole built with ENABLE_CUDA=ON (preset cuda), run on the CUDA backend",
+    )
     parser.add_argument("--profile", default="showcase-orbit")
     parser.add_argument("--composition", default="wide-right")
     parser.add_argument(
@@ -371,7 +378,7 @@ def main() -> int:
         args.stage,
         interop_fragment=(args.glsl_mode == "interop-fragment"),
     )
-    _capture(cuda_binary, cuda_raw, args.profile, args.composition, args.stage)
+    _capture(cuda_binary, cuda_raw, args.profile, args.composition, args.stage, backend="cuda")
 
     glsl = _read_pfm(glsl_raw)
     cuda = _read_pfm(cuda_raw)

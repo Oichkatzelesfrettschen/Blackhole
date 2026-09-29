@@ -17,7 +17,6 @@ build produces today:
 
 - `Blackhole`: shared desktop application
 - `BlackholeGLSL`: desktop executable with the GLSL/OpenGL lane only
-- `BlackholeCUDA`: desktop executable with the CUDA lane forced on
 - `libblackhole_bridge.so`: Blender bridge shared library
 
 ## Verification companions

@@ -2,8 +2,9 @@
 
 ## Scope
 
-Use this lane when you want the shared desktop UI with the CUDA backend enabled.
-The dedicated executable for this product is `BlackholeCUDA`.
+Use this lane to build the `Blackhole` desktop application with the optional
+CUDA trace accelerator. OpenGL stays the default and primary backend; CUDA is
+selected in the renderer settings or with `--renderer-backend cuda`.
 
 ## Required
 
@@ -41,10 +42,10 @@ sudo pacman -S --needed \
 ## Configure/build
 
 ```bash
-./scripts/conan_install.sh Release build/CUDA-Only/Release
-cmake --preset cuda-only
-cmake --build --preset cuda-only
-ctest --preset cuda-only
+./scripts/conan_install.sh Release build/CUDA/Release
+cmake --preset cuda
+cmake --build --preset cuda
+ctest --preset cuda
 ```
 
 ## Optional Conan-backed extras
@@ -66,11 +67,11 @@ useful for xsimd/SLEEF measurements.
 For manual Conan installs, keep the Conan and CMake toggles aligned:
 
 ```bash
-./scripts/conan_install.sh Release build/CUDA-Only/Release \
+./scripts/conan_install.sh Release build/CUDA/Release \
   -o blackhole/*:enable_google_benchmark=True \
   -o blackhole/*:enable_mimalloc=True
 
-cmake --preset cuda-only \
+cmake --preset cuda \
   -DENABLE_GOOGLE_BENCHMARK=ON \
   -DENABLE_MIMALLOC=ON
 ```

@@ -76,7 +76,7 @@ cmake --build build/Release
 
 - `release`: baseline desktop build.
 - `glsl-only`: shared desktop UI without CUDA or Blender bridge.
-- `cuda-only`: shared desktop UI with CUDA enabled.
+- `cuda`: the desktop application with the optional CUDA trace accelerator; OpenGL stays the default backend.
 - `blender-bridge`: bridge-focused build without the desktop app.
 - `full-dev`: shared desktop UI, CUDA, Blender bridge, tools, and tests.
 

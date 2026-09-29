@@ -120,8 +120,8 @@ Notes:
   - `BLACKHOLE_WIREGRID_STRENGTH=<float>`
   - `BLACKHOLE_WIREGRID_SCENE_PRESERVE=<float>`
   - `BLACKHOLE_WIREGRID_COLOR_R/G/B/A=<float>`
-  This now works consistently across `BlackholeGLSL`, `Blackhole`, and
-  `BlackholeCUDA`, including volumetric paths that used to place the overlay at
+  This works consistently across `BlackholeGLSL` and `Blackhole` on every
+  backend, including volumetric paths that used to place the overlay at
   a fake far-plane point or skip it entirely.
   - `beauty` keeps the overlay secondary to showcase/off-axis scene reading
   - `diagnostic` keeps the overlay clearer for teaching/debug captures
