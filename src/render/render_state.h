@@ -216,7 +216,7 @@ struct RenderState {
     float pulseNow = 10.0f;  ///< Depth the pulse leaves (t_now).
     float pulsePast = 6.0f;  ///< Depth the pulse reaches (t_past).
     float pulseWidth = 0.35f;
-    float cellSize = 3.4f;       ///< Lattice cell period ("Corridor density").
+    float cellSize = 18.0f;      ///< Lattice cell period ("Corridor density").
     float driftSpeed = 0.6f;     ///< Forward camera drift, world units per second.
     float driftDistance = 0.0f; ///< Accumulated forward drift.
     float strandGlow = 1.0f;    ///< Fiber and frame emissive scale.
