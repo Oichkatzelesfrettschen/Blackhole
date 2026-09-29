@@ -264,11 +264,12 @@ far out [PUB, not re-derived here]. The regimes:
 - Thick flows (RIAF, MAD): H/R = 0.25-0.3 (Porth et al. 2019, appearance
   note section 3), where the thin-disk equation does not apply.
 
-[CODE] The RTE and Stokes paths model the disk as a Gaussian layer
-exp(-z^2/2h^2) with h = 0.1 r_s fixed (`interop_trace.glsl`, "h_disk", and
-`D_...` twin in `device_physics.cuh`); the legacy path uses
-`adiskHeight = 0.2`. No H(r) profile, no Omega_theta, no radiation-pressure
-regime. G4 in section 5.
+[CODE] The GLSL RTE and Stokes paths model the disk as a flared Gaussian
+layer exp(-z^2/2h^2) with h = `diskScaleHeight` * rho (default H/r 0.03,
+`bhDiskScaleHeight` in `interop_trace.glsl`, floored at 0.02 r_s). The CUDA
+twin keeps a fixed h = 0.1 r_s (`h_disk` in `device_physics.cuh`); the
+legacy path uses `adiskHeight = 0.2`. The flare is a constant H/r: no
+Omega_theta profile, no radiation-pressure regime. G4 in section 5.
 
 ### 2.4 Outer edge
 
@@ -506,8 +507,9 @@ delay (r2 - r1) + 2 ln((r2 - 2)/(r1 - 2)); Kerr principal-null delay
 rate `kerrDragAndTimeRates` (`kerr.glsl`), so the coordinate time along the
 ray exists. `HitResult` does not carry it (fields: terminal, hitPoint, phi,
 photonLambda, minRadius, closest-approach data). The disk's own time
-dependence uses the wall-clock `time` uniform (legacy noise advection),
-independent of any light-travel delay.
+dependence uses the wall-clock `time` uniform times `diskTimeScale`
+(default 10 GM/c^3 per wall second), which advances the turbulence pattern
+of `disk_turbulence.glsl`; it is independent of any light-travel delay.
 
 ## 5. Map against the renderer
 
@@ -538,14 +540,14 @@ those points.
 | Epicyclic frequencies | missing | nowhere in tree |
 | Radial instability inside ISCO / plunging emission | missing | flux is zero at r <= r_isco; no plunging orbit; `analytic_kerr_geodesic.h` and `device_analytic_kerr.cuh` have plunging Kerr geodesics but no render path calls them |
 | Finite ISCO stress | missing | |
-| Vertical structure H(r) | partial | fixed h = 0.1 r_s Gaussian in RTE/Stokes, no Omega_theta or H(r) |
-| Outer edge | partial | hard 20 r_s cap; the appearance note R1 covers the flux fall-off; Toomre and tidal edges missing |
+| Vertical structure H(r) | partial | GLSL RTE/Stokes flare h = `diskScaleHeight` * rho (constant H/r 0.03); CUDA keeps fixed h = 0.1 r_s; no Omega_theta profile |
+| Outer edge | partial | thin-surface disk keeps the hard 20 r_s cap in GLSL and CUDA; the GLSL volumetric disk tapers past 20 r_s (`bhDiskTaper`, 8 r_s width, volume to 44 r_s); Toomre and tidal edges missing |
 | Tilt, twist, warp, precession | missing | disk plane hard-coded at z = 0 in `bhCheckDiskIntersection`, `d_check_disk`, `bhDiskSegment` |
 | Tilted-emitter g (full covariant) | missing | `dtDiskTransferG` is lambda-only |
 | Slow-light rendering | partial | `ray.t` integrated in `kerr.glsl`, not exported |
 | Hot-spot / QPO time dependence | missing | |
 | Observer-sky Kerr sky map | done (separate path) | `observer_sky.frag`, double-precision CPU map |
-| Turbulence | partial | only the legacy `blackhole_main.frag` noiseTexture octave loop exists on this branch; the interop and CUDA paths have none, and `disk_turbulence.glsl` does not exist here |
+| Turbulence | partial | log-normal Keplerian emissivity texture `bhDiskTurbulenceFactor` (`shader/include/disk_turbulence.glsl`, `diskTurbulence` default 0.6) on the GLSL interop path; CUDA draws the smooth disk; not a Lee-Gammie field |
 
 Frame: the interop path uses `bhWorldToPhysics(v) = (v.x, -v.z, v.y)`, spin +z and
 disk xy; tilt belongs in that frame only, since the legacy path spins about world +y.
@@ -573,11 +575,14 @@ measured.
 
 #### G4. Vertical structure H(r)
 
+- Status: partly addressed by the constant-H/r flare `bhDiskScaleHeight`
+  (h = `diskScaleHeight` * rho, GLSL only). The physical c_s/Omega_theta
+  profile and the radiation-pressure switch remain.
 - Equations: h(r) = (c_s/Omega_theta) with c_s from the outer boundary
   H/R = 0.03-0.1 as a parameter; a radiation-pressure switch
   h = (3/2)(mdot/eta) r_g (1 - sqrt(r_in/r)).
-- Sites: replace the constant `h_disk` in `bhTraceGeodesicRTE` and
-  `bhTraceGeodesicStokes` with `bhDiskHeight(rho)`; twin
+- Sites: replace the constant-ratio `bhDiskScaleHeight(rho, r_s)` (and the
+  CUDA fixed `h_disk`) with a `bhDiskHeight(rho)` built on Omega_theta; twin
   `d_disk_height` in `device_physics.cuh`; float `omegaTheta` in
   `shader/include/disk_transfer.glsl` and `device_disk_transfer.cuh`.
 - Tests: `Omega_theta = Omega_phi` at a=0 (analytic); Omega_theta positive

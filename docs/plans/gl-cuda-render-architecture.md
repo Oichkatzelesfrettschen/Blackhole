@@ -105,7 +105,7 @@ are not whole-file counts. The GLSL column sums the shader files named.
 | Stokes IQUV transport | 427 (`interop_trace.glsl` 162, `stokes_transport.glsl` 265) | 327 | duplicated |
 | GRMHD volume sample | not counted | 56 | duplicated |
 | Analytic Kerr (Jacobi elliptic, plunging orbits) | 0 | 504 (`device_analytic_kerr.cuh`) | CUDA only, reached only from tests |
-| Disk turbulence | about 25 in the legacy `blackhole_main.frag` octave loop, plus the host FastNoise2 volume | 0 | GLSL only, legacy path only |
+| Disk turbulence | 106 in `disk_turbulence.glsl` (`bhDiskTurbulenceFactor`), plus the legacy `blackhole_main.frag` octave loop and the host FastNoise2 volume | 0 | GLSL only |
 | Camera and LUT plumbing | typed uniforms in `uniform_binding.cpp` | about 3,200 (kernels 1,129, launch 583, manager and backend 497, interop 281, LUT manager 613, registry 157) | CUDA host machinery |
 
 Totals over the rows with both counts: about 2,200 CUDA lines against about
@@ -142,10 +142,14 @@ Each item is observed; the image effect is stated where it follows.
    (lines 200-203) extracts the numbers from the source text and compares
    them. That pins the value and is the strongest cross-language check in
    the tree; it does not extend to functions.
-5. **Turbulence exists only in GLSL.** The noise-texture octave loop lives
-   in `blackhole_main.frag` (lines 295-310) and reads the host volume; neither
-   the interop path nor CUDA has it. A disk-appearance feature written for
-   one path is invisible in the others.
+5. **Disk appearance features exist only in GLSL.** Four are GLSL only:
+   the log-normal turbulence (`disk_turbulence.glsl`, `bhDiskTurbulenceFactor`,
+   uniform `diskTurbulence`), the flared scale height (`bhDiskScaleHeight`,
+   h = `diskScaleHeight` * rho), the outer density taper (`bhDiskTaper`), and
+   the disk clock (`diskTimeScale`). CUDA draws the smooth disk with the
+   fixed 0.1 r_s layer and the 20 r_s edge. The RTE and Stokes absorption
+   law alpha = `rteOpacityScale` * <rho> is the one appearance change made in
+   both. A feature written for one path is invisible in the other.
 6. **CUDA-only code that never renders.** `device_analytic_kerr.cuh` (504
    lines: AGM Jacobi elliptic functions for O(1) photon-ring rays) is
    included by `tests/cuda_analytic_kerr_test.cu` and
@@ -154,8 +158,11 @@ Each item is observed; the image effect is stated where it follows.
    reproduces cubemap face selection and layered equirect filtering that the
    fragment and compute paths get from `texture()`; any change to layer
    handling (`background_layer_params`, LOD bias) is made twice.
+8. **The CUDA precision variants disagree with the baseline kernel on SM 8.9**
+   (`cuda_variants_consistency`, issue #104), a further drift among the four
+   kernels of finding 1.
 
-Findings 1, 3, and 5 change what a user sees or silently drop a requested
+Findings 1, 3, 5, and 8 change what a user sees or silently drop a requested
 feature; 2, 6, and 7 are maintenance cost.
 
 ## 3. Parity tests that exist
@@ -199,8 +206,8 @@ transport. GL turns those into color.
 - For: it matches the user's premise; it removes the 1,000 lines of CUDA
   shading and sky sampling (background 335, shaper 198, wiregrid 173, hit
   shading 111, disk color about 210) [INF from the table]; and a new
-  appearance feature (turbulence, tilt, slow-light emission time) is written
-  once in GLSL. The observer-sky path already works this way: a
+  appearance feature (tilt, slow-light emission time; turbulence, flare,
+  taper, and clock already sit in GLSL) is written once in GLSL. The observer-sky path already works this way: a
   double-precision CPU trace builds a map, and `observer_sky.frag` shades
   from it [CODE].
 - Against: a terminal record crossing to GL costs bandwidth and an
@@ -281,8 +288,7 @@ Adopt (a) and (b) together, and let (c) follow for the shading code:
 3. **New appearance features are written once, in the shared core or in the
    GL shading pass, never in CUDA shading.** The acceptance test of the
    architecture is that tilt, warp, slow-light emission time
-   (`docs/physics/spacetime-and-disk-dynamics.md`, G1 and G2), and turbulence
-   each land with zero new lines in `device_physics.cuh` shading.
+   (`docs/physics/spacetime-and-disk-dynamics.md`, G1 and G2) each land with zero new lines in `device_physics.cuh` shading.
 4. **CUDA keeps its compute roles**: double-precision and analytic Kerr traces,
    volumetric RTE and Stokes transport as a radiance service behind a shared
    transport core, and LUT and sky-map builds.
@@ -381,9 +387,10 @@ so every later move is measured.
 ### Stage 5. Features written once
 
 - Land the tilted-disk surface and emission time
-  (`docs/physics/spacetime-and-disk-dynamics.md`, G1 and G2) and a disk
-  turbulence field in the shared core or the GL shading pass. The turbulence
-  becomes available on the interop and CUDA-fed paths for the first time.
+  (`docs/physics/spacetime-and-disk-dynamics.md`, G1 and G2) and the
+  turbulence, flare, taper, and clock now in `disk_turbulence.glsl` and
+  `interop_trace.glsl` moved into the shared core or the GL shading pass.
+  They become available on CUDA-fed output for the first time.
 - Gate: each feature's analytic-oracle tests from that note pass on GLSL and
   on CUDA-fed output; the diff adds no shading lines to `src/cuda/`.
 

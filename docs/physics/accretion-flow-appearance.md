@@ -258,6 +258,22 @@ note (script method stated), [UNVERIFIED] recalled but not fetched.
   legacy path with a linear radial01 falloff; adiskHeight = 0.2;
   emission = density * adiskLit * alpha * abs(noise) * innerBoost with the
   noise factor a product of noiseTexture samples (adiskNoiseLOD octaves).
+- shader/include/interop_trace.glsl (Kerr interop path): the thin-surface
+  default disk is opaque with the hard 20 r_s edge, shaded by
+  `bhDiskEmission` (g^4 F/F_peak bolometric law). The volumetric RTE and
+  Stokes disk sets absorption alpha = `rteOpacityScale` * <rho> (GLSL and
+  CUDA), flares as h = `diskScaleHeight` * rho (default H/r 0.03,
+  `bhDiskScaleHeight`), tapers past 20 r_s as a Gaussian of width
+  `BH_DISK_TAPER_WIDTH_RS` = 8 r_s (`bhDiskTaper`, volume out to 44 r_s,
+  `bhDiskVolumeOuterRadius`), and advances its pattern on the disk clock
+  `diskTimeScale` (default 10 GM/c^3 per wall second). Flare, taper, and
+  clock are GLSL only; CUDA keeps the fixed 0.1 r_s layer and the 20 r_s
+  edge.
+- shader/include/disk_turbulence.glsl: `bhDiskTurbulenceFactor` multiplies
+  the Page-Thorne emissivity by a log-normal factor exp(sigma n - sigma^2/2)
+  of four-octave value noise sheared at the Keplerian angular velocity;
+  uniform `diskTurbulence` (default 0.6, 0 restores the smooth disk). GLSL
+  only; CUDA draws the smooth disk.
 - The camera sits outside the 20 r_s edge, so the whole disk edge is in
   frame; any taper that starts inside 20 r_s or any cutoff at 20 r_s is
   visible.
@@ -268,6 +284,13 @@ Each entry states the change, its support, and what falsifies it.
 
 ### R1. Replace the hard outer edge with the physical flux fall-off
 
+- Status: realized for the volumetric disk, open for the thin surface. In
+  the volumetric model the outer Gaussian taper (`bhDiskTaper`) with
+  density-proportional absorption delivers the soft edge, because thin
+  outer gas is transparent. The thin-surface disk is opaque and its
+  bolometric law (`bhDiskEmission`, g^4 F/F_peak) makes an annulus past
+  20 r_s nearly black while it still hides the sky, so extending the opaque
+  surface works only with a band-limited visible-light intensity law (R4).
 - Change: let disk emission be F(r) = Page-Thorne (Novikov-Thorne) flux
   with no outer clip, extend the integration domain to at least
   3 x the camera distance (150+ r_s), and use T_eff = T_peak (F/F_peak)^(1/4).
@@ -285,6 +308,10 @@ Each entry states the change, its support, and what falsifies it.
 
 ### R2. Add an optically thin RIAF/torus volume mode
 
+- Status: partly realized by the flared volumetric disk (`diskScaleHeight`
+  * rho, absorption `rteOpacityScale` * <rho>, in the RTE and Stokes
+  traces). Remaining: an EHT-calibrated RIAF profile (n_e, T_e, B slopes
+  and R_high) and the face-on ring test below.
 - Change: volumetric emission along each ray with
   n_e = n_0 (r/r_S)^-1.1 exp(-z^2 / 2 rho^2), rho = H = (0.25-0.3) r
   (Porth 2019 SIM value; MAD equal or larger),
@@ -305,6 +332,13 @@ Each entry states the change, its support, and what falsifies it.
 
 ### R3. Replace the log-normal product texture with a spiral Gaussian random field
 
+- Status: the legacy product texture is superseded by the shipped
+  log-normal factor `bhDiskTurbulenceFactor` (`disk_turbulence.glsl`,
+  sigma default 0.6, mean 1, Keplerian shear with a cross-faded winding
+  period). It is a sheared value-noise texture, not the Lee-Gammie field:
+  it has no imposed pitch angle, no correlation time proportional to
+  1/Omega_K, and no r-proportional correlation lengths, so the change below
+  remains open. It is GLSL only.
 - Change: multiplicative fluctuation f(r, phi, t) with local pitch angle
   about 20 degrees (major axis), correlation time lambda_0 proportional
   to 1/Omega_K (about one orbital period), correlation lengths

@@ -48,6 +48,8 @@ maintaining separate release evidence.
 - [Renderer Fidelity Tranche](physics/renderer-fidelity-tranche.md) -- staged rendering-fidelity work items
 - [Special Functions](physics/special-functions.md) -- Boost-free Bessel K, synchrotron F/G, and Jacobi kernels with their measurements
 - [open_gororoba Decomposition](physics/open-gororoba-decomposition.md) -- principle-by-principle map of the Rust physics crates with verdicts
+- [Accretion Flow Appearance](physics/accretion-flow-appearance.md) -- observed and simulated appearance of accretion flows with ranked renderer recommendations
+- [Spacetime And Disk Dynamics](physics/spacetime-and-disk-dynamics.md) -- Kerr disk dynamics, tilt, warp, and slow-light gaps mapped against the renderer
 
 ## GPU
 
@@ -81,6 +83,7 @@ maintaining separate release evidence.
 - [OpenUniverse](plans/openuniverse.md) -- OpenUniverse integration scope
 - [Local Repos](plans/local-repos.md) -- local repository scope
 - [Tesseract Mechanic](plans/tesseract-mechanic.md) -- Novikov self-consistent message design note (speculative, not built)
+- [GL And CUDA Render Architecture](plans/gl-cuda-render-architecture.md) -- drift inventory between the GLSL and CUDA paths and a staged plan to share the physics core
 
 ## Validation
 
