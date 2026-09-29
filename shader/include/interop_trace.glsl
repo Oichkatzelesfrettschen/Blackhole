@@ -273,6 +273,26 @@ float bhDiskOuterRadius(float r_s) {
   return BH_DISK_OUTER_RADIUS_RS * r_s;
 }
 
+// Width of the volumetric disk's outer density taper in units of r_s, and the
+// radius where the volume ends: three widths past the edge, where the taper
+// is exp(-9) ~ 1e-4 of the density at the edge.
+const float BH_DISK_TAPER_WIDTH_RS = 8.0;
+
+float bhDiskTaper(float rho, float r_s) {
+  float excess = max(rho - bhDiskOuterRadius(r_s), 0.0) / (BH_DISK_TAPER_WIDTH_RS * r_s);
+  return exp(-excess * excess);
+}
+
+float bhDiskVolumeOuterRadius(float r_s) {
+  return bhDiskOuterRadius(r_s) + (3.0 * BH_DISK_TAPER_WIDTH_RS * r_s);
+}
+
+// Scale height of the volumetric disk at cylindrical radius rho, floored at
+// 0.02 r_s so the chord moments stay resolvable at the inner edge.
+float bhDiskScaleHeight(float rho, float r_s) {
+  return max(diskScaleHeight * rho, 0.02 * r_s);
+}
+
 // Escape radius for a ray starting at pos. A ray escapes only once it is
 // outside both the scene radius and the camera's own radius and moving
 // outward; a camera placed beyond maxDistance otherwise escapes every ray at
@@ -453,11 +473,12 @@ vec3 bhHorizonShade(float r, float r_s) {
 
 // Turbulence factor at a disk point p (physics frame, disk in xy): the
 // log-normal width is the diskTurbulence uniform and the pattern's clock is
-// the time uniform read as coordinate time in GM/c^3 (disk_turbulence.glsl).
+// the time uniform (wall seconds) times diskTimeScale, coordinate time in
+// GM/c^3 per wall second (disk_turbulence.glsl).
 float bhDiskTurbulence(vec3 p, float r_s) {
   float M = max(0.5 * r_s, BH_EPSILON);
-  return bhDiskTurbulenceFactor(length(p.xy) / M, atan(p.y, p.x), kerrSpin, time,
-                                diskTurbulence);
+  return bhDiskTurbulenceFactor(length(p.xy) / M, atan(p.y, p.x), kerrSpin,
+                                time * diskTimeScale, diskTurbulence);
 }
 
 vec4 bhDiskColorFromHit(HitResult hit, float r_s) {
@@ -589,10 +610,14 @@ vec4 bhShadeHit(HitResult hit, vec3 cameraPos, float r_s) {
 // ---------------------------------------------------------------------------
 // Volumetric disk segment
 //
-// The RTE and Stokes traces model the disk as a Gaussian layer, density
-// exp(-z^2 / 2h^2) with h = 0.1 r_s, over the annulus rIn <= rho <= rOut
-// (rho the cylindrical radius), emitting the Page-Thorne flux shifted by the
-// orbiting-emitter g-factor (bhDiskEmission). A
+// The RTE and Stokes traces model the disk as a flared Gaussian layer,
+// density exp(-z^2 / 2h^2) with scale height h = diskScaleHeight * rho (rho
+// the cylindrical radius, h read at each chord piece's midpoint), from the
+// ISCO outward, emitting the Page-Thorne flux shifted by the orbiting-emitter
+// g-factor (bhDiskEmission). Past BH_DISK_OUTER_RADIUS_RS the density falls
+// as exp(-((rho - r_edge) / w)^2) with w = BH_DISK_TAPER_WIDTH_RS r_s, a
+// presentation stand-in for truncation and flaring, so the outer gas thins
+// into transparency instead of ending at a rim. A
 // far-field step spans ~0.05 r, many scale heights, so a coefficient read at
 // one point misses a midplane crossed mid-step, applies the peak density to
 // the whole step, or keeps or drops the whole step by one radius.
@@ -671,19 +696,30 @@ float bhDiskRadialEmission(float rho, float photonLambda, float r_s, out vec3 em
 
 // Adds the part of the chord p0 -> p1 between parameters ta and tb (inside
 // the annulus) to the running column, emissivity, and color sums.
-void bhDiskPiece(vec3 p0, vec3 p1, float ta, float tb, float h, float r_s, float photonLambda,
+void bhDiskPiece(vec3 p0, vec3 p1, float ta, float tb, float r_s, float photonLambda,
                  inout float rhoSum, inout float jSum, inout vec3 colorSum) {
   if (tb <= ta) {
     return;
   }
   float za = mix(p0.z, p1.z, ta);
   float zb = mix(p0.z, p1.z, tb);
+  // The scale height is read where the density's mass sits: first where the
+  // piece is nearest the midplane (its crossing, else its end with the
+  // smaller |z|), then once more at the density centroid that height gives,
+  // which makes the read second order in the piece length.
+  float tMid = abs(za) < abs(zb) ? 0.0 : 1.0;
+  if (za * zb <= 0.0 && za != zb) {
+    tMid = za / (za - zb);
+  }
+  float h = bhDiskScaleHeight(length(mix(p0.xy, p1.xy, mix(ta, tb, clamp(tMid, 0.0, 1.0)))), r_s);
   vec2 moments = bhGaussianChordMoments(za, zb, h);
-  float column = (tb - ta) * moments.x;
+  h = bhDiskScaleHeight(length(mix(p0.xy, p1.xy, mix(ta, tb, moments.y))), r_s);
+  moments = bhGaussianChordMoments(za, zb, h);
+  vec3 weighted = mix(p0, p1, mix(ta, tb, moments.y));
+  float column = (tb - ta) * moments.x * bhDiskTaper(length(weighted.xy), r_s);
   if (column <= 0.0) {
     return;
   }
-  vec3 weighted = mix(p0, p1, mix(ta, tb, moments.y));
   vec3 color;
   float radial = bhDiskRadialEmission(length(weighted.xy), photonLambda, r_s, color) *
                  bhDiskTurbulence(weighted, r_s);
@@ -699,15 +735,17 @@ void bhDiskPiece(vec3 p0, vec3 p1, float ta, float tb, float h, float r_s, float
 // emissivity jEff = <g^4 (F / F_peak) rho> over the whole chord
 // (bhDiskEmission), and the mean density <rho> over the whole chord (zero
 // outside the annulus).
-bool bhDiskSegment(vec3 p0, vec3 p1, float rIn, float rOut, float h, float r_s,
+bool bhDiskSegment(vec3 p0, vec3 p1, float rIn, float rOut, float r_s,
                    float photonLambda, out vec3 emitColor, out float jEff,
                    out float rhoMean) {
   emitColor = vec3(0.0);
   jEff = 0.0;
   rhoMean = 0.0;
   // A chord on one side of the midplane and more than 8 h from it carries
-  // density below exp(-32) ~ 1e-14 everywhere.
-  if (p0.z * p1.z > 0.0 && min(abs(p0.z), abs(p1.z)) > 8.0 * h) {
+  // density below exp(-32) ~ 1e-14 everywhere; h is read at the chord's
+  // larger end radius, capped at rOut, which bounds it along the chord.
+  float hMax = bhDiskScaleHeight(min(max(length(p0.xy), length(p1.xy)), rOut), r_s);
+  if (p0.z * p1.z > 0.0 && min(abs(p0.z), abs(p1.z)) > 8.0 * hMax) {
     return false;
   }
   // Inside rOut is one interval; inside rIn is one interval to exclude.
@@ -725,11 +763,11 @@ bool bhDiskSegment(vec3 p0, vec3 p1, float rIn, float rOut, float h, float r_s,
                                                    : bhChordInsideRadius(a, b, rIn);
   vec3 colorSum = vec3(0.0);
   if (inner.x > inner.y) {
-    bhDiskPiece(p0, p1, outer.x, outer.y, h, r_s, photonLambda, rhoMean, jEff, colorSum);
+    bhDiskPiece(p0, p1, outer.x, outer.y, r_s, photonLambda, rhoMean, jEff, colorSum);
   } else {
-    bhDiskPiece(p0, p1, outer.x, min(outer.y, inner.x), h, r_s, photonLambda, rhoMean, jEff,
+    bhDiskPiece(p0, p1, outer.x, min(outer.y, inner.x), r_s, photonLambda, rhoMean, jEff,
                 colorSum);
-    bhDiskPiece(p0, p1, max(outer.x, inner.y), outer.y, h, r_s, photonLambda, rhoMean, jEff,
+    bhDiskPiece(p0, p1, max(outer.x, inner.y), outer.y, r_s, photonLambda, rhoMean, jEff,
                 colorSum);
   }
   if (!(rhoMean > 0.0)) {
@@ -747,8 +785,12 @@ bool bhDiskSegment(vec3 p0, vec3 p1, float rIn, float rOut, float h, float r_s,
 // rteStepVec3(); background and horizon contributions are weighted by the
 // surviving transmittance at escape.
 //
-// opacityScale: alpha_nu = opacityScale * j_eff  (tune in ImGui); j_eff and
-// alpha_nu are per unit affine length (kerrAffineStep).
+// opacityScale: alpha_nu = opacityScale * <rho>, absorption per unit density
+// (tune in ImGui); j_eff and alpha_nu are per unit affine length
+// (kerrAffineStep). Absorption follows the gas, not its emission, so the
+// source function S = j / alpha = <g^4 F / F_peak> color / opacityScale keeps
+// the radial flux and Doppler contrast where the disk is optically thick; an
+// absorption proportional to j would make S one constant color everywhere.
 // ---------------------------------------------------------------------------
 vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
                         float stepSize, float opacityScale, out vec3 terminalPos,
@@ -759,9 +801,7 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
   if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
 
   float r_disk_in  = bhDiskInnerRadius(r_s);
-  float r_disk_out = bhDiskOuterRadius(r_s);
-  // Gaussian vertical scale height for thin-disk density model (H/r ~ 0.1)
-  float h_disk = max(0.1 * r_s, BH_EPSILON);
+  float r_disk_out = bhDiskVolumeOuterRadius(r_s);
 
   float escapeRadius = bhEscapeRadius(ray.position, maxDistance);
   if (!bhHoleRendered()) {
@@ -807,9 +847,9 @@ vec4 bhTraceGeodesicRTE(Ray ray, float r_s, float maxDistance, int maxSteps,
     float jEff;
     float rhoNorm;
     if (adiskEnabled > 0.5 &&
-        bhDiskSegment(curPos, newPos, r_disk_in, r_disk_out, h_disk, r_s, -c.Lz, emitColor,
+        bhDiskSegment(curPos, newPos, r_disk_in, r_disk_out, r_s, -c.Lz, emitColor,
                       jEff, rhoNorm)) {
-      float alphaNu = opacityScale * max(jEff, 0.0);
+      float alphaNu = opacityScale * rhoNorm;
 
       accumI += rteStepVec3(emitColor, jEff, alphaNu, pathStep, transmit);
 
@@ -886,8 +926,7 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
   if (r_horizon <= BH_EPSILON) { r_horizon = r_s; }
 
   float r_disk_in  = bhDiskInnerRadius(r_s);
-  float r_disk_out = bhDiskOuterRadius(r_s);
-  float h_disk     = max(0.1 * r_s, BH_EPSILON);
+  float r_disk_out = bhDiskVolumeOuterRadius(r_s);
 
   // Thermal synchrotron intrinsic linear polarization fraction (~0.75 at Theta_e >> 1)
   const float PI_LIN = 0.75;
@@ -948,9 +987,9 @@ vec4 bhTraceGeodesicStokes(Ray ray, float r_s, float maxDistance, int maxSteps,
     float jEff;
     float rhoNorm;
     if (adiskEnabled > 0.5 &&
-        bhDiskSegment(curPos, newPos, r_disk_in, r_disk_out, h_disk, r_s, -c.Lz, emitColor,
+        bhDiskSegment(curPos, newPos, r_disk_in, r_disk_out, r_s, -c.Lz, emitColor,
                       jEff, rhoNorm)) {
-      float alphaNu = opacityScale * max(jEff, 0.0);
+      float alphaNu = opacityScale * rhoNorm;
 
       // Intensity path (front-to-back compositing identical to RTE path)
       accumI += rteStepVec3(emitColor, jEff, alphaNu, pathStep, transmit);

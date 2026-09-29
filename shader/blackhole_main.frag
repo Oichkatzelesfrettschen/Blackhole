@@ -94,7 +94,7 @@ uniform float debugClosestApproachDirection = 0.0;
 uniform float debugEscapedDirection = 0.0;
 // D2: Volumetric RTE path -- accumulates emission/absorption through disk volume
 uniform float rteEnabled      = 0.0;   // 0=single-scatter (legacy), 1=volumetric RTE
-uniform float rteOpacityScale = 0.5;   // alpha_nu = rteOpacityScale * j_nu
+uniform float rteOpacityScale = 0.5;   // alpha_nu = rteOpacityScale * <rho>
 
 // D4: Polarized Stokes I,Q,U,V transport (supersedes rteEnabled when on)
 uniform float stokesEnabled    = 0.0;  // 1 = track Stokes IQUV alongside intensity
@@ -119,6 +119,8 @@ uniform float diskBrightness = 1.0;
 uniform float diskFluxPeak = 1.1458947e-4;
 uniform float diskTransferMode = 0.0; // 0 = Physical g-factor, 1 = Interstellar (g = 1)
 uniform float diskTurbulence = 0.0;   // log-normal width of the disk emissivity texture
+uniform float diskTimeScale = 1.0;    // disk clock, GM/c^3 per wall second
+uniform float diskScaleHeight = 0.03; // volumetric disk H / rho
 
 // Physics parameters
 uniform float schwarzschildRadius = 2.0; // r_s = 2GM/c^2 (default = 2 in geometric units)

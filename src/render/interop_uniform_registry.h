@@ -68,7 +68,9 @@
   X(diskBrightness, "diskBrightness", 1.0f)                                                        \
   X(diskFluxPeak, "diskFluxPeak", 1.1458947e-4f)                                                   \
   X(diskTransferMode, "diskTransferMode", 0.0f)                                                    \
-  X(diskTurbulence, "diskTurbulence", 0.0f)
+  X(diskTurbulence, "diskTurbulence", 0.0f)                                                        \
+  X(diskTimeScale, "diskTimeScale", 1.0f)                                                          \
+  X(diskScaleHeight, "diskScaleHeight", 0.03f)
 
 // NOLINTEND(cppcoreguidelines-macro-usage)
 
