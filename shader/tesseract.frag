@@ -2,34 +2,40 @@
 #extension GL_GOOGLE_include_directive : enable
 /**
  * @file tesseract.frag
- * @brief Speculative tesseract scene: SDF raymarch of an endless rectilinear
- *        lattice of thin frame beams and dense glowing strands, sheared along
- *        its depth axis by an SO(4) rotation.
+ * @brief Speculative tesseract scene: sphere-traced 3D hyperplane slice of a
+ *        periodic 4D field of thickened 2-planes, dressed with helical strands.
  *
  * Render-only content (Thorne, The Science of Interstellar ch. 29-31); not
- * physics. Runs over the fullscreen triangle of shader/simple.vert, one ray
- * per pixel from bhRayDir (shader/include/interop_raygen.glsl), the same
- * camera-ray convention the black-hole integrator uses.
+ * physics. Design: docs/plans/tesseract-interstellar-visuals.md, after
+ * R1-R4 of the hyperdimensional projection research note. Runs over the
+ * fullscreen triangle of shader/simple.vert, one ray per pixel from bhRayDir
+ * (shader/include/interop_raygen.glsl).
  *
- * The lattice is plain domain repetition (mod-round) of a cell holding two
- * kinds of geometry: sdBoxFrame, thin dim bronze beams along the 12 edges
- * only (most of the cell's volume is open, dark void -- cells recede in x,
- * y, and z, not a single corridor), and a nested domain-repeated grid of
- * thin amber strand fibers along the depth axis (lattice z), each strand
- * lit and emissive enough to feed bloom on its own; the beams never are. A
- * cell's cross-section is sheared by shear4(), which rotates a pure-w point
- * (0, 0, 0, wSeed) with rotation4 and projects it back to R^3 with the same
- * perspective-along-w or stereographic map tesseract_geometry.cpp's
- * projectPerspective/projectStereographic apply on the CPU: as rotation4
- * animates, the shear slides neighboring cells against each other, the
- * "SO(4) spin visibly warps the lattice" effect. wSeed is a smooth sine of
- * depth, not a sawtooth: a fract()-based wrap is discontinuous at every
- * period and breaks the SDF's Lipschitz bound there, which read as a
- * seam of raymarch noise. A depth-periodic Gaussian (gaussian(), mirroring
- * litMomentEmission) lights one static band (nowDepth) and one traveling
- * band (pulseDepth, the gravity-message pulse) on every strand; beams never
- * carry either. Output is linear HDR radiance with alpha 1, summed into the
- * scene target so bloom and ACES tonemap treat it like the black-hole frame.
+ * Field. A 4D point is p4 = F * (p + offset) + (0, 0, 0, W0), where F is an
+ * orthonormal 4x3 slice frame built from the SO(4) matrix rotation4 blended
+ * toward the identity (sceneScale sets the blend), so the slice tilts slowly
+ * against the lattice as the left-isoclinic rotation animates. In the lattice
+ * cell of period cellSize, three families of thickened 2-planes (a beam axis
+ * plus w, omitting the two transverse axes) slice to tubes along x, y, and z:
+ * a cubic lattice of thin beams receding down corridors in every direction.
+ * Distances are exact 4D distances, a lower bound of the slice distance, so
+ * sphere tracing never overshoots.
+ *
+ * Strands. Around every beam wind two helical shells of thin strands (three
+ * inner, two outer, opposite twist). A strand's phase advances with arc length
+ * and with p4.w, so the weave shifts as the slice moves through w. The
+ * angular-sector fold is seam-free (the sector index shifts by the sector
+ * count across the atan branch cut, a full turn). Each strand hashes to one of
+ * three tiers of brightness and radius.
+ *
+ * Shading. Strands are emissive fibers: a bright core that falls off across the
+ * fiber width, plus a soft halo accumulated along the march from the distance
+ * to the nearest strand (analytic bloom, no extra pass), so a fiber thinner
+ * than a pixel still contributes light instead of aliasing. Beams are dark
+ * bronze with a rim and a narrow specular streak, kept under the 0.4 bloom
+ * threshold. Radiance falls with exponential extinction along the ray and
+ * with exp(-kappa |p4.w|), the distance of the sampled point from the w = 0
+ * hyperplane in the world frame. Output is linear HDR radiance with alpha 1.
  */
 
 #include "include/interop_raygen.glsl"
@@ -43,8 +49,8 @@ uniform float fovScale;   // tan(fovDeg / 2)
 uniform mat4 rotation4;   // SO(4) matrix of v -> qL v conj(qR), column-major.
 uniform int projectionMode;
 uniform float perspectiveDistance;
-uniform float sceneScale;
-uniform float corridorPeriod; // World units of depth before the shear/light pattern repeats.
+uniform float sceneScale;     // Slice-frame tilt gain: blend toward rotation4.
+uniform float corridorPeriod; // World units of depth before the light bands repeat.
 uniform float cellSize;       // Lattice cell period ("Corridor density").
 uniform float nowDepth;       // Depth (mod corridorPeriod) of the static "now" highlight band.
 uniform float nowWidth;
@@ -56,93 +62,79 @@ uniform float fogDensity;
 uniform int qualityTier; // 0 dense (real GPUs), 1 sparse (Mesa llvmpipe and other slow rasterizers).
 
 const float PI = 3.14159265359;
+const float TAU = 6.28318530718;
 
-// tesseract_geometry.cpp mirrors these constants for projectPerspective/projectStereographic.
-const float PERSPECTIVE_MIN_DEPTH = 0.05;
-const float STEREOGRAPHIC_MIN_DENOM = 0.02;
-const float STEREOGRAPHIC_FADE_END = 0.2;
-const float STEREOGRAPHIC_MIN_NORM = 1e-4;
 // Mirrors EMISSION_MIN_WIDTH in src/render/tesseract/tesseract_geometry.cpp.
 const float EMISSION_MIN_WIDTH = 1e-4;
 
 const int MATERIAL_BEAM = 0;
 const int MATERIAL_STRAND = 1;
 
-// Dim, non-emissive bronze: never crosses the bloom brightness-pass threshold
-// (0.4 by default), so beams read as structure, not light.
-const vec3 BEAM_COLOR = vec3(0.34, 0.19, 0.09);
-// Warm amber, mirrors STRAND_COLOR in src/render/tesseract/tesseract_geometry.h.
-const vec3 STRAND_COLOR = vec3(1.0, 0.55, 0.18);
-const vec3 STRAND_HIGHLIGHT = vec3(1.0, 0.92, 0.65);
-// The void is close to black; strands and beams fade into it with distance,
-// not into a flat mid-tone patch.
-const vec3 VOID_COLOR = vec3(0.0005, 0.0004, 0.001);
+// Dark bronze; the rim and specular terms below carry the metallic read.
+const vec3 BEAM_COLOR = vec3(0.30, 0.16, 0.07);
+const vec3 BEAM_RIM_COLOR = vec3(1.0, 0.62, 0.28);
+// Strand core (hot amber-white) and halo (deeper amber).
+const vec3 STRAND_CORE_COLOR = vec3(1.0, 0.66, 0.26);
+const vec3 STRAND_HALO_COLOR = vec3(1.0, 0.50, 0.15);
+const vec3 VOID_COLOR = vec3(0.0004, 0.0003, 0.0008);
 
-// Surface epsilon and step scale are fractions of cellSize so they track the
-// strand radius (also a cellSize fraction) at any "Corridor density" slider
-// value, rather than assuming one absolute scene scale.
-const float SURFACE_EPS_FRACTION = 0.0006;
-const float MIN_STEP_FRACTION = 0.0012;
-// Conservative step scale: the strand field is a nested domain repetition
-// (see strandFieldDistance) that only ever tests the strand nearest to the
-// query point's own grid cell, which can under-count how close a jittered
-// strand in a neighboring grid cell really is; the shear also locally
-// stretches distances by more than 1:1 where the SO(4) rotation mixes a lot
-// of w into the cross-section. Stepping by less than the raw SDF value
-// absorbs both without per-sample derivative bounds.
-const float STEP_SCALE = 0.55;
-const float MAX_MARCH_DISTANCE = 70.0;
-// Footprint multiple within which an exhausted march counts as a hit.
+// Beam ceiling: BEAM_COLOR * 0.08 + rim 0.16 + specular 0.10 stays under the
+// 0.4 bloom brightness-pass threshold; only strands bloom.
+const float BEAM_RIM_GAIN = 0.16;
+const float BEAM_SPEC_GAIN = 0.10;
+
+// Geometry as fractions of cellSize.
+const float BEAM_RADIUS_FRACTION = 0.012;
+const float SHELL_RADIUS_FRACTION[2] = float[2](0.05, 0.11);
+const float SHELL_PITCH_FRACTION[2] = float[2](0.50, 0.85);
+const int SHELL_STRANDS[2] = int[2](3, 1);
+const float SHELL_DIRECTION[2] = float[2](1.0, -1.0);
+// Strand radius per tier (dim, mid, bright) and emissive scale per tier.
+const float TIER_RADIUS_FRACTION[3] = float[3](0.0045, 0.0060, 0.0085);
+const float TIER_BRIGHTNESS[3] = float[3](0.08, 0.22, 1.30);
+// Beyond this transverse distance from a beam axis the strand shells are
+// replaced by their conservative lower bound.
+const float STRAND_CULL_FRACTION = 0.26;
+// Fraction of beams that carry strand shells.
+const float STRAND_BEAM_FRACTION = 0.45;
+// The w-phase rate of the helices (radians per cellSize of p4.w).
+const float STRAND_W_TWIST = 0.6;
+
+// Halo: analytic bloom from the nearest-strand distance along the march.
+const float HALO_RADIUS_FRACTION = 0.05;
+const float HALO_GAIN = 0.03;
+// exp(-kappa |p4.w|): 4D depth cue.
+const float W_DIM_KAPPA = 0.06;
+// Slice hyperplane offset along w, in cells.
+const float SLICE_W_CELLS = 0.25;
+// Lattice offset in cells: places the default eye (world x = y = 0, depth
+// drift along z) in the open middle of a cell, slightly off the corridor axis.
+const vec3 LATTICE_OFFSET_CELLS = vec3(0.53, 0.47, 0.5);
+
+const float SURFACE_EPS_FRACTION = 0.0004;
+const float MIN_STEP_FRACTION = 0.0008;
+// The fold to the nearest angular sector under-estimates strand proximity
+// slightly, and the slice frame is only near-isometric: step conservatively.
+const float STEP_SCALE = 0.6;
+const float MAX_MARCH_CELLS = 24.0;
 const float GRAZE_ACCEPT_FOOTPRINTS = 4.0;
-const float STRAND_WIGGLE_FREQUENCY = 1.7;
-// Fraction of the raw SO(4) shear offset applied to the lattice: the full
-// offset (up to about 1.5 sceneScale) bends every strand into a slack-line
-// sag; a fraction keeps the lattice rectilinear at rest and still slides
-// neighboring cells visibly as rotation4 animates.
-const float SHEAR_GAIN = 0.35;
-// Beam outer half-extent as a fraction of the cell half-size, and beam
-// thickness as a fraction of the full cell size (2-4% per the film's "thin
-// lattice-like structure").
-const float BEAM_HALF_FRACTION = 1.0;
-const float BEAM_THICKNESS_FRACTION = 0.0025;
-// Strand radius as a fraction of its own grid spacing (not of cellSize
-// directly): whatever density the quality tier picks, a strand stays this
-// thin relative to its neighbors, so the nearest strand never looks like a
-// filled tube even when the eye happens to be close to it.
-const float STRAND_RADIUS_FRACTION = 0.003;
-// Strands per cell edge on the dense and sparse quality tiers (N x N grid);
-// "on the order of 20-60 per cell face" (dense) and enough to stay
-// recognizable but cheap (sparse).
-const int STRAND_GRID_DENSE = 8;
-const int STRAND_GRID_SPARSE = 4;
+// Fog: transmittance exp(-(t / fogDistance)^FOG_EXPONENT). The exponent above 1
+// keeps the first cells clear and closes the corridor steeply beyond
+// fogDistance, so the vanishing point reads as depth, not as uniform haze.
+// fogDistance is FOG_CELLS cells at the default fogDensity (0.35) and scales
+// inversely with the slider.
+const float FOG_EXPONENT = 1.8;
+const float FOG_CELLS = 3.5;
+const float FOG_REFERENCE_DENSITY = 0.35;
 
-// The lattice's depth/strand axis is world x, carried into the z slot every
-// other function treats as "depth" by this swap (its own inverse, so it
-// carries a direction exactly as it carries a position, with no translation
-// to strip out). The default camera looks toward the world origin along a
-// path close to world z (buildCameraBasis's forward for an unmoved orbit),
-// so aligning the strand axis with world z would point the camera straight
-// down every fiber's length: a thin fiber viewed end-on covers far more
-// screen area than the same fiber viewed broadside, reading as a fat glowing
-// rod instead of a thin thread. World x sits close to perpendicular to that
-// default forward instead, so fibers are seen mostly broadside and the beam
-// grid, which repeats in all three axes regardless of which one is "depth",
-// still recedes in x, y, and z at once.
-vec3 latticeSpace(vec3 p) {
-  return p.zyx;
-}
-
-vec3 projectPerspective(vec4 p, float eyeDistance) {
-  float denom = max(eyeDistance - p.w, PERSPECTIVE_MIN_DEPTH);
-  return p.xyz * (eyeDistance / denom);
-}
-
-vec3 projectStereographic(vec4 p) {
-  float len = length(p);
-  vec4 s = len > STEREOGRAPHIC_MIN_NORM ? p / len : vec4(0.0, 0.0, 0.0, -1.0);
-  float denom = max(1.0 - s.w, STEREOGRAPHIC_MIN_DENOM);
-  return s.xyz / denom;
-}
+// Slice frame, set once per fragment by buildSliceFrame().
+vec4 gF0;
+vec4 gF1;
+vec4 gF2;
+// Tier index and 4D-cue-free brightness of the nearest strand of the last
+// field evaluation.
+float gTierBrightness = 1.0;
+float gTierRadius = 0.006;
 
 // Mirrors litMomentEmission in src/render/tesseract/tesseract_geometry.cpp.
 float gaussian(float x, float center, float width) {
@@ -150,240 +142,210 @@ float gaussian(float x, float center, float width) {
   return exp(-0.5 * u * u);
 }
 
+uint pcgHash(uint v) {
+  uint state = (v * 747796405u) + 2891336453u;
+  uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+  return (word >> 22u) ^ word;
+}
+
+// Integer PCG hash of a lattice-derived coordinate pair, quantized to 1/16.
+// sin()-based hashes differ between GPU drivers at large arguments, which
+// would give each driver a different strand layout.
 vec2 hash21(vec2 p) {
-  return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453123);
+  ivec2 i = ivec2(round(p * 16.0));
+  uint h = pcgHash(uint(i.x) + pcgHash(uint(i.y) + 0x9e3779b9u));
+  return vec2(float(h & 0xFFFFu), float(pcgHash(h) & 0xFFFFu)) / 65535.0;
 }
 
-// The 3D offset a depth of @p depthWorld shears the cross-section by: a
-// pure-w point rotated by the SO(4) orientation and projected back with the
-// active projection mode, so the offset is zero at rotation4 = identity and
-// grows as the rotation mixes w into x, y, z. Mirrors project4 in the
-// retired shader/tesseract.vert, minus the per-instance xyz component
-// (always zero here, since only the w seed varies). wSeed is sin(), not
-// 2 fract() - 1: fract() wraps with a jump discontinuity at every period,
-// which put a literal cliff in the SDF at every corridorPeriod boundary in
-// depth; sin() is periodic and C-infinity everywhere, so the shear (and the
-// SDF built on it) has no seam to raymarch noise against.
-vec3 shear4(float depthWorld) {
-  float wSeed = sin(2.0 * PI * depthWorld / max(corridorPeriod, 1e-3));
-  vec4 rotated = rotation4 * vec4(0.0, 0.0, 0.0, wSeed);
-  vec3 projected = projectionMode == 1 ? projectStereographic(rotated)
-                                       : projectPerspective(rotated, perspectiveDistance);
-  return SHEAR_GAIN * sceneScale * projected;
+// Orthonormal 4x3 slice frame: the columns of rotation4 blended toward the
+// identity (blend = 0.10 sceneScale, 0.13 at the default 1.3, capped at 0.6 so
+// the blend never cancels), then Gram-Schmidt orthonormalized.
+void buildSliceFrame() {
+  float blend = clamp(0.10 * sceneScale, 0.0, 0.6);
+  vec4 a0 = mix(vec4(1.0, 0.0, 0.0, 0.0), rotation4[0], blend);
+  vec4 a1 = mix(vec4(0.0, 1.0, 0.0, 0.0), rotation4[1], blend);
+  vec4 a2 = mix(vec4(0.0, 0.0, 1.0, 0.0), rotation4[2], blend);
+  gF0 = normalize(a0);
+  gF1 = normalize(a1 - (gF0 * dot(a1, gF0)));
+  gF2 = normalize(a2 - (gF0 * dot(a2, gF0)) - (gF1 * dot(a2, gF1)));
 }
 
-// Distance to a hollow box frame: the 12 edges only, thickness @p e, half
-// extents @p b. Most of the box's volume (and most of the cell) stays open,
-// dark void; only a ring of beams near each edge is solid.
-float sdBoxFrame(vec3 p, vec3 b, float e) {
-  p = abs(p) - b;
-  vec3 q = abs(p + e) - e;
-  return min(min(length(max(vec3(p.x, q.y, q.z), 0.0)) + min(max(p.x, max(q.y, q.z)), 0.0),
-                 length(max(vec3(q.x, p.y, q.z), 0.0)) + min(max(q.x, max(p.y, q.z)), 0.0)),
-             length(max(vec3(q.x, q.y, p.z), 0.0)) + min(max(q.x, max(q.y, p.z)), 0.0));
+vec4 slicePoint(vec3 p) {
+  vec3 q = p + (LATTICE_OFFSET_CELLS * cellSize);
+  return (gF0 * q.x) + (gF1 * q.y) + (gF2 * q.z) + vec4(0.0, 0.0, 0.0, SLICE_W_CELLS * cellSize);
 }
 
-// Distance from @p localP (cell-local) to one strand fiber running along the
-// depth axis at cross-section @p offset. The fiber is an unbounded line in
-// depth, bent by a low-frequency sine pair of the ABSOLUTE depth @p depth
-// (cell z plus local z) and a per-strand phase that depends on the strand's
-// cross-section cell only, so the same fiber continues without a seam through
-// every cell along the depth axis instead of ending in a cut capsule cap.
-float strandDistance(vec3 localP, vec2 offset, float radius, float wiggleAmp, float phase,
-                     float depth) {
-  vec2 bend = wiggleAmp * vec2(sin((depth * STRAND_WIGGLE_FREQUENCY) + phase),
-                               cos((depth * STRAND_WIGGLE_FREQUENCY * 1.3) + (phase * 1.7)));
-  return length(localP.xy - offset - bend) - radius;
+// One beam family: transverse 4D coordinates @p ct, axial coordinate @p s,
+// and the world-frame w coordinate @p w. Updates the nearest beam distance,
+// the nearest strand distance, and the nearest strand's tier.
+void beamFamily(vec2 ct, float s, float w, float family, inout float dBeam, inout float dStrand) {
+  vec2 n = round(ct / cellSize);
+  vec2 t = ct - (n * cellSize);
+  float rad = length(t);
+  dBeam = min(dBeam, rad - (BEAM_RADIUS_FRACTION * cellSize));
+  float outerRadius = SHELL_RADIUS_FRACTION[1] * cellSize;
+  if (rad > STRAND_CULL_FRACTION * cellSize) {
+    dStrand = min(dStrand, rad - outerRadius - (TIER_RADIUS_FRACTION[2] * cellSize));
+    return;
+  }
+  // Only some beams carry strands: bare beams keep the frame void-dominated.
+  if (hash21((n * 2.3) + vec2(family * 5.7, 1.3)).y > STRAND_BEAM_FRACTION) {
+    return;
+  }
+  float ang = atan(t.y, t.x);
+  for (int shell = 0; shell < 2; ++shell) {
+    int count = SHELL_STRANDS[shell];
+    float pitch = SHELL_PITCH_FRACTION[shell] * cellSize;
+    float phi = (SHELL_DIRECTION[shell] * TAU * s / pitch) +
+                (STRAND_W_TWIST * w / cellSize) + (float(shell) * 1.9);
+    float sector = round((ang - phi) * float(count) / TAU);
+    float centerAngle = phi + (TAU * sector / float(count));
+    vec2 c = SHELL_RADIUS_FRACTION[shell] * cellSize * vec2(cos(centerAngle), sin(centerAngle));
+    float index = mod(sector, float(count));
+    vec2 h = hash21((n * 1.7) + vec2((family * 3.1) + (float(shell) * 11.0), index * 5.3));
+    int tier = h.x < 0.5 ? 0 : (h.x < 0.8 ? 1 : 2);
+    float d = length(t - c) - (TIER_RADIUS_FRACTION[tier] * cellSize);
+    if (d < dStrand) {
+      dStrand = d;
+      gTierBrightness = TIER_BRIGHTNESS[tier];
+      gTierRadius = TIER_RADIUS_FRACTION[tier] * cellSize;
+    }
+  }
 }
 
-// Local (post-shear, cell-relative) position of world point @p p and the
-// cell's own center, shared by every distance/material/brightness query so
-// they all classify the same cell the same way.
-vec3 lockedLocalPosition(vec3 worldP, out vec3 cellCenter) {
-  vec3 p = latticeSpace(worldP);
-  vec3 shear = shear4(p.z);
-  vec3 sheared = vec3(p.x - shear.x, p.y - shear.y, p.z);
-  cellCenter = cellSize * round(sheared / cellSize);
-  return sheared - cellCenter;
+// Beam and strand distances at world point @p p; @p p4 returns the 4D point.
+void fieldDistances(vec3 p, out float dBeam, out float dStrand, out vec4 p4) {
+  p4 = slicePoint(p);
+  dBeam = 1e9;
+  dStrand = 1e9;
+  gTierBrightness = TIER_BRIGHTNESS[1];
+  gTierRadius = TIER_RADIUS_FRACTION[1] * cellSize;
+  beamFamily(p4.yz, p4.x, p4.w, 0.0, dBeam, dStrand);
+  beamFamily(p4.zx, p4.y, p4.w, 1.0, dBeam, dStrand);
+  beamFamily(p4.xy, p4.z, p4.w, 2.0, dBeam, dStrand);
 }
 
-// Cross-section grid spacing of the strand field: an N x N grid per cell,
-// N set by the quality tier, so "how many strands" is an O(1) domain-
-// repetition parameter rather than a per-sample loop count.
-float strandGridSpacing(float halfCell) {
-  int n = qualityTier == 0 ? STRAND_GRID_DENSE : STRAND_GRID_SPARSE;
-  return (2.0 * halfCell) / float(n);
-}
-
-vec2 strandGridIndex(vec3 localP, float spacing) {
-  return round(localP.xy / spacing);
-}
-
-// Per-(cell, grid-cell) hash: x drives phase and cross-section jitter, y
-// drives the per-strand brightness variance in shadeHit.
-vec2 strandHash(vec3 cellCenter, vec2 gridIndex) {
-  return hash21((cellCenter.xy * 3.1) + (gridIndex * 17.0));
-}
-
-// Distance to the nearest grid cell's strand fiber. localP.xy is rounded to
-// its grid cell before the strand's own cross-section jitter is applied, so
-// a query near a grid boundary can under-count a neighbor's jittered strand;
-// STEP_SCALE in raymarch() absorbs the resulting conservative-distance error.
-float strandFieldDistance(vec3 localP, vec3 cellCenter, float halfCell) {
-  float spacing = strandGridSpacing(halfCell);
-  vec2 gridIndex = strandGridIndex(localP, spacing);
-  vec2 h = strandHash(cellCenter, gridIndex);
-  vec2 jitter = (h - vec2(0.5)) * spacing * 0.6;
-  vec2 offset = clamp((gridIndex * spacing) + jitter, vec2(-halfCell * 0.92), vec2(halfCell * 0.92));
-  float phase = h.x * 6.2831853;
-  float wiggleAmp = qualityTier == 0 ? spacing * 0.12 : 0.0;
-  float radius = cellSize * STRAND_RADIUS_FRACTION;
-  return strandDistance(localP, offset, radius, wiggleAmp, phase, localP.z + cellCenter.z);
-}
-
-// Signed distance to the lattice at world position @p p: the nearer of the
-// cell's beam frame and its strand field. Takes no out parameters so the
-// raymarch loop and the normal's finite differences call one small, self-
-// contained function per sample.
 float mapDistance(vec3 p) {
-  vec3 cellCenter;
-  vec3 localP = lockedLocalPosition(p, cellCenter);
-  float halfCell = 0.5 * cellSize;
-  float beam = sdBoxFrame(localP, vec3(halfCell * BEAM_HALF_FRACTION), cellSize * BEAM_THICKNESS_FRACTION);
-  float strands = strandFieldDistance(localP, cellCenter, halfCell);
-  return min(beam, strands);
+  float dBeam;
+  float dStrand;
+  vec4 p4;
+  fieldDistances(p, dBeam, dStrand, p4);
+  return min(dBeam, dStrand);
 }
 
-// Material of the surface at @p p: recomputes the same beam/strand split
-// mapDistance already resolved, called once at the raymarch's final hit
-// point rather than every step.
-int materialAt(vec3 p) {
-  vec3 cellCenter;
-  vec3 localP = lockedLocalPosition(p, cellCenter);
-  float halfCell = 0.5 * cellSize;
-  float beam = sdBoxFrame(localP, vec3(halfCell * BEAM_HALF_FRACTION), cellSize * BEAM_THICKNESS_FRACTION);
-  float strands = strandFieldDistance(localP, cellCenter, halfCell);
-  return strands < beam ? MATERIAL_STRAND : MATERIAL_BEAM;
+vec3 estimateNormal(vec3 p, float e) {
+  const vec2 k = vec2(1.0, -1.0);
+  return normalize((k.xyy * mapDistance(p + (k.xyy * e))) + (k.yyx * mapDistance(p + (k.yyx * e))) +
+                   (k.yxy * mapDistance(p + (k.yxy * e))) + (k.xxx * mapDistance(p + (k.xxx * e))));
 }
 
-// Per-strand brightness variance ("brightness varying per strand"),
-// recomputed at the hit point from the same grid hash strandFieldDistance
-// used, so it stays consistent without threading an out parameter through
-// the raymarch loop.
-float strandBrightnessAt(vec3 p) {
-  vec3 cellCenter;
-  vec3 localP = lockedLocalPosition(p, cellCenter);
-  float halfCell = 0.5 * cellSize;
-  float spacing = strandGridSpacing(halfCell);
-  vec2 gridIndex = strandGridIndex(localP, spacing);
-  vec2 h = strandHash(cellCenter, gridIndex);
-  // Three discrete tiers (dim, mid, bright), the film's layered strand
-  // bundles: a continuous ramp would read as one uniform haze of fibers.
-  return h.y < 0.6 ? 0.4 : (h.y < 0.9 ? 1.0 : 2.2);
+// World-frame 4D depth cue.
+float wDim(float w) {
+  return exp(-W_DIM_KAPPA * abs(w));
 }
 
-vec3 estimateNormal(vec3 p) {
-  const vec2 e = vec2(1.0, -1.0) * 0.001;
-  return normalize((e.xyy * mapDistance(p + e.xyy)) + (e.yyx * mapDistance(p + e.yyx)) +
-                   (e.yxy * mapDistance(p + e.yxy)) + (e.xxx * mapDistance(p + e.xxx)));
+float fogTransmittance(float t, float fogDistance) {
+  return exp(-pow(t / fogDistance, FOG_EXPONENT));
 }
 
 // Sphere-traces from @p rayOrigin along @p rayDir. Returns the travelled
-// distance; @p hit reports whether a surface was found within
-// MAX_MARCH_DISTANCE.
-float raymarch(vec3 rayOrigin, vec3 rayDir, out bool hit) {
+// distance, whether a surface was hit, and the halo radiance gathered along
+// the march.
+float raymarch(vec3 rayOrigin, vec3 rayDir, float fogDistance, out bool hit, out vec3 halo) {
   int maxSteps = qualityTier == 0 ? 256 : 160;
+  float maxDistance = MAX_MARCH_CELLS * cellSize;
   float surfaceEps = cellSize * SURFACE_EPS_FRACTION;
   float minStep = cellSize * MIN_STEP_FRACTION;
-  // Half a pixel's footprint per unit of travel: a strand thinner than a
-  // pixel still registers a hit inside its footprint instead of being
-  // skipped between samples, and a grazing ray stops as soon as it is within
-  // a pixel of the fiber rather than crawling until the step budget ends.
+  float haloRadius = HALO_RADIUS_FRACTION * cellSize;
+  // Half a pixel's footprint per unit of travel: a fiber thinner than a pixel
+  // still registers a hit inside its footprint instead of being skipped, and
+  // a grazing ray stops as soon as it is within a pixel of the fiber.
   float pixelAngle = fovScale / max(resolution.y, 1.0);
   float travelled = 0.0;
   hit = false;
+  halo = vec3(0.0);
   float d = 0.0;
   float eps = surfaceEps;
   for (int step = 0; step < maxSteps; ++step) {
     vec3 p = rayOrigin + (rayDir * travelled);
-    d = mapDistance(p);
+    float dBeam;
+    float dStrand;
+    vec4 p4;
+    fieldDistances(p, dBeam, dStrand, p4);
+    d = min(dBeam, dStrand);
     eps = max(surfaceEps, travelled * pixelAngle);
     if (abs(d) < eps) {
       hit = true;
       break;
     }
-    // Step by |d| * STEP_SCALE, not d: the eye can start inside a beam
-    // (drift and rotation move it through the lattice with no collision
-    // guard), where d is negative and stepping by d alone would creep
-    // forward in surfaceEps-sized slivers, taking hundreds of steps to
-    // reach open space. Stepping by the unsigned, scaled-down distance still
-    // bounds a safe move and reaches open space in a few steps.
-    travelled += max(abs(d) * STEP_SCALE, minStep);
-    if (travelled > MAX_MARCH_DISTANCE) {
+    // Step by |d|: the eye can start inside a beam (no collision guard), where
+    // a negative d would stall the march.
+    float stepLength = max(abs(d) * STEP_SCALE, minStep);
+    float strandLight = exp(-max(dStrand, 0.0) / haloRadius) * gTierBrightness;
+    halo += STRAND_HALO_COLOR * (HALO_GAIN * strandLight * (stepLength / cellSize) *
+                                 fogTransmittance(travelled, fogDistance) * wDim(p4.w));
+    travelled += stepLength;
+    if (travelled > maxDistance) {
       break;
     }
   }
   // A ray that spent its whole step budget within a few footprints of a
   // surface (a fiber seen at a grazing angle) is a hit, not a miss.
-  if (!hit && travelled <= MAX_MARCH_DISTANCE && abs(d) < GRAZE_ACCEPT_FOOTPRINTS * eps) {
+  if (!hit && travelled <= maxDistance && abs(d) < GRAZE_ACCEPT_FOOTPRINTS * eps) {
     hit = true;
   }
   return travelled;
 }
 
 vec3 shadeHit(vec3 p, vec3 rayDir, float footprint) {
-  int material = materialAt(p);
-  vec3 normal = estimateNormal(p);
-  float lambert = clamp(dot(normal, -rayDir), 0.0, 1.0);
-  // The depth/strand axis is the tilted z, not world z (see latticeSpace);
-  // latticeSpace is a pure rotation, so it carries a direction the same way
-  // it carries a position, with no translation term to strip out.
-  float tiltedDepth = latticeSpace(p).z;
-  float tiltedRayZ = latticeSpace(rayDir).z;
+  float dBeam;
+  float dStrand;
+  vec4 p4;
+  fieldDistances(p, dBeam, dStrand, p4);
+  bool strand = dStrand < dBeam;
+  float tierBrightness = gTierBrightness;
+  float tierRadius = gTierRadius;
+  vec3 normal = estimateNormal(p, max(0.002 * cellSize, 0.5 * footprint));
+  float facing = clamp(dot(normal, -rayDir), 0.0, 1.0);
+  float cue = wDim(p4.w);
   vec3 radiance;
-  if (material == MATERIAL_STRAND) {
-    float depthPattern = mod(tiltedDepth, max(corridorPeriod, 1e-3));
-    float lit = gaussian(depthPattern, mod(nowDepth, max(corridorPeriod, 1e-3)), nowWidth);
-    float pulse = pulseEnabled != 0
-                     ? gaussian(depthPattern, mod(pulseDepth, max(corridorPeriod, 1e-3)), pulseWidth)
-                     : 0.0;
-    // Anisotropic highlight along the depth axis (the fiber tangent), cheap
-    // in place of a full microfacet BRDF: brightest when the view grazes the
-    // fiber rather than looking straight down its length.
-    float aniso = pow(clamp(1.0 - abs(tiltedRayZ), 0.0, 1.0), 3.0);
-    float brightness = strandBrightnessAt(p);
-    // Every strand is already a dim emissive fiber; the now/pulse boost
-    // brightens the highlighted band further without letting an ordinary
-    // strand flood the frame the way a much brighter baseline would once
-    // the lattice fills most of the screen with thin fibers.
-    radiance = (STRAND_COLOR * (0.32 + (0.16 * lambert)) * brightness) + (STRAND_HIGHLIGHT * aniso * 0.03 * brightness);
-    radiance *= 1.0 + (1.0 * lit) + (1.8 * pulse);
+  float radius;
+  if (strand) {
+    float depth = p.z + (LATTICE_OFFSET_CELLS.z * cellSize);
+    float period = max(corridorPeriod, 1e-3);
+    float depthPattern = mod(depth, period);
+    float lit = gaussian(depthPattern, mod(nowDepth, period), nowWidth);
+    float pulse = pulseEnabled != 0 ? gaussian(depthPattern, mod(pulseDepth, period), pulseWidth) : 0.0;
+    // Round fiber: brightest on the axis, falling off across the width.
+    float core = pow(facing, 1.5);
+    radiance = mix(STRAND_HALO_COLOR, STRAND_CORE_COLOR, core) * (0.25 + (0.75 * core)) *
+               tierBrightness * (1.0 + lit + (1.8 * pulse));
+    radius = tierRadius;
   } else {
-    // Beams carry no now/pulse boost: the gravity message travels the
-    // strands, and a beam never crosses the bloom threshold.
-    radiance = BEAM_COLOR * (0.03 + (0.22 * lambert));
+    float rim = pow(1.0 - facing, 4.0);
+    float spec = pow(facing, 40.0);
+    radiance = (BEAM_COLOR * (0.02 + (0.06 * facing))) + (BEAM_RIM_COLOR * BEAM_RIM_GAIN * rim) +
+               (vec3(1.0, 0.82, 0.6) * BEAM_SPEC_GAIN * spec);
+    radius = 2.0 * BEAM_RADIUS_FRACTION * cellSize;
   }
-  // A fiber thinner than one pixel's footprint covers only part of the pixel;
-  // dimming by the covered fraction trades the aliased speckle a hard
-  // subpixel hit produces for a soft, continuous fade with distance.
-  float radius = material == MATERIAL_STRAND ? cellSize * STRAND_RADIUS_FRACTION
-                                             : 2.0 * cellSize * BEAM_THICKNESS_FRACTION;
+  // A fiber thinner than one pixel's footprint covers part of the pixel.
   float coverage = clamp(radius / max(footprint, 1e-6), 0.0, 1.0);
-  return radiance * strandGlow * coverage;
+  return radiance * strandGlow * cue * coverage;
 }
 
 void main() {
+  buildSliceFrame();
   vec3 rayDir = bhRayDir(gl_FragCoord.xy, resolution, fovScale, cameraBasis);
+  float fogDistance = FOG_CELLS * cellSize * FOG_REFERENCE_DENSITY / max(fogDensity, 1e-3);
 
   bool hit;
-  float travelled = raymarch(eye, rayDir, hit);
+  vec3 halo;
+  float travelled = raymarch(eye, rayDir, fogDistance, hit, halo);
 
   float footprint = travelled * fovScale / max(resolution.y, 1.0);
   vec3 shaded = hit ? shadeHit(eye + (rayDir * travelled), rayDir, footprint) : vec3(0.0);
-  // Exponential extinction into a near-black void: depth reads by strands
-  // and beams fading out, not by a flat mid-tone patch filling empty rays.
-  float extinction = exp(-travelled * fogDensity * 0.22);
-  vec3 color = (shaded * extinction) + (VOID_COLOR * (1.0 - extinction));
+  float extinction = fogTransmittance(travelled, fogDistance);
+  vec3 color = (shaded * extinction) + (halo * strandGlow) + (VOID_COLOR * (1.0 - extinction));
 
   fragColor = vec4(color, 1.0);
 }

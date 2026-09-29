@@ -197,7 +197,7 @@ struct RenderState {
     /// qL <- exp(ds leftRate) qL (advanceOrientation), ds = rotationSpeed * dt.
     /// Opposite equal rates give a simple rotation; equal rates give SO(3).
     std::array<float, 3> leftRate = {0.35f, 0.0f, 0.15f};
-    std::array<float, 3> rightRate = {-0.35f, 0.12f, 0.0f};
+    std::array<float, 3> rightRate = {0.0f, 0.03f, 0.0f};
     bool animate = true;        ///< Advance rotation and pulse; off freezes both in place.
     float resetPhase = 2.5f;    ///< s applied from the identity on (re)initialization.
     float rotationSpeed = 1.0f; ///< ds per second of frame time while animating.
@@ -216,7 +216,7 @@ struct RenderState {
     float pulseNow = 10.0f;  ///< Depth the pulse leaves (t_now).
     float pulsePast = 6.0f;  ///< Depth the pulse reaches (t_past).
     float pulseWidth = 0.35f;
-    float cellSize = 18.0f;      ///< Lattice cell period ("Corridor density").
+    float cellSize = 12.0f;      ///< Lattice cell period ("Corridor density").
     float driftSpeed = 0.6f;     ///< Forward camera drift, world units per second.
     float driftDistance = 0.0f; ///< Accumulated forward drift.
     float strandGlow = 1.0f;    ///< Fiber and frame emissive scale.

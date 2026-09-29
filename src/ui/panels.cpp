@@ -1002,7 +1002,7 @@ void renderTesseractProjectionControls(RenderState::TesseractGroup &tg) {
 
 void renderTesseractCorridorControls(RenderState::TesseractGroup &tg) {
   ImGui::SeparatorText("Corridor and light");
-  ImGui::SliderFloat("Corridor density", &tg.cellSize, 4.0f, 40.0f);
+  ImGui::SliderFloat("Corridor density", &tg.cellSize, 3.0f, 30.0f);
   ImGui::SliderFloat("Corridor period", &tg.timeSpan, 1.0f, 30.0f);
   ImGui::SliderFloat("Drift speed", &tg.driftSpeed, 0.0f, 4.0f);
   ImGui::SliderFloat("Strand glow", &tg.strandGlow, 0.0f, 4.0f);

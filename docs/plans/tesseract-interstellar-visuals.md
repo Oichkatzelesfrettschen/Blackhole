@@ -1,10 +1,53 @@
 # Tesseract scene: replacing the wireframe with an Interstellar-inspired look
 
-Status: design research, no code changed. The owner viewed the live scene and rejected it: a
-thin wireframe hypercube plus labeled "library of time" feature points (books, window corners,
-desk corners) read as a math diagram, not as the film's tesseract. This document maps the
-current implementation, pins down what the film actually shows, and proposes a concrete,
-real-time, asset-free rendering design plus a delete/keep/build breakdown.
+Status: shipped as a 4D hyperplane-slice raymarch (section 0). Sections 1 to 4 are the original
+design research that preceded it and describe the retired ribbon renderer and the first
+domain-repetition design; where they disagree with section 0, section 0 holds. The owner rejected
+the original scene: a thin wireframe hypercube plus labeled "library of time" feature points
+(books, window corners, desk corners) read as a math diagram, not as the film's tesseract.
+
+## 0. What ships
+
+`shader/tesseract.frag` sphere-traces a 3D hyperplane slice of a periodic 4D field (R1 of
+`docs/plans/hyperdimensional-projection-research.md`).
+
+- Field: three families of thickened 2-planes (a beam axis plus w) with cell period `cellSize`
+  (default 12, slider 3 to 30). Each slices to a tube along x, y, or z, so beams form a cubic
+  lattice that recedes down corridors in every direction. Beam radius is 1.2% of the cell. The
+  distance is the exact 4D distance, a lower bound of the slice distance, so sphere tracing does
+  not overshoot.
+- Slice frame: the columns of `rotation4` (the SO(4) matrix from `so4.h`, driven by the
+  left-isoclinic default `leftRate = (0.35, 0, 0.15)`, `rightRate = (0, 0.03, 0)`) blended toward
+  the identity (`0.10 * sceneScale`) and Gram-Schmidt orthonormalized. The slice tilts slowly
+  against the lattice as the rotation animates (R2). `projectionMode` and `perspectiveDistance`
+  no longer affect the shader; they still set the CPU framing bound.
+- Strands (R3): 45% of beams carry two helical shells of thin strands (three inner at 5% of the
+  cell radius, one outer at 11%, opposite twist). The phase advances with arc length and with
+  p4.w. The angular-sector fold is seam-free across the atan branch cut. Each strand hashes to
+  one of three tiers (radius 0.45%, 0.6%, 0.85% of the cell; emissive scale 0.08, 0.22, 1.3; 50%, 30%, 20% of strands), an integer PCG hash of the
+  lattice coordinates so every GL driver builds the same layout, and the now/pulse depth bands
+  boost strands only.
+- Shading: strands are round emissive fibers with a hot core falling off across the width plus a
+  halo accumulated from the nearest-strand distance along the march (analytic bloom); the
+  brightest tier crosses the 0.4 bloom threshold. Beams are dark bronze with a rim term and a
+  narrow specular streak, kept under the threshold.
+- Depth cues (R4): fog transmittance `exp(-(t / D)^1.8)` with `D` = 3.5 cells at the default
+  `fogDensity` (a steep exponent keeps the near cells clear and closes the corridor beyond `D`),
+  and `exp(-0.06 |p4.w|)` dimming of the sampled point's world-frame w.
+- Camera: the world lattice is offset so the default eye sits near the middle of a cell,
+  slightly off the corridor axis, looking down z with forward drift; the vanishing point is the
+  fog-dark center.
+- Marching: hit tolerance is half a pixel footprint per unit of travel; a march that exhausts its
+  step budget within four footprints of a surface counts as a hit; fibers thinner than a
+  footprint are dimmed by coverage.
+- Tests: `tesseract_raymarch_gl_test` bounds lit coverage to [10%, 45%], requires the brightest
+  0.5% of pixels to be amber and over the 0.4 bloom threshold, bounds isolated outlier pixels to
+  0.5% (measured 0.09%), and requires the mean central-third brightness to stay under 0.6 of the
+  outer ring's (measured 0.34; the recession falsifier). `tesseract_exposure_gl_test` pins
+  `TESSERACT_RECORD_EXPOSURE` (2.6) to a median display value near 0.9. Numbers measured on an NVIDIA GeForce RTX 4070 Ti
+  (Dense tier).
+- Not done: the R5 structure shot, the slice (room) patches, and a UI cleanup of the now-inert
+  projection controls.
 
 ## 1. Current implementation map
 
