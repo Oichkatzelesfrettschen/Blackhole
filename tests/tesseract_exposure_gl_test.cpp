@@ -4,7 +4,7 @@
  *
  * renderTesseractScene draws the default scene at the record framing into a
  * float target, the raw frame the tonemap reads before bloom. The lattice
- * raymarch fills most of the frame with lit surfaces (unlike the retired
+ * raymarch lights a large share of the frame with strands (unlike the retired
  * ribbon pass, which was mostly background), so the 99th percentile of every
  * pixel's max channel, times TESSERACT_RECORD_EXPOSURE, through the tonemap's
  * ACES curve and the showcase-orbit gamma, must land near 0.9. Skips without
@@ -128,8 +128,8 @@ std::vector<float> rawMaxChannel(double seconds, float fovDeg) {
   return maxChannel;
 }
 
-// 99th percentile max channel over every pixel: the lattice raymarch fills
-// most of the frame with lit surfaces, so unlike the retired ribbon pass this
+// 99th percentile max channel over every pixel: the lattice raymarch lights a
+// large share of the frame, so unlike the retired ribbon pass this
 // needs no background filter.
 float scenePercentile99(std::vector<float> maxChannel) {
   const auto rank = static_cast<std::ptrdiff_t>(0.99 * static_cast<double>(maxChannel.size() - 1));

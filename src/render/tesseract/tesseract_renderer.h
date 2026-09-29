@@ -180,16 +180,16 @@ inline constexpr float TESSERACT_MIN_PERSPECTIVE_DISTANCE = 2.1f;
  * which the raymarched lattice does not share, so applyRecordProfileSetup
  * replaces them in the tesseract scene. The statistic is the 99th percentile
  * of every pixel's max channel over the raw frame (tesseract_exposure_gl_test):
- * unlike the retired ribbon pass, a solid lattice fills most of the frame, so
- * this is not a small bright-pixel subset. Because the pass shows a local
+ * unlike the retired ribbon pass, the lattice's strands cover a large share of
+ * the frame, so this is not a small bright-pixel subset. Because the pass shows a local
  * neighborhood of an endless corridor, whether the narrow now/pulse highlight
  * band falls near the camera at a given moment varies with drift and
- * rotation, so the raw p99 itself ranges roughly 0.05 to 1.3 across the
+ * rotation, so the raw p99 itself ranges roughly 0.25 to 0.87 across the
  * default animation and lens choices tesseract_exposure_gl_test samples,
- * median near 0.65. TESSERACT_RECORD_EXPOSURE times that median, through the
+ * median near 0.43. TESSERACT_RECORD_EXPOSURE times that median, through the
  * ACES curve and the showcase-orbit gamma, lands near display 0.9.
  */
-inline constexpr float TESSERACT_RECORD_EXPOSURE = 1.4f;
+inline constexpr float TESSERACT_RECORD_EXPOSURE = 1.7f;
 /// Fraction of a recorded frame's room between the tesseract's center and the
 /// nearer frame edge that the bounding sphere fills on the tighter axis, below
 /// 1 so the sphere, a conservative bound, stays in frame (tesseractFraming).
