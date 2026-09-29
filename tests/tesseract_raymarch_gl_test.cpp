@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <cstddef>
 #include <memory>
 #include <numbers>
@@ -42,8 +43,8 @@ namespace {
 using blackhole::RenderState;
 using blackhole::TesseractRecordFrame;
 
-constexpr int WIDTH = 320;
-constexpr int HEIGHT = 180;
+constexpr int WIDTH = 640;
+constexpr int HEIGHT = 360;
 // A pixel below this linear-HDR max channel reads as void, not lit lattice.
 constexpr float COVERAGE_FLOOR = 0.02f;
 // Void-dominated but not empty. Falsifiers: a filled cardboard corridor or
@@ -51,12 +52,15 @@ constexpr float COVERAGE_FLOOR = 0.02f;
 // frame where strands vanished reads below MIN_LIT_COVERAGE.
 constexpr float MIN_LIT_COVERAGE = 0.10f;
 constexpr float MAX_LIT_COVERAGE = 0.45f;
-// Beam shading is BEAM_COLOR * (0.03 + 0.22 lambert) in shader/tesseract.frag,
-// at most 0.085 in linear HDR. The mean of the brightest 1% of pixels above
-// BRIGHT_STRAND_FLOOR (over twice that ceiling) can only come from strands.
-// Falsifier: strands dimmed to beam level, or beams promoted to emissive,
-// pull the mean under the floor or make it hue-neutral.
-constexpr float BRIGHT_STRAND_FLOOR = 0.2f;
+// The bloom brightness-pass threshold (post.bloomThreshold default). Beam
+// shading (dark bronze, rim, narrow specular; shader BEAM_* constants) stays
+// under it, so the brightest pixels crossing it, and being amber, proves that
+// strands are the brightest, glowing element. Falsifier: strands dimmed to
+// beam level, or beams promoted to emissive, pull the mean under the floor or
+// make it hue-neutral.
+constexpr float BRIGHT_STRAND_FLOOR = 0.4f;
+// Fraction of pixels, brightest first, the strand check averages over.
+constexpr std::size_t TOP_FRACTION_DENOMINATOR = 200;
 constexpr float AMBER_HUE_LOW_DEG = 15.0f;
 constexpr float AMBER_HUE_HIGH_DEG = 55.0f;
 // Speckle: a pixel whose max channel departs from the median of its 8
@@ -66,8 +70,15 @@ constexpr float AMBER_HUE_HIGH_DEG = 55.0f;
 constexpr float OUTLIER_DELTA = 0.35f;
 // Upper bound on the outlier fraction. Falsifier: a discontinuous SDF (a
 // fract()-based shear) or an under-stepped march scatters isolated pixels
-// well past this; the measured frame sits at 0.0002, so the bound has 25x margin.
+// well past this; the measured frame sits at 0.0004-0.0009, so the bound has 5x margin.
 constexpr float MAX_OUTLIER_FRACTION = 0.005f;
+// Depth recession: the frame's central third looks down the corridor into fog
+// and void, so its mean max channel must be below this fraction of the outer
+// ring's. Falsifier: a flat wall of strands (no fog gradient, no vanishing
+// point) puts the ratio near 1. The mean is over four animation moments and
+// clips each pixel at the bloom threshold, so a few bloom-bright strands do
+// not decide the ratio; the measured mean sits near 0.34.
+constexpr float MAX_CENTER_TO_RING_RATIO = 0.60f;
 
 class TesseractRaymarchGlTest : public ::testing::Test {
 protected:
@@ -128,7 +139,7 @@ float hueDegreesOf(float r, float g, float b) {
   return hue < 0.0f ? hue + 360.0f : hue;
 }
 
-std::vector<float> renderDefaultScene() {
+std::vector<float> renderDefaultScene(double seconds = 1.5) {
   const auto stateStorage = std::make_unique<RenderState>();
   RenderState &rs = *stateStorage;
   const GLuint target = createColorTexture32f(WIDTH, HEIGHT);
@@ -139,7 +150,7 @@ std::vector<float> renderDefaultScene() {
                         glm::vec3(0.0f, 0.0f, -1.0f));
   blackhole::renderTesseractScene(
       rs, basis, glm::vec3(0.0f, 0.0f, -1.0f), 0.0f,
-      TesseractRecordFrame{.outputClockSeconds = 1.5, .camera = {.fovDeg = 45.0f}});
+      TesseractRecordFrame{.outputClockSeconds = seconds, .camera = {.fovDeg = 45.0f}});
   std::vector<float> rgba(static_cast<std::size_t>(WIDTH) * HEIGHT * 4);
   glGetTextureImage(target, 0, GL_RGBA, GL_FLOAT, static_cast<GLsizei>(rgba.size() * sizeof(float)),
                     rgba.data());
@@ -167,13 +178,13 @@ TEST_F(TesseractRaymarchGlTest, VoidDominatedFrameWithStrandsAsTheBrightestEleme
   EXPECT_GE(coverage, MIN_LIT_COVERAGE);
   EXPECT_LE(coverage, MAX_LIT_COVERAGE);
 
-  // Brightest 1% of pixels: strand-colored (amber hue) and brighter than any
+  // Brightest 0.5% of pixels: strand-colored (amber hue) and brighter than any
   // beam can be.
   std::vector<std::size_t> order(pixelCount);
   for (std::size_t i = 0; i < pixelCount; ++i) {
     order.at(i) = i;
   }
-  const std::size_t topCount = pixelCount / 100;
+  const std::size_t topCount = pixelCount / TOP_FRACTION_DENOMINATOR;
   std::ranges::partial_sort(order, order.begin() + static_cast<std::ptrdiff_t>(topCount),
                             [&](std::size_t a, std::size_t b) {
                               return maxChannels.at(a) > maxChannels.at(b);
@@ -195,7 +206,7 @@ TEST_F(TesseractRaymarchGlTest, VoidDominatedFrameWithStrandsAsTheBrightestEleme
   if (meanHueDeg < 0.0) {
     meanHueDeg += 360.0;
   }
-  std::printf("brightest 1%%: mean max channel %.3f, circular mean hue %.1f degrees\n", topMean,
+  std::printf("brightest 0.5%%: mean max channel %.3f, circular mean hue %.1f degrees\n", topMean,
               meanHueDeg);
   EXPECT_GT(topMean, static_cast<double>(BRIGHT_STRAND_FLOOR));
   EXPECT_GE(meanHueDeg, AMBER_HUE_LOW_DEG);
@@ -228,6 +239,36 @@ TEST_F(TesseractRaymarchGlTest, VoidDominatedFrameWithStrandsAsTheBrightestEleme
   std::printf("outlier fraction %.4f (%zu of %zu)\n", static_cast<double>(outlierFraction),
               outliers, interior);
   EXPECT_LE(outlierFraction, MAX_OUTLIER_FRACTION);
+}
+
+TEST_F(TesseractRaymarchGlTest, CentralThirdIsDarkerThanTheOuterRing) {
+  double ratioSum = 0.0;
+  int samples = 0;
+  for (const double seconds : {0.0, 1.5, 3.0, 4.5}) {
+    const std::vector<float> rgba = renderDefaultScene(seconds);
+    double centerSum = 0.0;
+    double ringSum = 0.0;
+    std::size_t centerCount = 0;
+    std::size_t ringCount = 0;
+    for (int y = 0; y < HEIGHT; ++y) {
+      for (int x = 0; x < WIDTH; ++x) {
+        const bool center =
+            x >= WIDTH / 3 && x < 2 * WIDTH / 3 && y >= HEIGHT / 3 && y < 2 * HEIGHT / 3;
+        const double value = static_cast<double>(std::min(BRIGHT_STRAND_FLOOR, maxChannelAt(
+            rgba, (static_cast<std::size_t>(y) * WIDTH) + static_cast<std::size_t>(x))));
+        (center ? centerSum : ringSum) += value;
+        ++(center ? centerCount : ringCount);
+      }
+    }
+    const double ratio = (centerSum / static_cast<double>(centerCount)) /
+                         (ringSum / static_cast<double>(ringCount));
+    std::printf("t %.1f center/ring mean ratio %.3f\n", seconds, ratio);
+    ratioSum += ratio;
+    ++samples;
+  }
+  const double meanRatio = ratioSum / samples;
+  std::printf("mean center/ring ratio %.3f\n", meanRatio);
+  EXPECT_LT(meanRatio, static_cast<double>(MAX_CENTER_TO_RING_RATIO));
 }
 
 } // namespace
