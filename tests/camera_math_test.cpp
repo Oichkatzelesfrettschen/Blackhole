@@ -67,7 +67,7 @@ TEST(RendererContract, StartupAndReferenceBudget) {
   const blackhole::RendererContract contract;
   EXPECT_EQ(contract.backend, blackhole::RenderBackend::Fragment);
   EXPECT_EQ(contract.geodesic, blackhole::GeodesicModel::KerrReference);
-  EXPECT_EQ(contract.radiative, blackhole::RadiativeModel::ThinSurface);
+  EXPECT_EQ(contract.radiative, blackhole::RadiativeModel::VolumetricRte);
   EXPECT_EQ(contract.quality, blackhole::QualityTier::Balanced);
   // Reference covers twice the selected affine range at step 0.02, and at
   // least 40: 300 x 0.1 = 30 -> 60 -> 3001 steps; 500 x 0.04 = 20 -> 40.

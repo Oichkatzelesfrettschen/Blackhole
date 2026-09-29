@@ -16,7 +16,10 @@ enum class QualityTier { Interactive, Balanced, Reference };
 struct RendererContract {
   RenderBackend backend = RenderBackend::Fragment;
   GeodesicModel geodesic = GeodesicModel::KerrReference;
-  RadiativeModel radiative = RadiativeModel::ThinSurface;
+  // The volumetric disk (interop_trace.glsl bhTraceGeodesicRTE): density
+  // absorption, flared height, and a soft outer taper over the thin-surface
+  // disk's emission.
+  RadiativeModel radiative = RadiativeModel::VolumetricRte;
   QualityTier quality = QualityTier::Balanced;
 };
 

@@ -329,8 +329,8 @@ struct RenderState {
     float diskTurbulence = 0.6f;
     // Disk clock in GM/c^3 of coordinate time per wall second. At 10 the
     // Schwarzschild ISCO orbit (2 pi 6^1.5 M = 92 M) takes 9 s and the
-    // texture's 240 M winding cycle 24 s; 1 is the physical rate for a
-    // 2e5 solar-mass hole.
+    // texture band centered on 8 M renews every half orbit there, 7 s; 1 is
+    // the physical rate for a 2e5 solar-mass hole.
     float diskTimeScale = 10.0f;
     // Scale height over cylindrical radius of the volumetric (RTE and
     // Stokes) disk; the thin-surface disk has no thickness.
