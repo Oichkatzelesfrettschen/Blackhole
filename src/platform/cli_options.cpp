@@ -23,6 +23,7 @@ void printCliUsage(const char *argv0) {
   std::printf("  --curve-tsv <path>       Load a 2-column TSV and plot it in ImGui.\n");
   std::printf("  --workspace-screenshot <prefix>  Capture whole-window PNG and layout JSON.\n");
   std::printf("  --workspace <simulator|propertime|diagnostics>  Select a fresh workspace.\n");
+  std::printf("  --scene <blackhole|observer|tesseract>  Select the capture scene.\n");
   std::printf("  --window-size <WxH>      Capture framebuffer size.\n");
   std::printf("  --ui-scale <S>           Capture UI scale (default: 1).\n");
   std::printf("  --export-frame <path>    Render one frame, save as PNG, then exit.\n");
@@ -80,6 +81,15 @@ CliParseOutcome parseCliOptions(int argc, char **argv, CliOptions &out) {
     if (arg == "--workspace" && i + 1 < argc) {
       out.workspaceName = argv[++i];
       continue;
+    }
+    if (arg == "--scene" && i + 1 < argc) {
+      out.sceneName = argv[++i];
+      if (out.sceneName == "blackhole" || out.sceneName == "observer" ||
+          out.sceneName == "tesseract") {
+        continue;
+      }
+      std::printf("Unknown scene: %s\n", out.sceneName.c_str());
+      return CliParseOutcome::ExitFailure;
     }
     if (arg == "--window-size" && i + 1 < argc) {
       const std::string value = argv[++i];

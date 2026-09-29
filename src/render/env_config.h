@@ -22,18 +22,18 @@
 
 namespace blackhole {
 
-/** @brief Scene named by a BLACKHOLE_SCENE value: "blackhole", "observer-sky", or "tesseract". */
+/** @brief Scene named by a CLI or BLACKHOLE_SCENE value. */
 std::optional<RenderState::SceneMode> parseSceneName(std::string_view name);
 
 /**
- * @brief Scene the process starts in: BLACKHOLE_SCENE when it names a scene,
- *        Blackhole otherwise. applyEnvironmentConfig and main's option
- *        validation both read the scene through this function.
+ * @brief Scene the process starts in: an explicit capture scene, then
+ *        BLACKHOLE_SCENE, then Blackhole. Startup and option validation share
+ *        this selector.
  */
-RenderState::SceneMode startupSceneMode();
+RenderState::SceneMode startupSceneMode(std::string_view sceneName = {});
 
-/** @brief Applies BLACKHOLE_* environment-variable overrides to rs at startup. */
-void applyEnvironmentConfig(RenderState &rs);
+/** @brief Applies BLACKHOLE_* overrides with an optional capture scene. */
+void applyEnvironmentConfig(RenderState &rs, std::string_view sceneName = {});
 
 /**
  * @brief Parses one BLACKHOLE_* float value.

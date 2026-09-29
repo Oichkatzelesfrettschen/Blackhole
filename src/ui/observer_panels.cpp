@@ -39,16 +39,19 @@ void renderObserverControls(RenderState::ObserverViewGroup &view) {
   const double epsilonMax = blackhole::K_OBSERVER_EPSILON_MAX;
   ImGui::SliderScalar("1 - a", ImGuiDataType_Double, &view.epsilon, &epsilonMin, &epsilonMax,
                       "%.3e", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
-  if (ImGui::Button("Gargantua canon (1 - a = 1.33e-14, prograde ISCO)")) {
+  if (ImGui::Button("Gargantua canon")) {
     view.epsilon = blackhole::K_GARGANTUA_SPIN_DEFICIT;
     view.atIsco = true;
     view.kind = ObserverKind::Prograde;
   }
+  ImGui::TextWrapped("1 - a = 1.33e-14; prograde ISCO");
   constexpr std::array<const char *, 4> kinds = {"Circular orbit, prograde",
                                                  "Circular orbit, retrograde", "ZAMO (hovering)",
                                                  "Static (hovering, outside ergoregion)"};
   int kindIndex = static_cast<int>(view.kind);
-  if (ImGui::Combo("Observer", &kindIndex, kinds.data(), static_cast<int>(kinds.size()))) {
+  ImGui::TextUnformatted("Observer kind");
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  if (ImGui::Combo("##observer-kind", &kindIndex, kinds.data(), static_cast<int>(kinds.size()))) {
     view.kind = static_cast<ObserverKind>(kindIndex);
   }
   ImGui::Checkbox("At the ISCO", &view.atIsco);
@@ -73,7 +76,7 @@ void renderClockControls(RenderState::ObserverViewGroup &view) {
   ImGui::SliderScalar("Sky time scale", ImGuiDataType_Double, &view.skyTimeScale, &scaleMin,
                       &scaleMax, "%.1e",
                       ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
-  ImGui::TextDisabled("observer seconds per wall second; 1 = the observer's real time");
+  ImGui::TextWrapped("observer seconds per wall second; 1 = the observer's real time");
   if (ImGui::Button("1e-3 (default)")) {
     view.skyTimeScale = 1.0e-3;
   }
@@ -83,7 +86,8 @@ void renderClockControls(RenderState::ObserverViewGroup &view) {
   }
   ImGui::SameLine();
   ImGui::Checkbox("Paused", &view.paused);
-  ImGui::Checkbox("Motion blur (4 to 16 samples when the sky moves)", &view.motionBlur);
+  ImGui::Checkbox("Motion blur", &view.motionBlur);
+  ImGui::TextWrapped("4 to 16 samples when the sky moves");
   const blackhole::ObserverClockModel &clock = view.lastClock;
   ImGui::Text("Observer clock: %.6f s", view.properSeconds);
   if (clock.secondsPerM > 0.0) {
@@ -114,7 +118,7 @@ void renderViewControls(RenderState::ObserverViewGroup &view) {
                         &lonMax, "%.4f");
     ImGui::SliderScalar("Latitude (deg)", ImGuiDataType_Double, &view.lookLatitudeDeg, &latMin,
                         &latMax, "%.4f");
-    ImGui::TextDisabled("longitude 0 = the hole, 90 = direction of motion, 180 = straight out");
+    ImGui::TextWrapped("longitude 0 = the hole, 90 = direction of motion, 180 = straight out");
   }
   if (view.navigation == Navigation::TrackPatch && !view.renderer.lut()) {
     ImGui::TextDisabled("The patch appears once the sky map is ready.");
@@ -130,11 +134,13 @@ void renderViewControls(RenderState::ObserverViewGroup &view) {
   ImGui::Checkbox("CMB (2.725 K blackbody)", &view.cmbEnabled);
   ImGui::SameLine();
   ImGui::Checkbox("Stars (cubemap)", &view.starsEnabled);
-  ImGui::SliderFloat("Starfield luminance (cd/m^2)", &view.starSkyLuminance, 1.0e-6F, 1.0F, "%.1e",
+  ImGui::TextWrapped("Starfield luminance (cd/m^2)");
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  ImGui::SliderFloat("##starfield-luminance", &view.starSkyLuminance, 1.0e-6F, 1.0F, "%.1e",
                      ImGuiSliderFlags_Logarithmic);
   ImGui::DragFloatRange2("log10 luminance range", &view.logLuminanceMin, &view.logLuminanceMax,
                          0.1F, -12.0F, 20.0F, "%.1f");
-  ImGui::TextDisabled("Star colors: RGB texels shifted as blackbodies (approximate).");
+  ImGui::TextWrapped("Star colors: RGB texels shifted as blackbodies (approximate).");
 }
 
 /** @brief What a panel shows while no sky is resident: the renderer's status
@@ -205,6 +211,8 @@ void renderObserverPhysicsNote(const RenderState &rs) {
   }
   ImGui::Text("M = %.3g M_sun: GM/c^3 = %.5g s", view.massSolar, clock.secondsPerM);
   ImGui::Separator();
+  ImGui::BeginChild("Physics explanation", ImVec2(0, 110), ImGuiChildFlags_Borders,
+                    ImGuiWindowFlags_AlwaysVerticalScrollbar);
   ImGui::TextWrapped(
       "A tidally locked observer keeps the same face to the hole, so its local sky is fixed in "
       "its own frame: the shadow and the blueshift patch are functions of the look direction "
@@ -213,6 +221,7 @@ void renderObserverPhysicsNote(const RenderState &rs) {
       "Miller's orbit. At sky time scale 1 each frame averages 4 to 16 sub-frame positions over "
       "the turn the sky just made (motion blur); the default 1e-3 slows the sky a thousandfold "
       "so the star field can be followed.");
+  ImGui::EndChild();
   ImGui::End();
 }
 
@@ -329,11 +338,16 @@ void renderObserverSkyPanel(RenderState &rs) {
   RenderState::ObserverViewGroup &view = rs.observerView;
   ImGui::SetNextWindowSize(ImVec2(460, 720), ImGuiCond_FirstUseEver);
   ImGui::Begin("Observer sky");
+  ImGui::BeginChild("Scene explanation", ImVec2(0, 56), ImGuiChildFlags_Borders,
+                    ImGuiWindowFlags_AlwaysVerticalScrollbar);
   ImGui::TextWrapped("%s", observerSpinDisclosure(rs).c_str());
+  ImGui::EndChild();
+  ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
   renderObserverControls(view);
   renderClockControls(view);
   renderViewControls(view);
   renderStatistics(view);
+  ImGui::PopItemWidth();
   ImGui::End();
 }
 
@@ -344,6 +358,10 @@ void renderObserverWindows(RenderState &rs) {
   renderObserverSkyPanel(rs);
   renderObserverPhysicsNote(rs);
   renderObserverDistantView(rs);
+  if (rs.overlays.sceneWindowFocusPending) {
+    ImGui::SetWindowFocus("Observer sky");
+    rs.overlays.sceneWindowFocusPending = false;
+  }
 }
 
 } // namespace ui

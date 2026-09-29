@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cfloat>
 #include <cstddef>
 #include <filesystem>
 #include <format>
@@ -987,7 +988,9 @@ void renderTesseractProjectionControls(RenderState::TesseractGroup &tg) {
   constexpr std::array<const char *, 2> projectionItems = {"Perspective along w",
                                                            "Stereographic from S^3"};
   int projectionIndex = static_cast<int>(tg.projection);
-  if (ImGui::Combo("Projection", &projectionIndex, projectionItems.data(),
+  ImGui::TextUnformatted("Projection");
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  if (ImGui::Combo("##projection", &projectionIndex, projectionItems.data(),
                    static_cast<int>(projectionItems.size()))) {
     tg.projection = static_cast<RenderState::TesseractGroup::Projection>(projectionIndex);
   }
@@ -1004,7 +1007,9 @@ void renderTesseractLibraryControls(RenderState::TesseractGroup &tg) {
   tg.selection.featureIndex = std::min(tg.selection.featureIndex, features.size() - 1);
   // ImGui labels need null-terminated strings; the names are string_views.
   const std::string selectedName(features.at(tg.selection.featureIndex).name);
-  if (ImGui::BeginCombo("Selected feature", selectedName.c_str())) {
+  ImGui::TextUnformatted("Selected feature");
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  if (ImGui::BeginCombo("##selected-feature", selectedName.c_str())) {
     for (std::size_t featureIndex = 0; featureIndex < features.size(); ++featureIndex) {
       const bool selected = featureIndex == tg.selection.featureIndex;
       const std::string featureName(features.at(featureIndex).name);
@@ -1046,15 +1051,24 @@ void renderTesseractPanel(RenderState &rs) {
     return;
   }
   ImGui::SetNextWindowSize(ImVec2(360, 560), ImGuiCond_FirstUseEver);
+  if (rs.overlays.sceneWindowFocusPending) {
+    ImGui::SetNextWindowFocus();
+    rs.overlays.sceneWindowFocusPending = false;
+  }
   if (ImGui::Begin("Tesseract", nullptr, ImGuiWindowFlags_NoCollapse)) {
     const std::string_view label = blackhole::TESSERACT_SPECULATIVE_LABEL;
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.78f, 0.35f, 1.0f));
-    ImGui::TextUnformatted(label.data(), label.data() + label.size());
+    ImGui::BeginChild("Scene explanation", ImVec2(0, 56), ImGuiChildFlags_Borders,
+                      ImGuiWindowFlags_AlwaysVerticalScrollbar);
+    ImGui::TextWrapped("%.*s", static_cast<int>(label.size()), label.data());
+    ImGui::EndChild();
     ImGui::PopStyleColor();
+    ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
     renderTesseractRotationControls(rs.tesseract);
     renderTesseractProjectionControls(rs.tesseract);
     renderTesseractLibraryControls(rs.tesseract);
     renderTesseractAppearanceControls(rs.tesseract);
+    ImGui::PopItemWidth();
   }
   ImGui::End();
 }

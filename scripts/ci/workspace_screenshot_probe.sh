@@ -10,6 +10,10 @@ export LIBGL_ALWAYS_SOFTWARE=1
 export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
 export MESA_GL_VERSION_OVERRIDE=4.6
 export MESA_GLSL_VERSION_OVERRIDE=460
+mesa_egl_vendor=/usr/share/glvnd/egl_vendor.d/50_mesa.json
+if [ -f "$mesa_egl_vendor" ]; then
+  export __EGL_VENDOR_LIBRARY_FILENAMES=$mesa_egl_vendor
+fi
 
 if [ "${BLACKHOLE_WORKSPACE_DISPLAY:-xvfb}" = xvfb ] && [ "${BH_WORKSPACE_XVFB_ACTIVE:-0}" != 1 ]; then
   command -v xvfb-run >/dev/null 2>&1 || {
@@ -43,6 +47,19 @@ for configuration in 1280x720:1 1920x1080:1 2560x1440:2; do
     prefix=$artifact_dir/$workspace-$size-scale$scale
     if ! "$build_dir/Blackhole" --workspace-screenshot "$prefix" \
       --workspace "$workspace" --window-size "$size" --ui-scale "$scale" \
+      > "$prefix.log" 2>&1; then
+      echo "Workspace capture failed: $prefix (see $prefix.log)" >&2
+      result=1
+      continue
+    fi
+    if ! "$PYTHON" scripts/ci/check_workspace_layout.py "$prefix.json" "$prefix.first.json"; then
+      result=1
+    fi
+  done
+  for scene in observer tesseract; do
+    prefix=$artifact_dir/simulator-$scene-$size-scale$scale
+    if ! "$build_dir/Blackhole" --workspace-screenshot "$prefix" \
+      --workspace simulator --scene "$scene" --window-size "$size" --ui-scale "$scale" \
       > "$prefix.log" 2>&1; then
       echo "Workspace capture failed: $prefix (see $prefix.log)" >&2
       result=1

@@ -1342,10 +1342,18 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
   return result;
 }
 
-void writeWorkspaceLayout(const platform::CliOptions &cli, bool first) {
+void writeWorkspaceLayout(const platform::CliOptions &cli, RenderState::SceneMode sceneMode,
+                          bool first) {
   nlohmann::json layout;
   const ImGuiViewport *const viewport = ImGui::GetMainViewport();
   layout["workspace"] = cli.workspaceName;
+  if (sceneMode == RenderState::SceneMode::ObserverSky) {
+    layout["scene"] = "observer";
+  } else if (sceneMode == RenderState::SceneMode::Tesseract) {
+    layout["scene"] = "tesseract";
+  } else {
+    layout["scene"] = "blackhole";
+  }
   layout["viewport"] = {viewport->Pos.x, viewport->Pos.y, viewport->Size.x,
                         viewport->Size.y};
   layout["ui_scale"] = cli.uiScale;
@@ -1425,10 +1433,10 @@ bool completeFrame(RenderState &rs, const platform::CliOptions &cli, GLFWwindow 
   if (!cli.workspaceScreenshotPath.empty()) {
     ++workspaceCaptureFrame;
     if (workspaceCaptureFrame == 3) {
-      writeWorkspaceLayout(cli, true);
+      writeWorkspaceLayout(cli, rs.scene.mode, true);
       rs.overlays.firstLayout = true;
     } else if (workspaceCaptureFrame == 6) {
-      writeWorkspaceLayout(cli, false);
+      writeWorkspaceLayout(cli, rs.scene.mode, false);
       writeWorkspaceScreenshot(cli, window);
     }
   }
@@ -1561,6 +1569,7 @@ void prepareWorkspaceDockspace(ImGuiID dockspaceId, Settings &settings, RenderSt
   if (rs.overlays.firstLayout) {
     resetLayout(dockspaceId, static_cast<ui::WorkspaceKind>(settings.workspaceKind));
     rs.overlays.firstLayout = false;
+    rs.overlays.sceneWindowFocusPending = true;
     settings.workspaceSchemaVersion = ui::K_WORKSPACE_SCHEMA_VERSION;
   }
   rs.overlays.diagnosticsVisible = settings.advancedControls ||
@@ -1607,12 +1616,12 @@ void renderWorkspacePanels(RenderState &rs, const Settings &settings, GLFWwindow
   if (rs.overlays.diagnosticsVisible) {
     renderControlsHelpPanel();
     renderWiregridPanel(rs);
-    ui::renderObserverWindows(rs);
-    renderTesseractPanel(rs);
     renderRmlUiPanel(rs);
     renderGizmoPanel(rs);
     renderPerformancePanel(rs, cpuFrameMs);
   }
+  ui::renderObserverWindows(rs);
+  renderTesseractPanel(rs);
   if (settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::ProperTime)) {
     ui::renderConstellationPanels(constellationUi, rs);
   } else if (settings.workspaceKind == static_cast<int>(ui::WorkspaceKind::Diagnostics)) {
@@ -1641,8 +1650,8 @@ int renderTargetExtent(int exportExtent, bool referenceScene, float viewportExte
 
 bool workspaceCaptureOptionsValid(const platform::CliOptions &cli) {
   const bool capture = !cli.workspaceScreenshotPath.empty();
-  const bool options = !cli.workspaceName.empty() || cli.windowWidth != 0 ||
-                       cli.windowHeight != 0 || cli.uiScale != 1.0f;
+  const bool options = !cli.workspaceName.empty() || !cli.sceneName.empty() ||
+                       cli.windowWidth != 0 || cli.windowHeight != 0 || cli.uiScale != 1.0f;
   if (!capture) {
     return !options;
   }
@@ -1735,7 +1744,7 @@ int main(int argc, char **argv) {
       return 2;
     }
     if (const auto conflict =
-            blackhole::exportConflictForScene(cli, blackhole::startupSceneMode())) {
+            blackhole::exportConflictForScene(cli, blackhole::startupSceneMode(cli.sceneName))) {
       std::printf("%s\n", conflict->c_str());
       return 2;
     }
@@ -1860,7 +1869,7 @@ int main(int argc, char **argv) {
     if (cli.exportWidth > 0) {
       rs.display.renderScale = 1.0f;
     }
-    applyEnvironmentConfig(rs);
+    applyEnvironmentConfig(rs, cli.sceneName);
     if (K_APP_VARIANT_CUDA_ONLY) {
       rs.dispatch.contract.backend = RenderBackend::Cuda;
     }

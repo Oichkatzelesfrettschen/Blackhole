@@ -289,17 +289,19 @@ void applyOverlayEnvironment(RenderState &rs) {
   }
 }
 
-void applySceneEnvironment(RenderState &rs) {
+void applySceneEnvironment(RenderState &rs, std::string_view sceneName) {
   if (rs.scene.envApplied) {
     return;
   }
-  if (const char *sceneEnv = std::getenv("BLACKHOLE_SCENE")) {
-    if (!parseSceneName(sceneEnv).has_value()) {
-      std::cerr << "BLACKHOLE_SCENE='" << sceneEnv
-                << "' is not a scene; expected blackhole, observer-sky, or tesseract\n";
+  if (sceneName.empty()) {
+    if (const char *sceneEnv = std::getenv("BLACKHOLE_SCENE")) {
+      if (!parseSceneName(sceneEnv).has_value()) {
+        std::cerr << "BLACKHOLE_SCENE='" << sceneEnv
+                  << "' is not a scene; expected blackhole, observer-sky, or tesseract\n";
+      }
     }
   }
-  rs.scene.mode = startupSceneMode();
+  rs.scene.mode = startupSceneMode(sceneName);
   rs.scene.envApplied = true;
 }
 
@@ -484,7 +486,7 @@ std::optional<std::pair<double, double>> parseFinitePair(const char *text) {
 }
 
 std::optional<RenderState::SceneMode> parseSceneName(std::string_view name) {
-  if (name == "observer-sky") {
+  if (name == "observer-sky" || name == "observer") {
     return RenderState::SceneMode::ObserverSky;
   }
   if (name == "tesseract") {
@@ -496,7 +498,10 @@ std::optional<RenderState::SceneMode> parseSceneName(std::string_view name) {
   return std::nullopt;
 }
 
-RenderState::SceneMode startupSceneMode() {
+RenderState::SceneMode startupSceneMode(std::string_view sceneName) {
+  if (!sceneName.empty()) {
+    return parseSceneName(sceneName).value_or(RenderState::SceneMode::Blackhole);
+  }
   const char *sceneEnv = std::getenv("BLACKHOLE_SCENE");
   if (sceneEnv == nullptr) {
     return RenderState::SceneMode::Blackhole;
@@ -504,8 +509,8 @@ RenderState::SceneMode startupSceneMode() {
   return parseSceneName(sceneEnv).value_or(RenderState::SceneMode::Blackhole);
 }
 
-void applyEnvironmentConfig(RenderState &rs) {
-  applySceneEnvironment(rs);
+void applyEnvironmentConfig(RenderState &rs, std::string_view sceneName) {
+  applySceneEnvironment(rs, sceneName);
   applyObserverEnvironment(rs);
   applyCompareEnvironment(rs);
   applyProbeEnvironment(rs);

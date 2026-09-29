@@ -22,6 +22,7 @@ struct CliOptions {
   std::string curveTsvPath;
   std::string workspaceScreenshotPath;
   std::string workspaceName;
+  std::string sceneName;
   int windowWidth = 0;
   int windowHeight = 0;
   float uiScale = 1.0f;
