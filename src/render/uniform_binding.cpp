@@ -331,6 +331,9 @@ void bindCudaLaunchParams(BH_LaunchParams &cp, const RenderState &rs,
   cp.disk_brightness = interop.diskBrightness;
   cp.disk_flux_peak = interop.diskFluxPeak;
   cp.disk_transfer_mode = rs.disk.diskTransferMode;
+  cp.disk_turbulence = interop.diskTurbulence;
+  cp.disk_time_scale = interop.diskTimeScale;
+  cp.disk_scale_height = interop.diskScaleHeight;
 }
 #endif
 

@@ -124,6 +124,11 @@ struct BH_LaunchParams {
     float disk_brightness;       /**< @brief Display scale on the bolometric intensity g^4 F / F_peak. */
     float disk_flux_peak;        /**< @brief physics::pageThorneFluxPeak(spin), the flux normalization (M = 1). */
     int   disk_transfer_mode;    /**< @brief 0 = Physical g-factor, 1 = Interstellar (g = 1, lensing kept). */
+
+    /* Volumetric disk (bhDiskTurbulence / bhDiskScaleHeight) */
+    float disk_turbulence;   /**< @brief Log-normal width sigma of the emissivity turbulence (0 = smooth disk). */
+    float disk_time_scale;   /**< @brief Turbulence clock in GM/c^3 per wall second (GLSL diskTimeScale). */
+    float disk_scale_height; /**< @brief Disk scale height per cylindrical radius, H/r (GLSL diskScaleHeight). */
 };
 
 /**

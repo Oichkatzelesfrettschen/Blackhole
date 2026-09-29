@@ -144,6 +144,7 @@ static BH_LaunchParams make_disk_params(int w, int h) {
     /* Disk emission: 6500 K at the Page-Thorne flux peak, unit brightness. */
     p.disk_peak_temperature = 6500.0f;
     p.disk_brightness       = 1.0f;
+    p.disk_scale_height       = 0.03f;
     p.disk_flux_peak        = static_cast<float>(physics::pageThorneFluxPeak(p.spin));
     p.doppler_strength = 0.0f; /* disable Doppler for cleaner comparisons */
     p.adisk_lit        = 1.0f; /* non-zero so d_disk_color returns visible brightness */

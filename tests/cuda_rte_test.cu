@@ -60,6 +60,7 @@ static BH_LaunchParams make_rte_params(int w, int h, float spin,
     /* Disk emission: 6500 K at the Page-Thorne flux peak, unit brightness. */
     p.disk_peak_temperature = 6500.0f;
     p.disk_brightness       = 1.0f;
+    p.disk_scale_height       = 0.03f;
     p.disk_flux_peak        = static_cast<float>(physics::pageThorneFluxPeak(p.spin));
 
     /* Camera at (0, 0, 20): looking toward the BH at origin */

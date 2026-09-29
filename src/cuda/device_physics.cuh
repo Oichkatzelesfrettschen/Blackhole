@@ -15,6 +15,7 @@
 #include <math.h>
 
 #include "device_disk_transfer.cuh"
+#include "device_disk_turbulence.cuh"
 #include "../../shader/include/ray_terminal.h"
 
 enum class RayTerminal : unsigned char {
@@ -48,6 +49,9 @@ __device__ __forceinline__ void d_set_terminal(RayTerminal *output, RayTerminal 
 #define D_DISK_OUTER_RADIUS_RS                                                                     \
   20.0f /**< @brief Accretion-disk outer edge in units of rs; BH_DISK_OUTER_RADIUS_RS in           \
            interop_trace.glsl. */
+#define D_DISK_TAPER_WIDTH_RS                                                                      \
+  8.0f /**< @brief Width of the volumetric disk's outer density taper in units of rs;              \
+          BH_DISK_TAPER_WIDTH_RS in interop_trace.glsl. */
 
 /* Synchrotron G(x) LUT domain -- shared with the C++ generator through
  * shader/include/synchrotron_lut_domain.h. */
@@ -144,6 +148,9 @@ extern __constant__ float d_disk_peak_temperature; /**< @brief Blackbody tempera
 extern __constant__ float d_disk_brightness;       /**< @brief Display scale on the bolometric disk intensity g^4 F / F_peak. */
 extern __constant__ float d_disk_flux_peak;        /**< @brief Page-Thorne flux-shape peak at d_spin (M = 1), the flux normalization. */
 extern __constant__ int   d_disk_transfer_mode;    /**< @brief 0 = Physical g-factor, 1 = Interstellar (g = 1, lensing kept). */
+extern __constant__ float d_disk_turbulence;       /**< @brief Log-normal width sigma of the disk emissivity turbulence (0 = smooth). */
+extern __constant__ float d_disk_time_scale;       /**< @brief Turbulence clock in GM/c^3 per wall second (GLSL diskTimeScale). */
+extern __constant__ float d_disk_scale_height;     /**< @brief Volumetric disk scale height per cylindrical radius, H/r (GLSL diskScaleHeight). */
 
 /* ========================================================================
  * Vector helpers (replacing GLSL vec3 operations)
@@ -1274,9 +1281,23 @@ __device__ __forceinline__ void d_disk_emission(float r, float photon_lambda, fl
 }
 
 /**
+ * @brief Turbulence factor at a disk point p (physics frame, disk in xy).
+ *
+ * The log-normal width is d_disk_turbulence and the pattern clock is
+ * d_time_sec * d_disk_time_scale, coordinate time in GM/c^3. Twin of
+ * bhDiskTurbulence.
+ */
+__device__ __forceinline__ float d_disk_turbulence_at(float3 p, float rs) {
+    float const m = fmaxf(0.5f * rs, D_EPSILON);
+    return d_disk_turbulence_factor(sqrtf(fmaf(p.x, p.x, p.y * p.y)) / m, atan2f(p.y, p.x),
+                                    d_spin, d_time_sec * d_disk_time_scale, d_disk_turbulence);
+}
+
+/**
  * @brief RGBA color of a disk hit; twin of bhDiskColorFromHit.
  *
- * d_disk_emission times the optional spectral LUT and d_disk_brightness.
+ * d_disk_emission times d_disk_turbulence_at, the optional spectral LUT, and
+ * d_disk_brightness.
  *
  * @param hit Result of a disk-terminated geodesic trace.
  * @param rs  Schwarzschild radius.
@@ -1288,6 +1309,7 @@ __device__ __forceinline__ float4 d_disk_color(const HitResult& hit, float rs) {
     float3 chroma;
     float intensity;
     d_disk_emission(r, hit.photon_lambda, rs, chroma, intensity);
+    intensity *= d_disk_turbulence_at(hit.hit_point, rs);
 
     if (d_use_luts && d_tex_spectral) {
         float const r_norm = r / fmaxf(rs, D_EPSILON);
@@ -2132,29 +2154,65 @@ __device__ __forceinline__ float d_disk_radial_emission(float rho, float photon_
 }
 
 /**
+ * @brief Outer taper of the volumetric disk's density at cylindrical radius
+ *        rho: exp(-((rho - r_edge) / w)^2) beyond the edge r_edge =
+ *        D_DISK_OUTER_RADIUS_RS rs with w = D_DISK_TAPER_WIDTH_RS rs, 1
+ *        inside. Twin of bhDiskTaper.
+ */
+__device__ __forceinline__ float d_disk_taper(float rho, float rs) {
+    float const excess =
+        fmaxf(rho - (D_DISK_OUTER_RADIUS_RS * rs), 0.0f) / (D_DISK_TAPER_WIDTH_RS * rs);
+    return expf(-excess * excess);
+}
+
+/**
+ * @brief Radius where the volumetric disk ends: three taper widths past the
+ *        edge, where the taper is exp(-9). Twin of bhDiskVolumeOuterRadius.
+ */
+__device__ __forceinline__ float d_disk_volume_outer_radius(float rs) {
+    return (D_DISK_OUTER_RADIUS_RS * rs) + (3.0f * D_DISK_TAPER_WIDTH_RS * rs);
+}
+
+/**
+ * @brief Scale height of the volumetric disk at cylindrical radius rho,
+ *        d_disk_scale_height rho floored at 0.02 rs. Twin of bhDiskScaleHeight.
+ */
+__device__ __forceinline__ float d_disk_scale_height_at(float rho, float rs) {
+    return fmaxf(d_disk_scale_height * rho, 0.02f * rs);
+}
+
+/**
  * @brief Disk emission over the chord p0 -> p1 of one integrator step.
  *
  * The chord is intersected with the annulus [r_in, r_out] (rho^2 is
- * quadratic along it, so at most two intervals emit); the Gaussian layer
- * (scale height h) is integrated exactly over each interval and the radial
- * factors (d_disk_emission for the photon with physical Lz / E =
+ * quadratic along it, so at most two intervals emit); the flared Gaussian
+ * layer (scale height d_disk_scale_height_at, read at each interval's
+ * midplane crossing and then at its density centroid) is integrated exactly
+ * over each interval, tapered beyond the disk edge (d_disk_taper), and the
+ * radial factors (d_disk_emission for the photon with physical Lz / E =
  * photon_lambda: Page-Thorne flux, orbiting-emitter g^4, blackbody color)
- * are read at each interval's density-weighted centroid. With every
- * coefficient proportional to the density and a constant source function,
- * the segment's formal solution depends only on the column. Returns false
- * when no emitting part carries density; j_eff and rho_mean are means over
- * the whole chord. Twin of bhDiskSegment in shader/include/interop_trace.glsl.
+ * times the turbulence factor are read at each interval's density-weighted
+ * centroid. With every coefficient proportional to the density and a
+ * constant source function, the segment's formal solution depends only on
+ * the column. Returns false when no emitting part carries density; j_eff and
+ * rho_mean are means over the whole chord. Twin of bhDiskSegment and
+ * bhDiskPiece in shader/include/interop_trace.glsl.
  */
 __device__ __forceinline__ bool d_disk_segment(float3 p0, float3 p1, float r_in, float r_out,
-                                               float h, float rs, float photon_lambda,
+                                               float rs, float photon_lambda,
                                                float3 &emit_color, float &j_eff,
                                                float &rho_mean) {
     emit_color = make_f3(0.0f, 0.0f, 0.0f);
     j_eff = 0.0f;
     rho_mean = 0.0f;
     /* A chord on one side of the midplane and more than 8 h from it carries
-     * density below exp(-32) ~ 1e-14 everywhere. */
-    if (p0.z * p1.z > 0.0f && fminf(fabsf(p0.z), fabsf(p1.z)) > 8.0f * h) {
+     * density below exp(-32) ~ 1e-14 everywhere; h is read at the chord's
+     * larger end radius, capped at r_out, which bounds it along the chord. */
+    float const h_max = d_disk_scale_height_at(
+        fminf(fmaxf(sqrtf(fmaf(p0.x, p0.x, p0.y * p0.y)), sqrtf(fmaf(p1.x, p1.x, p1.y * p1.y))),
+              r_out),
+        rs);
+    if (p0.z * p1.z > 0.0f && fminf(fabsf(p0.z), fabsf(p1.z)) > 8.0f * h_max) {
         return false;
     }
     /* rho^2 is convex along the chord: end points inside r_out keep the whole
@@ -2188,16 +2246,30 @@ __device__ __forceinline__ bool d_disk_segment(float3 p0, float3 p1, float r_in,
         }
         float const za = fmaf(p1.z - p0.z, ta, p0.z);
         float const zb = fmaf(p1.z - p0.z, tb, p0.z);
-        float2 const moments = d_gaussian_chord_moments(za, zb, h);
-        float const column = (tb - ta) * moments.x;
+        /* The scale height is read where the density's mass sits: first where
+         * the piece is nearest the midplane (its crossing, else its end with
+         * the smaller |z|), then at the density centroid that height gives. */
+        float t_mid = fabsf(za) < fabsf(zb) ? 0.0f : 1.0f;
+        if (za * zb <= 0.0f && za != zb) {
+            t_mid = za / (za - zb);
+        }
+        float const tm = fmaf(tb - ta, fminf(fmaxf(t_mid, 0.0f), 1.0f), ta);
+        float h = d_disk_scale_height_at(
+            hypotf(fmaf(bx, tm, p0.x), fmaf(by, tm, p0.y)), rs);
+        float2 moments = d_gaussian_chord_moments(za, zb, h);
+        float const tc = fmaf(tb - ta, moments.y, ta);
+        h = d_disk_scale_height_at(hypotf(fmaf(bx, tc, p0.x), fmaf(by, tc, p0.y)), rs);
+        moments = d_gaussian_chord_moments(za, zb, h);
+        float const tw = fmaf(tb - ta, moments.y, ta);
+        float3 const w = d_add(p0, d_scale(d_sub(p1, p0), tw));
+        float const rho_w = sqrtf(fmaf(w.x, w.x, w.y * w.y));
+        float const column = (tb - ta) * moments.x * d_disk_taper(rho_w, rs);
         if (column <= 0.0f) {
             continue;
         }
-        float const tw = fmaf(tb - ta, moments.y, ta);
-        float3 const w = d_add(p0, d_scale(d_sub(p1, p0), tw));
         float3 color;
-        float const radial =
-            d_disk_radial_emission(sqrtf(fmaf(w.x, w.x, w.y * w.y)), photon_lambda, rs, color);
+        float const radial = d_disk_radial_emission(rho_w, photon_lambda, rs, color) *
+                             d_disk_turbulence_at(w, rs);
         rho_mean += column;
         j_eff += radial * column;
         color_sum = d_add(color_sum, d_scale(color, radial * column));
@@ -2219,7 +2291,9 @@ __device__ __forceinline__ bool d_disk_segment(float3 p0, float3 p1, float r_in,
  * Disk emission model at each step inside [r_disk_in, r_disk_out]:
  *   - d_disk_emission: Page-Thorne flux, blackbody color at T_obs = g T_emit,
  *     intensity g^4 F / F_peak with g from the ray's own Lz (-c.Lz)
- *   - Gaussian vertical density: rho ~ exp(-z^2 / 2*h_disk^2),  h_disk = 0.1*rs
+ *   - Gaussian vertical density: rho ~ exp(-z^2 / 2 h^2), h = d_disk_scale_height rho
+ *     floored at 0.02 rs, tapered beyond D_DISK_OUTER_RADIUS_RS rs to the
+ *     volume edge d_disk_volume_outer_radius
  *
  * Background is added at escape weighted by surviving transmittance.
  * Early exit when transmit < 0.005 (medium is effectively opaque).
@@ -2247,8 +2321,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
     if (r_horizon <= D_EPSILON) { r_horizon = rs; }
 
     float const r_disk_in   = d_isco;
-    float const r_disk_out = D_DISK_OUTER_RADIUS_RS * rs;
-    float const h_disk      = fmaxf(0.1f * rs, D_EPSILON);
+    float const r_disk_out  = d_disk_volume_outer_radius(rs);
     float const dt          = d_step_size;
     float const max_dist    = d_max_dist;
     float const escape_r    = fmaxf(max_dist, 1.01f * d_length(cam_pos));
@@ -2297,7 +2370,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
         float j_eff;
         float rho_norm;
         if (d_adisk_enabled &&
-            d_disk_segment(cur_pos, new_pos, r_disk_in, r_disk_out, h_disk, rs, -c.Lz,
+            d_disk_segment(cur_pos, new_pos, r_disk_in, r_disk_out, rs, -c.Lz,
                            emit_color, j_eff, rho_norm)) {
             float const alpha_nu = opacity_scl * rho_norm;
             float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu, path_step, transmit);
@@ -2578,8 +2651,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
     if (r_horizon <= D_EPSILON) { r_horizon = rs; }
 
     float const r_disk_in   = d_isco;
-    float const r_disk_out = D_DISK_OUTER_RADIUS_RS * rs;
-    float const h_disk      = fmaxf(0.1f * rs, D_EPSILON);
+    float const r_disk_out  = d_disk_volume_outer_radius(rs);
     float const dt          = d_step_size;
     float const max_dist    = d_max_dist;
     float const escape_r    = fmaxf(max_dist, 1.01f * d_length(cam_pos));
@@ -2641,7 +2713,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
         float j_eff;
         float rho_norm;
         if (d_adisk_enabled &&
-            d_disk_segment(cur_pos, new_pos, r_disk_in, r_disk_out, h_disk, rs, -c.Lz,
+            d_disk_segment(cur_pos, new_pos, r_disk_in, r_disk_out, rs, -c.Lz,
                            emit_color, j_eff, rho_norm)) {
             float const alpha_nu = opacity_scl * rho_norm;
 

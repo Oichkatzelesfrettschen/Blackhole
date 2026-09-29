@@ -141,6 +141,7 @@ BH_LaunchParams mirrorLaunchParams(bhtest::MirrorPair const& pair, TraceCase c, 
     p.kerr_enabled = 1;
     p.disk_peak_temperature = 10000.0f;
     p.disk_brightness = 1.0f;
+    p.disk_scale_height = 0.03f;
     p.disk_flux_peak = static_cast<float>(physics::pageThorneFluxPeak(static_cast<double>(c.spin)));
     p.disk_transfer_mode = transferMode;
 

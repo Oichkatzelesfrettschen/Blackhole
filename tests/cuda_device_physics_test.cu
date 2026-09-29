@@ -55,6 +55,7 @@ static BH_LaunchParams make_schwarzschild_params(int w, int h) {
     /* Disk emission: 6500 K at the Page-Thorne flux peak, unit brightness. */
     p.disk_peak_temperature = 6500.0f;
     p.disk_brightness       = 1.0f;
+    p.disk_scale_height       = 0.03f;
     p.disk_flux_peak        = static_cast<float>(physics::pageThorneFluxPeak(p.spin));
 
     /* Camera at (0, 0, 10): 5x the event horizon radius */
@@ -385,6 +386,7 @@ TEST_F(CudaDevicePhysicsTest, AdaptiveStepFiniteNearPhotonSphere) {
     /* Disk emission: 6500 K at the Page-Thorne flux peak, unit brightness. */
     p.disk_peak_temperature = 6500.0f;
     p.disk_brightness       = 1.0f;
+    p.disk_scale_height       = 0.03f;
     p.disk_flux_peak        = static_cast<float>(physics::pageThorneFluxPeak(p.spin));
 
     /* Camera at (0, 0, 5): 2.5*rs from BH -- photon sphere at 1.5*rs is

@@ -97,6 +97,9 @@ __constant__ float d_disk_peak_temperature; /**< @brief Blackbody temperature at
 __constant__ float d_disk_brightness;       /**< @brief Display scale on the bolometric disk intensity. */
 __constant__ float d_disk_flux_peak;        /**< @brief Page-Thorne flux-shape peak at d_spin (M = 1). */
 __constant__ int   d_disk_transfer_mode;    /**< @brief 0 = Physical g-factor, 1 = Interstellar (g = 1). */
+__constant__ float d_disk_turbulence;       /**< @brief Log-normal width sigma of the disk emissivity turbulence. */
+__constant__ float d_disk_time_scale;       /**< @brief Turbulence clock in GM/c^3 per wall second. */
+__constant__ float d_disk_scale_height;     /**< @brief Volumetric disk scale height per cylindrical radius. */
 
 /* External launch wrappers from each kernel file */
 extern "C" void launchFp32Baseline(float4 *fb, int w, int h, cudaStream_t s);
@@ -197,6 +200,9 @@ int uploadConstants(
   COPY_CONST(d_disk_brightness, p->disk_brightness);
   COPY_CONST(d_disk_flux_peak, p->disk_flux_peak);
   COPY_CONST(d_disk_transfer_mode, p->disk_transfer_mode);
+  COPY_CONST(d_disk_turbulence, p->disk_turbulence);
+  COPY_CONST(d_disk_time_scale, p->disk_time_scale);
+  COPY_CONST(d_disk_scale_height, p->disk_scale_height);
 
   /* Array copies */
   cudaError_t const errPos = cudaMemcpyToSymbol(d_cam_pos, p->cam_pos, sizeof(p->cam_pos));

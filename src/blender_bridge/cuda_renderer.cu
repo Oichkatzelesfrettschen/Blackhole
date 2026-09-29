@@ -554,6 +554,9 @@ static void apply_bridge_feature_defaults(struct BH_LaunchParams *p) {
     p->disk_peak_temperature = env_float("BLACKHOLE_BRIDGE_DISK_PEAK_TEMPERATURE", 6500.0f);
     p->disk_brightness = env_float("BLACKHOLE_BRIDGE_DISK_BRIGHTNESS", 1.0f);
     p->disk_transfer_mode = env_flag("BLACKHOLE_BRIDGE_DISK_INTERSTELLAR", 0);
+    p->disk_turbulence = env_float("BLACKHOLE_BRIDGE_DISK_TURBULENCE", 0.0f);
+    p->disk_time_scale = env_float("BLACKHOLE_BRIDGE_DISK_TIME_SCALE", 1.0f);
+    p->disk_scale_height = env_float("BLACKHOLE_BRIDGE_DISK_SCALE_HEIGHT", 0.03f);
     p->disk_flux_peak = static_cast<float>(
         physics::pageThorneFluxPeak(std::fmax(-0.9999, std::fmin(static_cast<double>(p->spin), 0.9999))));
 }
