@@ -5,8 +5,8 @@ Status: survey note. No code changes. It extends
 judged `gr_core`, `grmhd_core`, `lbm_*`, `cr_transport`, special functions,
 Kerr geodesics, the null constraint, and norm projection, and it feeds
 [Projection and Rendering of Four- and Higher-Dimensional Structures](hyperdimensional-projection-research.md)
-(tesseract) and the disk research on the `docs/accretion-disk-appearance`
-branch (Page-Thorne taper, RIAF mode, spiral GRF turbulence, blackbody color).
+(tesseract) and the disk research in
+[Accretion Flow Appearance](../physics/accretion-flow-appearance.md) (Page-Thorne taper, RIAF mode, spiral GRF turbulence, blackbody color).
 open_gororoba paths are written `crates/<crate>/src/<file>` plus the symbol.
 
 ## 1. Findings
@@ -186,7 +186,7 @@ Provenance tags follow the tesseract note: [math], [pub], [design].
   is correct because the multiplier is even in k); its tests were not read; none
   exist for noise synthesis.
 - Port: `shader/tesseract.frag`, a `fog4(vec4 p)` term that modulates the fog
-  extinction along the ray. Cost: 8 cosines per march step, about 8 x 20 ALU on
+  extinction (`fogTransmittance`, exponent 1.8) along the ray in `raymarch`. Cost: 8 cosines per march step, about 8 x 20 ALU on
   the fog path only. The cost is an estimate, not a measurement. [design]
 - Payoff: breaks the uniform haze into cloudlike structure that stays coherent
   under the SO(4) animation, because it lives in 4D coordinates.
@@ -206,11 +206,11 @@ Provenance tags follow the tesseract note: [math], [pub], [design].
   A = B = C = 1 and 1e-10 for (sqrt 3, sqrt 2, 1). Streamline separation from a
   1e-9 offset grew to 1.9e-8 and 1.2e-7 over t = 40, which supports smooth
   braiding and does not support any chaos claim.
-- Port: `shader/tesseract.frag`, replace or add to the quaternion twist warp of
-  tesseract note R3: offset the transverse strand coordinates by
+- Port: `shader/tesseract.frag`, replace or add to the helical phase twist of
+  tesseract note R3 (`phi` in `beamFamily`, `shader/tesseract.frag`): offset the transverse strand coordinates by
   eps (u_x, u_y)(x, y, w). Six trig calls per evaluation. [design]
 - Payoff: strands that braid without self-intersection when
-  eps < 1 / max|grad u|, a bound the quaternion twist lacks in closed form.
+  eps < 1 / max|grad u|, a bound the helical phase twist lacks in closed form.
 - Falsifier: a render where two strands of one family cross at eps below the
   bound, or where the twist warp already produces the same braid visually at
   lower cost.
@@ -247,12 +247,11 @@ draws with replacement and is not a permutation (its doc says so).
 
 ## 5. Lane B: black hole renderer
 
-`shader/include/disk_turbulence.glsl` is on `main` (PR #102, commit 02d4694).
+`shader/include/disk_turbulence.glsl` defines `bhDiskTurbulenceFactor`, called from `interop_trace.glsl`.
 It multiplies the disk emissivity by exp(sigma g - sigma^2/2), with g a
 four-octave trilinear value-noise fbm scaled to unit variance, orbiting at
 Omega = 1 / (r^1.5 + a), and it bounds the shear winding with two cross-faded
-copies of period 240 M. That file is the target for B1 and B2. The worktree
-this note lives in predates the PR.
+copies of period 240 M. That file is the target for B1 and B2.
 
 ### B1. Integer PCG hash for the disk texture
 
@@ -262,9 +261,10 @@ this note lives in predates the PR.
   (Jarzynski and Olano 2020).
 - What: an integer hash is bit-exact on every GPU and on the CPU. `dtbHash`
   in `disk_turbulence.glsl` is a float `fract` hash whose result depends on
-  fp32 rounding of `p * 17` products, so two drivers can differ, and the CUDA
+  fp32 rounding of `p * 17` products, so two drivers can differ. The CUDA
   path uses a different integer hash (`d_hash` in
-  `src/cuda/device_physics.cuh`).
+  `src/cuda/device_physics.cuh`), and `shader/tesseract.frag` already uses
+  this PCG hash (`pcgHash`, `hash21`) for its strand layout.
 - Evidence: `none` in open_gororoba for hash quality (used, not tested). The
   hash itself is published, and this note did not measure quality.
 - Port: `dtbHash(vec3 cell)` becomes three chained PCG rounds over `uvec3(ivec3(cell))`
@@ -421,7 +421,7 @@ whose exact error is nonzero and asserts the error term is nonzero.
 | Rank | Item | Cost | Why this rank |
 |---|---|---|---|
 | 1 | A1 icosians and 600-cell, plus icosian camera tour | ~40 lines geometry, no shader | Only lane-A kernel with a verified count, closure, and edge structure; adds a second structure shot and seamless loops |
-| 2 | A6 ABC displacement for strands, against the R3 twist warp | ~6 trig calls, shader | Bounded, divergence-free braid; a design bet, cheap to A/B against the twist |
+| 2 | A6 ABC displacement for strands, against the R3 helical twist | ~6 trig calls, shader | Bounded, divergence-free braid; a design bet, cheap to A/B against the twist |
 | 3 | A5 spectral-synthesis 4D fog with an `fft_4d` oracle | ~8 cosines on the fog path | Coherent 4D haze with no 4D texture; validation is external and easy |
 | 4 | A2 Rocq-checked 16x16 sign table as a test vector | ~30 lines test | Free cross-check of the sign function |
 | 5 | A3 C-876 as an so4.h unit test, homogeneous rotation form | ~20 lines test | Cheap consistency test; proof scope is SO(3) only |

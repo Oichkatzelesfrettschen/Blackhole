@@ -84,6 +84,8 @@ maintaining separate release evidence.
 - [Local Repos](plans/local-repos.md) -- local repository scope
 - [Tesseract Mechanic](plans/tesseract-mechanic.md) -- Novikov self-consistent message design note (speculative, not built)
 - [GL And CUDA Render Architecture](plans/gl-cuda-render-architecture.md) -- drift inventory between the GLSL and CUDA paths and a staged plan to share the physics core
+- [Hyperdimensional Projection Research](plans/hyperdimensional-projection-research.md) -- slicing, projection, and Cayley-Dickson techniques for the tesseract scene, with adoption status
+- [open_gororoba Adaptation Survey](plans/open-gororoba-adaptation-survey.md) -- ranked open_gororoba techniques adaptable to the renderer and the tesseract
 
 ## Validation
 

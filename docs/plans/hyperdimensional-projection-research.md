@@ -1,7 +1,9 @@
 # Projection and Rendering of Four- and Higher-Dimensional Structures
 
-Status: research note for the tesseract scene (`src/render/tesseract/`). No
-code is changed by this note. Provenance labels used throughout:
+Status: research note for the tesseract scene (`src/render/tesseract/`). The
+note changes no code. R1 through R4 are adopted in `shader/tesseract.frag`
+(section 6 lists the deviations); R5 and R6 are not. Provenance labels used
+throughout:
 
 - **[math]** established mathematics, checkable by proof or the oracle in
   section 3.
@@ -27,9 +29,10 @@ Verification status of every citation is in the references. A source marked
    search. Its look decomposes into components that a 3D ray marcher can
    produce (section 2). [pub, press accounts, snippet only]
 3. The strongest fit to that look is a hyperplane slice of a periodic 4D
-   field of thickened 2-planes ("beams"), warped by a unit-quaternion twist
-   that varies along the fourth coordinate to weave strands. It costs a few
-   ALU operations per march step and reuses `so4.h` unchanged. [design]
+   field of thickened 2-planes ("beams"), with helical strands whose phase
+   advances along the fourth coordinate. It costs a few ALU operations per
+   march step and reuses `so4.h` unchanged; `shader/tesseract.frag` renders it
+   this way. [design]
 4. Cayley-Dickson arithmetic beyond the quaternions (octonions, sedenions)
    adds no visual value for the lattice look. The quaternion layer is already
    in the codebase and is the only layer that has a rotation group acting on
@@ -291,6 +294,16 @@ Ranked. Each item: what, why, cost, falsifier.
 
 ### R1. Render the scene as a ray-marched hyperplane slice of a periodic 4D beam field [design over pub]
 
+Status: adopted in `shader/tesseract.frag` (`slicePoint`, `beamFamily`,
+`fieldDistances`, `raymarch`). The shader keeps three families, one per beam
+axis x, y, z with w as the second plane axis, folds each cell by `round` rather
+than `fract`, and sets the lattice period by `cellSize`. The slice frame `gF0`,
+`gF1`, `gF2` is the Gram-Schmidt orthonormalization of `rotation4` blended
+toward the identity (`buildSliceFrame`, gain from `sceneScale`), so the slice
+tilts slowly against the lattice instead of following the full rotation. The
+distance is the exact 4D distance, a lower bound of the slice distance, and the
+march steps at 0.6 of it (`STEP_SCALE`).
+
 Field: a lattice of thickened 2-planes in R^4. A plane spanned by
 `(a_axis, b_axis)` thickened by radius `r` slices to a 1D line in `H`, seen
 as a tube. In lattice coordinates `q = fract(p4 / L) - 0.5` with cell size
@@ -318,6 +331,11 @@ uniform lines on black, no fog gradient) fails the brief.
 
 ### R2. Animate an isoclinic rotation of the slice frame, with a slow simple rotation as accent [math, design]
 
+Status: adopted. The shader consumes the uniform `rotation4`, the SO(4) matrix
+of v -> qL v conj(qR), uploaded by `tesseract_renderer.cpp` from the
+`so4.h` quaternion state; the frame blend in `buildSliceFrame` is the only
+shader-side change to it.
+
 Drive `qL(t) = exp(t * omega_L)` and `qR = 1` (left isoclinic) via `quatExp`
 in `so4.h`. Add a second small `qR` term only to break perfect symmetry.
 Simple rotations in one plane become a rare event that reads as the slice
@@ -330,6 +348,16 @@ confirm every point of a probe set moves at equal speed (isoclinic
 invariant): the speed spread must be zero to float tolerance.
 
 ### R3. Weave strands by a quaternion twist warp of the transverse coordinates [design]
+
+Status: adopted in the 2D-rotation form the text below allows, with helical
+shells instead of a rotated transverse frame. In `beamFamily` the strand phase
+`phi` advances with arc length `s` (pitch `SHELL_PITCH_FRACTION`) and with
+`p4.w` (`STRAND_W_TWIST`); two shells wind in opposite directions
+(`SHELL_DIRECTION`); the angular-sector fold is seam-free across the `atan`
+branch cut; strands are culled beyond `STRAND_CULL_FRACTION` of a cell from the
+beam axis, replaced there by their conservative lower bound; and each strand
+hashes to one of three brightness and radius tiers through an integer PCG hash
+(`hash21`), because `sin`-based hashes differ between drivers.
 
 For each beam, replace the transverse offset `(qk, ql)` by a rotation
 through angle `phi = k_w * w + k_s * s` (where `w` is the local 4D
@@ -359,6 +387,14 @@ sample the SDF across the branch cut of `atan` and require the gap to be zero
 to tolerance. A count of strands per cross-section must equal `N` at any `s`.
 
 ### R4. Depth cues: fog on the ray and on `|w - w_slice|`, emissive strands, no shadows [pub, design]
+
+Status: adopted in `shader/tesseract.frag`. Fog transmittance is
+exp(-(t / fogDistance)^1.8) (`fogTransmittance`, `FOG_EXPONENT`), which keeps
+the first cells clear and closes the corridor steeply, where the plain
+exp(-sigma t) below fades from the eye. The 4D cue is `wDim`,
+exp(-`W_DIM_KAPPA` |p4.w|). The halo is accumulated along the march from the
+nearest-strand distance (analytic bloom, no extra pass), strands are emissive,
+and no shadow is computed.
 
 - Extinction `T = exp(-sigma * t)` along the ray, with the far color graded
   toward warm white (a look choice; the film's grading is not verified).
