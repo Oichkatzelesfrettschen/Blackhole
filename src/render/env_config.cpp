@@ -24,6 +24,7 @@
 #include "render/gl_capabilities.h"
 #include "render/observer_sky_view.h"
 #include "render/render_state.h"
+#include "render/tesseract/tesseract_renderer.h"
 #include "tools/compare_harness.h" // K_COMPARE_PRESETS
 
 #if BLACKHOLE_HAS_CUDA
@@ -303,6 +304,22 @@ void applySceneEnvironment(RenderState &rs, std::string_view sceneName) {
   }
   rs.scene.mode = startupSceneMode(sceneName);
   rs.scene.envApplied = true;
+  // BLACKHOLE_TESSERACT_EMANATION=0 hides the emanation panes;
+  // BLACKHOLE_TESSERACT_STRUT=S pins the strut and stops the balloon ride.
+  if (const char *paneEnv = std::getenv("BLACKHOLE_TESSERACT_EMANATION")) {
+    rs.tesseract.emanationEnabled = std::string_view(paneEnv) != "0";
+  }
+  if (const char *strutEnv = std::getenv("BLACKHOLE_TESSERACT_STRUT")) {
+    char *end = nullptr;
+    const long strut = std::strtol(strutEnv, &end, 10);
+    if (end != strutEnv && *end == '\0' && strut >= 1 && strut <= TESSERACT_EMANATION_MAX_STRUT) {
+      rs.tesseract.emanationStrut = static_cast<int>(strut);
+      rs.tesseract.emanationRide = false;
+    } else {
+      std::cerr << "BLACKHOLE_TESSERACT_STRUT='" << strutEnv << "' is not an integer in [1, "
+                << TESSERACT_EMANATION_MAX_STRUT << "]; ignored\n";
+    }
+  }
 }
 
 /** @brief A finite double from an environment variable, or nothing. */

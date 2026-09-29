@@ -223,6 +223,14 @@ struct RenderState {
     float fogDensity = 0.35f;   ///< Aerial-perspective fog into the void.
     Quality quality = Quality::Dense;
     bool qualityUserSet = false; ///< True once the UI has set quality explicitly.
+    /// Emanation-table lattice panes (tesseract/emanation_table.h): draw them.
+    bool emanationEnabled = true;
+    /// Step the strut through the sky regimes over wall time (balloon ride).
+    bool emanationRide = true;
+    float emanationDwell = 8.0f; ///< Seconds the ride holds each strut.
+    int emanationStrut = 17;     ///< Strut S in [1, 511] when the ride is off.
+    float emanationGain = 1.0f;  ///< Pane emissive scale.
+    float emanationClock = 0.0f; ///< Seconds the ride has run (wall time, or the record clock).
     TesseractRenderer renderer;
     HudOverlay speculativeLabel;
     int speculativeLabelWidth = 0;  ///< Render width the label layout was fitted to.

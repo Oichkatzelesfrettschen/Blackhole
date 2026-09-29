@@ -14,6 +14,7 @@
 #define BLACKHOLE_RENDER_TESSERACT_TESSERACT_RENDERER_H
 
 #include <array>
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -108,7 +109,19 @@ struct TesseractFrameInputs {
   float strandGlow = 1.0f;          ///< Fiber and frame emissive scale.
   float fogDensity = 0.35f;         ///< Aerial-perspective fog into the void.
   int qualityTier = 0; ///< 0 dense, 1 sparse (Mesa llvmpipe and other slow rasterizers).
+  bool emanationEnabled = true; ///< Draw the emanation-table panes.
+  int emanationStrut = 17;      ///< Strut S of the level-10 table the panes show, in [1, 511].
+  float emanationGain = 1.0f;   ///< Pane emissive scale.
 };
+
+/// Level of the Cayley-Dickson algebra whose emanation table the panes show (dim 1024).
+inline constexpr int TESSERACT_EMANATION_LEVEL = 10;
+/// Edge of that level's table, 2^(N-1) - 2 tone-row positions.
+inline constexpr int TESSERACT_EMANATION_SIZE = 510;
+/// Largest strut of the level, 2^(N-1) - 1.
+inline constexpr int TESSERACT_EMANATION_MAX_STRUT = 511;
+/// Texture unit the pass binds the emanation texture to (binding in tesseract.frag).
+inline constexpr int TESSERACT_EMANATION_UNIT = 3;
 
 /**
  * @brief Owner of the tesseract pass GL objects.
@@ -151,15 +164,38 @@ public:
    */
   bool isLlvmpipe();
 
+  /// R16I texture of the baked table (row-major, tone-row order), 0 before the first render.
+  [[nodiscard]] gl::GLuint emanationTexture() const { return emanationTexture_; }
+  /// Strut of the baked table, 0 before the first render.
+  [[nodiscard]] int emanationBakedStrut() const { return emanationStrut_; }
+  /// Filled (DMZ) cells of the baked table.
+  [[nodiscard]] std::size_t emanationDmzCount() const { return emanationDmz_; }
+
 private:
   void ensureResources();
+  /// Builds and uploads the table of @p strut unless it is the baked one.
+  void bakeEmanation(int strut);
 
   gl::GLuint program_ = 0;
   gl::GLuint vao_ = 0;
   gl::GLuint fbo_ = 0;
+  gl::GLuint emanationTexture_ = 0;
+  int emanationStrut_ = 0;
+  std::size_t emanationDmz_ = 0;
+  float emanationFill_ = 0.0f; ///< Filled fraction of the addressable cells.
   bool llvmpipeChecked_ = false;
   bool llvmpipeDetected_ = false;
 };
+
+/**
+ * @brief Strut of the emanation panes for this frame.
+ *
+ * With the ride on, the strut is entry floor(emanationClock / emanationDwell)
+ * of the sky-regime list of level TESSERACT_EMANATION_LEVEL (one strut per
+ * sky regime, ascending; tesseract/emanation_table.h skyRegimeStruts),
+ * wrapped. With it off, emanationStrut clamped to [1, TESSERACT_EMANATION_MAX_STRUT].
+ */
+int tesseractEmanationStrut(bool ride, float clockSeconds, float dwellSeconds, int manualStrut);
 
 /// Near clip plane of the tesseract view, in world units from the eye.
 inline constexpr float TESSERACT_NEAR_PLANE = 0.05f;

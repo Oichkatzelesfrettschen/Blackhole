@@ -37,6 +37,7 @@
 #include "input.h"
 #include "render.h"
 #include "render/render_state.h"
+#include "render/tesseract/emanation_table.h"
 #include "render/tesseract/so4.h"
 #include "render/tesseract/tesseract_geometry.h"
 #include "shader.h"
@@ -73,6 +74,8 @@ struct SavedGlState {
   GLint drawFramebuffer = 0;
   GLint readFramebuffer = 0;
   GLint program = 0;
+  GLint activeTexture = 0;
+  GLint emanationBinding = 0;
 
   void capture() {
     blendEnabled = glIsEnabled(GL_BLEND);
@@ -88,6 +91,12 @@ struct SavedGlState {
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFramebuffer);
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFramebuffer);
     glGetIntegerv(GL_CURRENT_PROGRAM, &program);
+    // The pass binds one texture unit; glBindTextureUnit leaves the active
+    // unit alone, but reading a unit's binding goes through it.
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture);
+    glActiveTexture(static_cast<GLenum>(static_cast<int>(GL_TEXTURE0) + TESSERACT_EMANATION_UNIT));
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &emanationBinding);
+    glActiveTexture(static_cast<GLenum>(activeTexture));
   }
 
   void restore() const {
@@ -110,6 +119,8 @@ struct SavedGlState {
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(drawFramebuffer));
     glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(readFramebuffer));
     glUseProgram(static_cast<GLuint>(program));
+    glBindTextureUnit(static_cast<GLuint>(TESSERACT_EMANATION_UNIT),
+                      static_cast<GLuint>(emanationBinding));
   }
 };
 
@@ -132,6 +143,13 @@ void TesseractRenderer::shutdown() {
     glDeleteFramebuffers(1, &fbo_);
     fbo_ = 0;
   }
+  if (emanationTexture_ != 0) {
+    glDeleteTextures(1, &emanationTexture_);
+    emanationTexture_ = 0;
+  }
+  emanationStrut_ = 0;
+  emanationDmz_ = 0;
+  emanationFill_ = 0.0f;
 }
 
 bool TesseractRenderer::reloadShaders() {
@@ -178,6 +196,33 @@ void TesseractRenderer::ensureResources() {
   }
 }
 
+void TesseractRenderer::bakeEmanation(int strut) {
+  if (emanationTexture_ != 0 && strut == emanationStrut_) {
+    return;
+  }
+  const tesseract::EmanationTable table =
+      tesseract::createStruttedEt(TESSERACT_EMANATION_LEVEL, strut);
+  if (emanationTexture_ == 0) {
+    glCreateTextures(GL_TEXTURE_2D, 1, &emanationTexture_);
+    glTextureStorage2D(emanationTexture_, 1, GL_R16I, TESSERACT_EMANATION_SIZE,
+                       TESSERACT_EMANATION_SIZE);
+    // Integer textures do not filter; the shader reads them with texelFetch.
+    glTextureParameteri(emanationTexture_, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(GL_NEAREST));
+    glTextureParameteri(emanationTexture_, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(GL_NEAREST));
+  }
+  GLint unpackAlignment = 4;
+  glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpackAlignment);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 2);
+  glTextureSubImage2D(emanationTexture_, 0, 0, 0, TESSERACT_EMANATION_SIZE,
+                      TESSERACT_EMANATION_SIZE, GL_RED_INTEGER, GL_SHORT, table.value.data());
+  glPixelStorei(GL_UNPACK_ALIGNMENT, unpackAlignment);
+  emanationStrut_ = strut;
+  emanationDmz_ = table.dmzCount;
+  emanationFill_ = table.totalPossible == 0
+                       ? 0.0f
+                       : static_cast<float>(table.dmzCount) / static_cast<float>(table.totalPossible);
+}
+
 void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   if (inputs.targetTexture == 0 || inputs.width <= 0 || inputs.height <= 0) {
     return;
@@ -190,6 +235,8 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   saved.capture();
 
   ensureResources();
+  bakeEmanation(std::clamp(inputs.emanationStrut, 1, TESSERACT_EMANATION_MAX_STRUT));
+  glBindTextureUnit(static_cast<GLuint>(TESSERACT_EMANATION_UNIT), emanationTexture_);
 
   glNamedFramebufferTexture(fbo_, GL_COLOR_ATTACHMENT0, inputs.targetTexture, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
@@ -218,6 +265,9 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   glUniform1f(uniformLocation(program_, "strandGlow"), inputs.strandGlow);
   glUniform1f(uniformLocation(program_, "fogDensity"), inputs.fogDensity);
   glUniform1i(uniformLocation(program_, "qualityTier"), inputs.qualityTier);
+  glUniform1i(uniformLocation(program_, "emanationEnabled"), inputs.emanationEnabled ? 1 : 0);
+  glUniform1f(uniformLocation(program_, "emanationGain"), inputs.emanationGain);
+  glUniform1f(uniformLocation(program_, "emanationFill"), emanationFill_);
 
   glBindVertexArray(vao_);
   glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -369,6 +419,16 @@ glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, const glm::vec3 
   return projection * view;
 }
 
+int tesseractEmanationStrut(bool ride, float clockSeconds, float dwellSeconds, int manualStrut) {
+  if (!ride) {
+    return std::clamp(manualStrut, 1, TESSERACT_EMANATION_MAX_STRUT);
+  }
+  static const std::vector<int> skyRide = tesseract::skyRegimeStruts(TESSERACT_EMANATION_LEVEL);
+  const float dwell = std::max(dwellSeconds, 0.1f);
+  const auto step = static_cast<long long>(std::floor(std::max(clockSeconds, 0.0f) / dwell));
+  return skyRide[static_cast<std::size_t>(step % static_cast<long long>(skyRide.size()))];
+}
+
 void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
                             const std::optional<TesseractRecordFrame> &record) {
   auto &tg = rs.tesseract;
@@ -388,6 +448,7 @@ void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
     tg.pulseTravel = motion.pulseTravel;
     tg.orientationInitialized = true;
     tg.driftDistance = tg.driftSpeed * static_cast<float>(seconds);
+    tg.emanationClock = static_cast<float>(seconds);
   } else {
     if (!tg.orientationInitialized) {
       const tesseract::TesseractMotion reset = tesseract::tesseractMotionAt(
@@ -403,6 +464,7 @@ void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
                                                        static_cast<double>(tg.rotationSpeed));
     tg.pulseTravel = tesseract::advancePulseTravel(tg.pulseTravel, step * tg.pulseSpeed, pulseSpan);
     tg.driftDistance += step * tg.driftSpeed;
+    tg.emanationClock += step;
   }
 }
 
@@ -451,6 +513,10 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
   inputs.strandGlow = std::max(tg.strandGlow, 0.0f);
   inputs.fogDensity = std::max(tg.fogDensity, 0.0f);
   inputs.qualityTier = static_cast<int>(tg.quality);
+  inputs.emanationEnabled = tg.emanationEnabled;
+  inputs.emanationStrut = tesseractEmanationStrut(tg.emanationRide, tg.emanationClock,
+                                                  tg.emanationDwell, tg.emanationStrut);
+  inputs.emanationGain = std::max(tg.emanationGain, 0.0f);
   tg.renderer.render(inputs);
 }
 
