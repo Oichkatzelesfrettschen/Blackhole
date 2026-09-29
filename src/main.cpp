@@ -1566,7 +1566,10 @@ void initializeWorkspaceLayout(Settings &settings, const ui::CampaignUiState &ca
 
 void prepareWorkspaceDockspace(ImGuiID dockspaceId, Settings &settings, RenderState &rs) {
   ImGui::DockSpaceOverViewport(dockspaceId, ImGui::GetMainViewport(), ImGuiDockNodeFlags_None);
-  if (rs.overlays.firstLayout) {
+  // The main menu bar's height reaches WorkSize only at the NewFrame after its
+  // first submission, so the first build waits for that frame; built earlier,
+  // the central viewport node absorbs the bar and every split beside it shifts.
+  if (rs.overlays.firstLayout && ImGui::GetFrameCount() > 1) {
     resetLayout(dockspaceId, static_cast<ui::WorkspaceKind>(settings.workspaceKind));
     rs.overlays.firstLayout = false;
     rs.overlays.sceneWindowFocusPending = true;

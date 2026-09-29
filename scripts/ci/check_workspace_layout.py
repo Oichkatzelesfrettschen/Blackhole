@@ -14,6 +14,7 @@ MINIMUMS = {
         "Viewport": (500, 300),
         "Operations": (380, 180),
         "System/Strategic Map": (380, 180),
+        "Briefing": (380, 120),
     },
     "diagnostics": {"Viewport": (500, 300), "Settings": (300, 180), "Controls": (300, 180)},
 }

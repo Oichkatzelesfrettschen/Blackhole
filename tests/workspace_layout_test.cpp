@@ -52,7 +52,6 @@ struct WorkspaceRects {
   WindowRect objectives;
   WindowRect briefing;
   WindowRect events;
-  WindowRect physical;
 };
 
 WorkspaceRects drawWorkspaceWindows(ui::WorkspaceKind workspace) {
@@ -68,8 +67,7 @@ WorkspaceRects drawWorkspaceWindows(ui::WorkspaceKind workspace) {
           .objectives = drawWindow("Objectives"),
           .briefing =
               workspace == ui::WorkspaceKind::ProperTime ? drawWindow("Briefing") : WindowRect{},
-          .events = drawWindow("Event Log"),
-          .physical = drawWindow("Physical Viewport")};
+          .events = drawWindow("Event Log")};
 }
 
 WorkspaceRects runLayoutPass(ui::WorkspaceKind workspace) {
@@ -98,9 +96,11 @@ void expectProtectedViewport(const WindowRect &viewport) {
 void expectProperTimePanels(const WorkspaceRects &rectangles) {
   EXPECT_NE(rectangles.objectives.dockId, 0U);
   EXPECT_NE(rectangles.briefing.dockId, 0U);
-  EXPECT_EQ(rectangles.briefing.dockId, rectangles.objectives.dockId);
+  EXPECT_NE(rectangles.briefing.dockId, rectangles.objectives.dockId);
+  EXPECT_NE(rectangles.briefing.dockId, rectangles.viewport.dockId);
+  EXPECT_TRUE(separated(rectangles.viewport, rectangles.briefing));
+  EXPECT_TRUE(separated(rectangles.rail, rectangles.briefing));
   EXPECT_NE(rectangles.events.dockId, 0U);
-  EXPECT_NE(rectangles.physical.dockId, 0U);
 }
 
 void expectWorkspaceGeometry(const WorkspaceRects &rectangles, ImVec2 displaySize,

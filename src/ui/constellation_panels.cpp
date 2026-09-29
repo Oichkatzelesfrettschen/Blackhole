@@ -124,6 +124,8 @@ void drawStrategicMap(ConstellationUiState &uiState,
                       const game::ConstellationViewSnapshot &snapshot) {
   if (ImGui::Begin("System/Strategic Map")) {
     ImGui::Text("Turn %lld", static_cast<long long>(snapshot.turn));
+    ImGui::TextWrapped("The viewport renders the selected system; the camera does not advance "
+                       "campaign time.");
     for (const game::SystemStanding &system : snapshot.systems) {
       const std::string label = "System " + std::to_string(system.id);
       if (ImGui::Selectable(label.c_str(), uiState.selectedSystem == system.id)) {
@@ -369,11 +371,6 @@ void renderConstellationPanels(ConstellationUiState &uiState, blackhole::RenderS
   drawObjectives(uiState, snapshot);
   drawBriefing(uiState);
   drawEventLog(uiState, snapshot, events);
-  if (ImGui::Begin("Physical Viewport")) {
-    ImGui::Text("System %u selected for the shared viewport", uiState.selectedSystem);
-    ImGui::TextUnformatted("The render camera does not advance campaign time.");
-  }
-  ImGui::End();
   if (uiState.selectedSystem < snapshot.systems.size()) {
     renderState.physicsCore.kerrSpin =
         static_cast<float>(snapshot.systems.at(uiState.selectedSystem).spinDimensionless);
