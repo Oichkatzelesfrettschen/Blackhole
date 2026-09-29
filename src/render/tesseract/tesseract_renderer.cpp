@@ -126,6 +126,23 @@ struct SavedGlState {
   }
 };
 
+// Uploads the slice frame both passes march from (shader/include/tesseract_slice.glsl).
+void bindSliceUniforms(GLuint program, const TesseractSliceFrame &slice, float cellSize) {
+  std::array<float, 12> axes{};
+  for (std::size_t c = 0; c < slice.axes.size(); ++c) {
+    for (std::size_t r = 0; r < 4; ++r) {
+      axes.at((4 * c) + r) = static_cast<float>(slice.axes.at(c).at(r));
+    }
+  }
+  glUniform4fv(uniformLocation(program, "sliceAxes"), 3, axes.data());
+  glUniform4f(uniformLocation(program, "eyeSlice"), static_cast<float>(slice.eye[0]),
+              static_cast<float>(slice.eye[1]), static_cast<float>(slice.eye[2]),
+              static_cast<float>(slice.eye[3]));
+  glUniform1f(uniformLocation(program, "cellSize"), cellSize);
+  glUniform1f(uniformLocation(program, "latticePeriodCells"),
+              static_cast<float>(TESSERACT_LATTICE_PERIOD_CELLS));
+}
+
 } // namespace
 
 TesseractRenderer::~TesseractRenderer() {
@@ -301,6 +318,7 @@ TesseractRenderer::EmanationTrail TesseractRenderer::updateEmanationTrail(
 }
 
 void TesseractRenderer::drawEmanationPanes(const TesseractFrameInputs &inputs,
+                                           const TesseractSliceFrame &slice,
                                            const EmanationTrail &trail) {
   // Panes add light over the lattice already in the target.
   glEnable(GL_BLEND);
@@ -309,14 +327,10 @@ void TesseractRenderer::drawEmanationPanes(const TesseractFrameInputs &inputs,
   glUseProgram(panesProgram_);
   glUniform2f(uniformLocation(panesProgram_, "resolution"), static_cast<float>(inputs.width),
               static_cast<float>(inputs.height));
-  glUniform3fv(uniformLocation(panesProgram_, "eye"), 1, glm::value_ptr(inputs.eye));
   glUniformMatrix3fv(uniformLocation(panesProgram_, "cameraBasis"), 1, GL_FALSE,
                      glm::value_ptr(inputs.cameraBasis));
   glUniform1f(uniformLocation(panesProgram_, "fovScale"), inputs.fovScale);
-  glUniformMatrix4fv(uniformLocation(panesProgram_, "rotation4"), 1, GL_FALSE,
-                     inputs.rotation.data());
-  glUniform1f(uniformLocation(panesProgram_, "sceneScale"), inputs.sceneScale);
-  glUniform1f(uniformLocation(panesProgram_, "cellSize"), inputs.cellSize);
+  bindSliceUniforms(panesProgram_, slice, inputs.cellSize);
   glUniform1f(uniformLocation(panesProgram_, "strandGlow"), inputs.strandGlow);
   glUniform1f(uniformLocation(panesProgram_, "fogDensity"), inputs.fogDensity);
   glUniform1f(uniformLocation(panesProgram_, "emanationGain"), inputs.emanationGain);
@@ -357,16 +371,18 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   glUseProgram(program_);
   glUniform2f(uniformLocation(program_, "resolution"), static_cast<float>(inputs.width),
               static_cast<float>(inputs.height));
-  glUniform3fv(uniformLocation(program_, "eye"), 1, glm::value_ptr(inputs.eye));
   glUniformMatrix3fv(uniformLocation(program_, "cameraBasis"), 1, GL_FALSE,
                      glm::value_ptr(inputs.cameraBasis));
   glUniform1f(uniformLocation(program_, "fovScale"), inputs.fovScale);
-  glUniformMatrix4fv(uniformLocation(program_, "rotation4"), 1, GL_FALSE, inputs.rotation.data());
-  glUniform1i(uniformLocation(program_, "projectionMode"), inputs.projectionMode);
-  glUniform1f(uniformLocation(program_, "perspectiveDistance"), inputs.perspectiveDistance);
-  glUniform1f(uniformLocation(program_, "sceneScale"), inputs.sceneScale);
+  const TesseractSliceFrame slice = tesseractSliceFrame(inputs.rotation, inputs.sceneScale,
+                                                        inputs.cellSize, inputs.eye, inputs.drift);
+  bindSliceUniforms(program_, slice, inputs.cellSize);
+  const double period = std::max(static_cast<double>(inputs.corridorPeriod), 1e-3);
+  const double depth = static_cast<double>(inputs.eye.z) + inputs.drift.z +
+                       (TESSERACT_LATTICE_OFFSET_CELLS[2] * static_cast<double>(inputs.cellSize));
   glUniform1f(uniformLocation(program_, "corridorPeriod"), inputs.corridorPeriod);
-  glUniform1f(uniformLocation(program_, "cellSize"), inputs.cellSize);
+  glUniform1f(uniformLocation(program_, "eyeDepth"),
+              static_cast<float>(depth - (period * std::floor(depth / period))));
   glUniform1f(uniformLocation(program_, "nowDepth"), inputs.nowDepth);
   glUniform1f(uniformLocation(program_, "nowWidth"), inputs.nowWidth);
   glUniform1f(uniformLocation(program_, "pulseDepth"), inputs.pulseDepth);
@@ -384,7 +400,7 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   glDrawArrays(GL_TRIANGLES, 0, 6);
 
   if (inputs.emanationEnabled) {
-    drawEmanationPanes(inputs, trail);
+    drawEmanationPanes(inputs, slice, trail);
   }
 
   saved.restore();
@@ -534,13 +550,59 @@ glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, const glm::vec3 
   return projection * view;
 }
 
-int tesseractEmanationStrut(bool ride, float clockSeconds, float dwellSeconds, int manualStrut) {
+TesseractSliceFrame tesseractSliceFrame(const std::array<float, 16> &rotation, float sceneScale,
+                                        float cellSize, const glm::vec3 &eye,
+                                        const glm::dvec3 &drift) {
+  using Vec4 = std::array<double, 4>;
+  const auto dot = [](const Vec4 &a, const Vec4 &b) {
+    return (a[0] * b[0]) + (a[1] * b[1]) + (a[2] * b[2]) + (a[3] * b[3]);
+  };
+  const auto axpy = [](const Vec4 &y, double a, const Vec4 &x) {
+    return Vec4{y[0] + (a * x[0]), y[1] + (a * x[1]), y[2] + (a * x[2]), y[3] + (a * x[3])};
+  };
+  const auto normalized = [&dot](const Vec4 &v) {
+    const double inverse = 1.0 / std::sqrt(dot(v, v));
+    return Vec4{v[0] * inverse, v[1] * inverse, v[2] * inverse, v[3] * inverse};
+  };
+  const double blend = std::clamp(0.10 * static_cast<double>(sceneScale), 0.0, 0.6);
+  std::array<Vec4, 3> blended{};
+  for (std::size_t c = 0; c < blended.size(); ++c) {
+    for (std::size_t r = 0; r < 4; ++r) {
+      const double identity = r == c ? 1.0 : 0.0;
+      blended.at(c).at(r) =
+          identity + (blend * (static_cast<double>(rotation.at((4 * c) + r)) - identity));
+    }
+  }
+  TesseractSliceFrame slice;
+  slice.axes[0] = normalized(blended[0]);
+  slice.axes[1] = normalized(axpy(blended[1], -dot(blended[1], slice.axes[0]), slice.axes[0]));
+  const Vec4 third = axpy(blended[2], -dot(blended[2], slice.axes[0]), slice.axes[0]);
+  slice.axes[2] = normalized(axpy(third, -dot(third, slice.axes[1]), slice.axes[1]));
+
+  const double cell = static_cast<double>(cellSize);
+  const std::array<double, 3> local{
+      static_cast<double>(eye.x) + (TESSERACT_LATTICE_OFFSET_CELLS[0] * cell),
+      static_cast<double>(eye.y) + (TESSERACT_LATTICE_OFFSET_CELLS[1] * cell),
+      static_cast<double>(eye.z) + (TESSERACT_LATTICE_OFFSET_CELLS[2] * cell)};
+  Vec4 point{drift.x, drift.y, drift.z, TESSERACT_SLICE_W_CELLS * cell};
+  for (std::size_t c = 0; c < local.size(); ++c) {
+    point = axpy(point, local.at(c), slice.axes.at(c));
+  }
+  const double period = static_cast<double>(TESSERACT_LATTICE_PERIOD_CELLS) * cell;
+  for (std::size_t r = 0; r < 3; ++r) {
+    point.at(r) -= period * std::floor((point.at(r) / period) + 0.5);
+  }
+  slice.eye = point;
+  return slice;
+}
+
+int tesseractEmanationStrut(bool ride, double clockSeconds, float dwellSeconds, int manualStrut) {
   if (!ride) {
     return std::clamp(manualStrut, 1, TESSERACT_EMANATION_MAX_STRUT);
   }
   static const std::vector<int> skyRide = tesseract::skyRegimeStruts(TESSERACT_EMANATION_LEVEL);
-  const float dwell = std::max(dwellSeconds, 0.1f);
-  const auto step = static_cast<long long>(std::floor(std::max(clockSeconds, 0.0f) / dwell));
+  const double dwell = std::max(static_cast<double>(dwellSeconds), 0.1);
+  const auto step = static_cast<long long>(std::floor(std::max(clockSeconds, 0.0) / dwell));
   return skyRide[static_cast<std::size_t>(step % static_cast<long long>(skyRide.size()))];
 }
 
@@ -562,8 +624,8 @@ void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
     tg.orientation = motion.orientation;
     tg.pulseTravel = motion.pulseTravel;
     tg.orientationInitialized = true;
-    tg.driftDistance = tg.driftSpeed * static_cast<float>(seconds);
-    tg.emanationClock = static_cast<float>(seconds);
+    tg.driftDistance = static_cast<double>(tg.driftSpeed) * seconds;
+    tg.emanationClock = seconds;
   } else {
     if (!tg.orientationInitialized) {
       const tesseract::TesseractMotion reset = tesseract::tesseractMotionAt(
@@ -578,8 +640,8 @@ void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
                                                    static_cast<double>(step) *
                                                        static_cast<double>(tg.rotationSpeed));
     tg.pulseTravel = tesseract::advancePulseTravel(tg.pulseTravel, step * tg.pulseSpeed, pulseSpan);
-    tg.driftDistance += step * tg.driftSpeed;
-    tg.emanationClock += step;
+    tg.driftDistance += static_cast<double>(step) * static_cast<double>(tg.driftSpeed);
+    tg.emanationClock += static_cast<double>(step);
   }
 }
 
@@ -609,9 +671,18 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
       record.has_value() ? std::optional<TesseractRecordCamera>(record->camera) : std::nullopt);
   // Eye placement mirrors tesseractView, with a forward drift added so the
   // default view floats through the corridor instead of orbiting a static
-  // object (Cooper floats through the tesseract rather than around it).
-  const glm::vec3 forward = glm::column(cameraBasis, 2);
-  inputs.eye = (-focusDirection * framing.viewDistance) + (forward * tg.driftDistance);
+  // object (Cooper floats through the tesseract rather than around it). A
+  // recorded frame's camera is fixed, so its drift is the straight path; an
+  // interactive frame adds its own drift along its own forward.
+  const glm::dvec3 forward(glm::column(cameraBasis, 2));
+  if (record.has_value()) {
+    tg.driftOffset = forward * tg.driftDistance;
+  } else {
+    tg.driftOffset += forward * (tg.driftDistance - tg.driftApplied);
+  }
+  tg.driftApplied = tg.driftDistance;
+  inputs.eye = -focusDirection * framing.viewDistance;
+  inputs.drift = tg.driftOffset;
   inputs.cameraBasis = cameraBasis;
   inputs.fovScale = std::tan(glm::radians(framing.fovDeg) * 0.5f);
   inputs.rotation = tesseract::toColumnMajor(rotation);
@@ -635,9 +706,9 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
   inputs.emanationNesting = tg.emanationNesting;
   inputs.emanationWalk = tg.emanationWalk;
   const float walkPeriod = std::max(tg.emanationWalkPeriod, 0.05f);
-  const float walkClock = std::max(tg.emanationClock, 0.0f) / walkPeriod;
+  const double walkClock = std::max(tg.emanationClock, 0.0) / static_cast<double>(walkPeriod);
   inputs.emanationWalkStep = static_cast<int>(std::floor(walkClock));
-  inputs.emanationWalkPhase = walkClock - std::floor(walkClock);
+  inputs.emanationWalkPhase = static_cast<float>(walkClock - std::floor(walkClock));
   inputs.emanationBakeBlocking = record.has_value();
   tg.renderer.render(inputs);
 }

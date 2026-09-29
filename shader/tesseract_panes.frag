@@ -2,28 +2,35 @@
 #extension GL_GOOGLE_include_directive : enable
 /**
  * @file tesseract_panes.frag
- * @brief Emanation-table panes of the tesseract scene, drawn additively over
+ * @brief Emanation-table pages of the tesseract scene, drawn additively over
  *        the lattice of shader/tesseract.frag.
  *
- * The planes p4.z = m cellSize, which face the corridor axis, carry the
+ * Pages hang in a sparse set of lattice tiles on the planes p4.z = m cellSize,
+ * which face the corridor axis: a hash of the tile and plane picks
+ * EMANATION_PAGE_FRACTION of them, and each page is inset from the beams that
+ * frame its tile, so the corridor between pages stays dark. A page carries the
  * strutted emanation table of the 1024-dimensional Cayley-Dickson algebra
  * (src/render/tesseract/emanation_table.h, baked by the CPU into an R16I
- * texture). Each pane tile shows the whole 510 x 510 table, indexed by the two
- * in-plane periodic slice coordinates (p4.x, p4.y), with the beams along its
- * edges. A filled (zero-divisor) cell glows: the high bits of |value| = a ^ b
- * (the table sub-block) set the hue, the sign picks warm or cool.
+ * texture), indexed by the two in-plane slice coordinates (p4.x, p4.y). A
+ * filled (zero-divisor) cell lights as a square: the high bits of
+ * |value| = a ^ b (the table sub-block) set the hue, the sign picks warm or
+ * cool; an empty cell adds nothing.
  *
- * The pass is analytic: p4 is affine in the ray parameter, so a pane crossing
- * is a division, the table is read at the first EMANATION_PANES crossings
- * ahead of the eye, and no march step touches the texture. Panes are light
+ * The pass is analytic: p4 is affine in the ray parameter, so a plane crossing
+ * is a division, the first EMANATION_PLANES crossings ahead of the eye are
+ * tested for a page, and no march step touches the texture. Pages are light
  * added over the frame, so the beams and strands do not occlude them.
  *
  * Zoom nesting (Theorem 11, de Marrais): the level-l table of a strut is the
- * four corner blocks of its level-(l+1) table. A pane nearer the eye squeezes
- * the central cross of its table away and shows the next lower level, down to
- * the lowest level holding the strut; the texture stays level 10 and the
- * shader maps indices (emanationExpand). A xor-triple walk over the filled
- * cells (xorTripleWalk) marks its lead cell and trail on the nearest panes.
+ * four corner blocks of its level-(l+1) table. A page shows the level whose
+ * cells span about EMANATION_CELL_PIXELS on screen, down to the lowest level
+ * holding the strut, so a distant page shows a coarse table and an
+ * approaching page opens the central cross of each level in turn until it
+ * shows level 10; the texture stays level 10 and the shader maps indices
+ * (emanationExpand). A page whose finest reachable level is still finer than
+ * EMANATION_BLUR_START cells per pixel fades out. A xor-triple walk over the
+ * filled cells (xorTripleWalk) marks its lead cell and trail on the nearest
+ * pages.
  */
 
 #include "include/interop_raygen.glsl"
@@ -33,7 +40,6 @@
 layout(location = 0) out vec4 fragColor;
 
 uniform vec2 resolution;
-uniform vec3 eye;
 uniform mat3 cameraBasis; // columns (right, up, forward), buildCameraBasis order.
 uniform float fovScale;   // tan(fovDeg / 2)
 uniform float strandGlow;
@@ -55,22 +61,26 @@ layout(binding = 3) uniform isampler2D emanationTable;
 const float MAX_MARCH_CELLS = 24.0;
 
 const int EMANATION_TOP_LEVEL = 10;
-// Panes read per ray, nearest first.
-const int EMANATION_PANES = 4;
-// Zoom nesting: a pane at t cells from the eye has folded
-// (FOLD_START - t) * FOLD_RATE times toward the strut's lowest level.
-const float EMANATION_FOLD_START = 3.2;
-const float EMANATION_FOLD_RATE = 2.0;
-// Brightness falls by 1 / (1 + FOLD_DIM * folds): coarse cells cover more pixels.
-const float EMANATION_FOLD_DIM = 0.3;
-// Pixel footprint in table cells over which a pane blends to its mean fill.
-const float EMANATION_BLUR_START = 1.0;
-const float EMANATION_BLUR_END = 3.0;
-const float EMANATION_GAIN = 0.08;
-// Fill fraction at which a pane's per-cell glow is EMANATION_GAIN.
+// Planes tested per ray, nearest first.
+const int EMANATION_PLANES = 6;
+// Fraction of plane tiles that hold a page, and the inset of a page from each
+// beam of its tile, as a fraction of the tile.
+const float EMANATION_PAGE_FRACTION = 0.10;
+const float EMANATION_PAGE_INSET = 0.1;
+// Screen pixels per table cell the zoom nesting aims for.
+const float EMANATION_CELL_PIXELS = 4.0;
+// Half the edge of a lit cell's square, in cells: the gap between neighbors
+// keeps the table's rows and columns apart.
+const float EMANATION_CELL_HALF = 0.36;
+// Table cells per pixel over which a page too fine to resolve fades out.
+const float EMANATION_BLUR_START = 0.6;
+const float EMANATION_BLUR_END = 1.5;
+const float EMANATION_GAIN = 0.25;
+// Fill fraction at which a page's per-cell glow is EMANATION_GAIN.
 const float EMANATION_REFERENCE_FILL = 0.3;
-const float EMANATION_GLOW_CORE = 0.35;
-const float EMANATION_GLOW_EDGE = 1.0;
+// Faint frame along each page edge, about EMANATION_FRAME_PIXELS wide.
+const vec3 EMANATION_FRAME_COLOR = vec3(0.6, 0.4, 0.2);
+const float EMANATION_FRAME_PIXELS = 1.5;
 // Pulse walk marker: trail brightness per step of age, size in pixels (at
 // least), the nearest panes that carry it, and gain against the pane glow.
 const float EMANATION_TRAIL_DECAY = 0.62;
@@ -119,25 +129,21 @@ float emanationFoldPosition(float s, int level, float fold) {
 
 // emanation-map-end
 
-// Radiance of the level-@p level table at pane display coordinates @p uv (cells
-// of the folded table per tile): each filled cell among the 2 x 2 nearest
-// contributes a soft round glow of at most one cell radius, joined by max so
-// overlapping cells do not sum past a single cell's color. The glow thickens
-// the one-cell lines of sparse tables into readable strokes and doubles as
-// the antialiasing kernel. Cells of the central cross fade as it folds away.
-vec3 emanationGlow(vec2 uv, int level, float fold) {
+// Radiance of the level-@p level table at page display coordinates @p uv
+// (cells of the folded table across the page): each filled cell among the
+// 2 x 2 nearest lights a square of half-edge EMANATION_CELL_HALF, antialiased
+// over @p cellsPerPixel and joined by max, so neighbors never sum past one
+// cell's color. Cells of the central cross fade as it folds away.
+vec3 emanationGlow(vec2 uv, int level, float fold, float cellsPerPixel) {
   int size = emanationLevelSize(level);
   int corner = emanationLevelSize(level - 1) / 2;
   vec2 position = vec2(emanationFoldPosition(uv.x, level, fold),
                        emanationFoldPosition(uv.y, level, fold));
-  // The four cells whose centers are nearest: the glow reaches at most one cell.
+  // The four cells whose centers are nearest.
   ivec2 first = ivec2(floor(position - 0.5));
-  // A coarse level's cells span many pixels: keep them crisp instead of a wide halo.
-  float coarse = float(EMANATION_TOP_LEVEL - level) / 5.0;
-  float glowEdge = mix(EMANATION_GLOW_EDGE, 0.62, coarse);
-  float glowCore = mix(EMANATION_GLOW_CORE, 0.34, coarse);
   ivec2 top = ivec2(emanationExpand(first.x, level), emanationExpand(first.y, level));
   ivec2 next = ivec2(emanationExpand(first.x + 1, level), emanationExpand(first.y + 1, level));
+  float edgeWidth = clamp(cellsPerPixel, 0.02, 0.5);
   vec3 glow = vec3(0.0);
   for (int dy = 0; dy <= 1; ++dy) {
     for (int dx = 0; dx <= 1; ++dx) {
@@ -151,7 +157,9 @@ vec3 emanationGlow(vec2 uv, int level, float fold) {
       }
       bool inCross = (cell.x >= corner && cell.x < size - corner) ||
                      (cell.y >= corner && cell.y < size - corner);
-      float weight = 1.0 - smoothstep(glowCore, glowEdge, length(position - (vec2(cell) + 0.5)));
+      vec2 offset = abs(position - (vec2(cell) + 0.5));
+      float weight = 1.0 - smoothstep(EMANATION_CELL_HALF - edgeWidth, EMANATION_CELL_HALF + edgeWidth,
+                                      max(offset.x, offset.y));
       weight *= inCross ? 1.0 - fold : 1.0;
       glow = max(glow, emanationColor(v, level) * weight);
     }
@@ -216,14 +224,29 @@ vec3 emanationTrailGlow(vec2 uv, int level, float fold, float cellsPerPixel) {
   return glow;
 }
 
-// Additive light of the emanation panes along a ray up to @p tEnd: the planes
-// p4.z = m cellSize, which face the corridor axis, so the tile of each is seen
-// face-on and the beams along its edges frame it. p4 is affine in the ray
-// parameter t, so the first EMANATION_PANES crossings ahead of the eye are
-// divisions and the table is read once per crossing.
+uint emanationPcg(uint v) {
+  uint state = (v * 747796405u) + 2891336453u;
+  uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+  return (word >> 22u) ^ word;
+}
+
+// Uniform [0, 1] hash of a page slot: tile (x, y) and plane index, each
+// reduced onto the lattice period so the slots repeat with the wrapped eye.
+float emanationPageHash(vec2 tile, float plane) {
+  ivec2 t = ivec2(latticeCellId(tile));
+  int m = int(latticeCellId(vec2(plane)).x);
+  uint h = emanationPcg(uint(t.x) + emanationPcg(uint(t.y) + emanationPcg(uint(m) + 0x9e3779b9u)));
+  return float(h & 0xFFFFu) / 65535.0;
+}
+
+// Additive light of the emanation pages along a ray up to @p tEnd. The
+// planes p4.z = m cellSize face the corridor axis, so a page is seen face-on
+// inside the beams that frame its tile. p4 is affine in the ray parameter t,
+// so each crossing ahead of the eye is a division and the table is read once
+// per page crossed.
 vec3 emanationPanes(vec3 rayDir, float tEnd, float fogDistance) {
-  vec4 a = slicePoint(eye);
-  vec4 b = (gF0 * rayDir.x) + (gF1 * rayDir.y) + (gF2 * rayDir.z);
+  vec4 a = eyeSlice;
+  vec4 b = sliceOffset(rayDir);
   float incidence = abs(b.z);
   if (incidence < 1e-4) {
     return vec3(0.0);
@@ -234,43 +257,57 @@ vec3 emanationPanes(vec3 rayDir, float tEnd, float fogDistance) {
   float u0 = a.z / cellSize;
   float first = dir > 0.0 ? floor(u0) + 1.0 : ceil(u0) - 1.0;
   float grazing = smoothstep(0.03, 0.3, incidence);
-  vec3 meanLight = emanationFill * mix(EMANATION_WARM_LOW, EMANATION_WARM_HIGH, 0.5);
+  float pageEdge = 1.0 - (2.0 * EMANATION_PAGE_INSET);
   vec3 sum = vec3(0.0);
   vec3 trail = vec3(0.0);
-  for (int j = 0; j < EMANATION_PANES; ++j) {
+  int pages = 0;
+  for (int j = 0; j < EMANATION_PLANES; ++j) {
     float plane = first + (dir * float(j));
     float t = ((plane * cellSize) - a.z) / b.z;
     if (t <= 0.0 || t >= tEnd) {
       break;
     }
     vec4 q = a + (b * t);
-    // Zoom nesting: nearer panes have folded further toward the strut's lowest level.
-    float nest = clamp((EMANATION_FOLD_START - (t / cellSize)) * EMANATION_FOLD_RATE, 0.0, maxFolds);
+    vec2 tileCoord = q.xy / cellSize;
+    vec2 tile = floor(tileCoord);
+    if (emanationPageHash(tile, plane) > EMANATION_PAGE_FRACTION) {
+      continue;
+    }
+    vec2 pageUv = ((tileCoord - tile) - EMANATION_PAGE_INSET) / pageEdge;
+    if (any(lessThan(pageUv, vec2(0.0))) || any(greaterThanEqual(pageUv, vec2(1.0)))) {
+      continue;
+    }
+    // Page extent in pixels along its foreshortened axis.
+    float pagePixels = (cellSize * pageEdge * max(incidence, 0.05)) / (t * pixelAngle);
+    // Zoom nesting: the level whose table spans pagePixels / EMANATION_CELL_PIXELS
+    // cells, from size 2^(l - 1) - 2.
+    float wantedLevel = log2(max(pagePixels / EMANATION_CELL_PIXELS, 1.0) + 2.0) + 1.0;
+    float nest = clamp(float(EMANATION_TOP_LEVEL) - wantedLevel, 0.0, maxFolds);
     int level = EMANATION_TOP_LEVEL - int(floor(nest));
     float fold = nest - floor(nest);
     float levelSize = float(emanationLevelSize(level));
     float displaySize = levelSize - (fold * (levelSize - float(emanationLevelSize(max(level - 1, 3)))));
-    // Tile coordinates: the two in-plane periodic slice coordinates.
-    vec2 uv = fract(q.xy / cellSize) * displaySize;
-    // Pixel footprint in display cells; beyond a few cells the table reads as its mean.
-    float footprint = (t * pixelAngle) / (max(incidence, 0.05) * (cellSize / displaySize));
-    vec3 light = mix(emanationGlow(uv, level, fold), meanLight,
-                     smoothstep(EMANATION_BLUR_START, EMANATION_BLUR_END, footprint));
-    // A pane closer than a fraction of a cell would fill the frame with one table cell.
+    vec2 uv = pageUv * displaySize;
+    float cellsPerPixel = displaySize / pagePixels;
+    float resolved = 1.0 - smoothstep(EMANATION_BLUR_START, EMANATION_BLUR_END, cellsPerPixel);
+    float edgePixels = min(min(pageUv.x, pageUv.y), min(1.0 - pageUv.x, 1.0 - pageUv.y)) * pagePixels;
+    vec3 light = (emanationGlow(uv, level, fold, cellsPerPixel) * resolved) +
+                 (EMANATION_FRAME_COLOR * exp(-edgePixels / EMANATION_FRAME_PIXELS));
+    // A page closer than a fraction of a cell would fill the frame with one table cell.
     float nearFade = smoothstep(0.25, 0.7, t / cellSize);
-    float paneWeight = grazing * nearFade * fogTransmittance(t, fogDistance) * wDim(q.w);
-    sum += light * (paneWeight / (1.0 + (EMANATION_FOLD_DIM * nest)));
-    if (j < EMANATION_TRAIL_PANES) {
-      trail += emanationTrailGlow(uv, level, fold, 2.0 * footprint) * paneWeight;
+    float pageWeight = grazing * nearFade * fogTransmittance(t, fogDistance) * wDim(q.w);
+    sum += light * pageWeight;
+    if (pages < EMANATION_TRAIL_PANES) {
+      trail += emanationTrailGlow(uv, level, fold, 2.0 * cellsPerPixel) * pageWeight * resolved;
     }
+    ++pages;
   }
-  // Equal mean pane energy across struts: sparse tables glow brighter per cell.
+  // Equal mean page energy across struts: sparse tables glow brighter per cell.
   float sparsity = clamp(EMANATION_REFERENCE_FILL / max(emanationFill, 0.01), 0.15, 3.0);
   return (sum * (EMANATION_GAIN * sparsity) + (trail * EMANATION_TRAIL_GAIN)) * (emanationGain * strandGlow);
 }
 
 void main() {
-  buildSliceFrame();
   vec3 rayDir = bhRayDir(gl_FragCoord.xy, resolution, fovScale, cameraBasis);
   float fogDistance = fogDistanceFor(fogDensity);
   fragColor = vec4(emanationPanes(rayDir, MAX_MARCH_CELLS * cellSize, fogDistance), 0.0);

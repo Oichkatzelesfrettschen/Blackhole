@@ -1017,7 +1017,7 @@ void renderTesseractCorridorControls(RenderState::TesseractGroup &tg) {
     tg.qualityUserSet = true;
   }
   ImGui::SeparatorText("Emanation lattice (1024-D)");
-  ImGui::Checkbox("Emanation panes", &tg.emanationEnabled);
+  ImGui::Checkbox("Emanation pages", &tg.emanationEnabled);
   ImGui::Checkbox("Balloon ride (step strut S)", &tg.emanationRide);
   ImGui::SliderFloat("Ride dwell (s)", &tg.emanationDwell, 1.0f, 30.0f);
   ImGui::BeginDisabled(tg.emanationRide);
@@ -1026,10 +1026,10 @@ void renderTesseractCorridorControls(RenderState::TesseractGroup &tg) {
   ImGui::Text("Showing S = %d",
               blackhole::tesseractEmanationStrut(tg.emanationRide, tg.emanationClock,
                                                  tg.emanationDwell, tg.emanationStrut));
-  ImGui::Checkbox("Zoom nesting (near panes show lower levels)", &tg.emanationNesting);
+  ImGui::Checkbox("Zoom nesting (far pages coarse, near pages unfold)", &tg.emanationNesting);
   ImGui::Checkbox("Xor-triple pulse walk", &tg.emanationWalk);
   ImGui::SliderFloat("Walk step (s)", &tg.emanationWalkPeriod, 0.1f, 3.0f);
-  ImGui::SliderFloat("Pane glow", &tg.emanationGain, 0.0f, 4.0f);
+  ImGui::SliderFloat("Page glow", &tg.emanationGain, 0.0f, 4.0f);
   ImGui::SeparatorText("Pulse and now band");
   ImGui::SliderFloat("Now depth", &tg.litMoment, 0.0f, tg.timeSpan);
   ImGui::SliderFloat("Now width", &tg.litWidth, 0.05f, 3.0f);

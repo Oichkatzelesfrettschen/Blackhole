@@ -25,6 +25,7 @@
 
 #include <glm/ext/matrix_float3x3.hpp>
 #include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_double3.hpp>
 #include <glm/ext/vector_float2.hpp>
 #include <glm/ext/vector_float3.hpp>
 
@@ -95,7 +96,8 @@ struct TesseractFrameInputs {
   gl::GLuint targetTexture = 0;
   int width = 0;
   int height = 0;
-  glm::vec3 eye{0.0f};              ///< World-space eye position, drift included.
+  glm::vec3 eye{0.0f};              ///< Eye position relative to the drift point (camera placement).
+  glm::dvec3 drift{0.0};            ///< World-space forward drift accumulated along the camera path.
   glm::mat3 cameraBasis{1.0f};      ///< Columns (right, up, forward), buildCameraBasis order.
   float fovScale = 1.0f;            ///< tan(fovDeg / 2), the bhRayDir convention.
   std::array<float, 16> rotation{}; ///< Column-major SO(4) matrix (toColumnMajor).
@@ -115,7 +117,7 @@ struct TesseractFrameInputs {
   bool emanationEnabled = true; ///< Draw the emanation-table panes.
   int emanationStrut = 17;      ///< Strut S of the level-10 table the panes show, in [1, 511].
   float emanationGain = 1.0f;   ///< Pane emissive scale.
-  bool emanationNesting = true; ///< Fold panes toward lower-level tables as the eye nears them.
+  bool emanationNesting = true; ///< Show distant pages at lower-level tables, unfolding as the eye nears.
   bool emanationWalk = true;    ///< Draw the xor-triple pulse walk.
   int emanationWalkStep = 0;    ///< Step index of the walk (floor(clock / period)).
   float emanationWalkPhase = 0.0f; ///< Fraction of the current step elapsed, in [0, 1).
@@ -123,6 +125,42 @@ struct TesseractFrameInputs {
   /// frames set it so every frame shows the strut its clock selects.
   bool emanationBakeBlocking = false;
 };
+
+/// Cells after which the strand and pane hashes repeat along x, y, and z of
+/// the 4D lattice; tesseractSliceFrame wraps the eye onto this period.
+inline constexpr int TESSERACT_LATTICE_PERIOD_CELLS = 64;
+/// Offset of the lattice from the world origin, in cells: places the default
+/// eye (world x = y = 0) in the open middle of a cell, off the corridor axis.
+inline constexpr std::array<double, 3> TESSERACT_LATTICE_OFFSET_CELLS{0.53, 0.47, 0.5};
+/// Offset of the slice hyperplane along w, in cells.
+inline constexpr double TESSERACT_SLICE_W_CELLS = 0.25;
+
+/**
+ * @brief Slice frame and eye point the tesseract shaders march from.
+ *
+ * axes are the columns of the orthonormal 4x3 frame F: the columns of the
+ * SO(4) matrix blended toward the identity by 0.10 sceneScale (capped at 0.6,
+ * so the blend never cancels), then Gram-Schmidt orthonormalized. eye is
+ * F (eye + offset) + (drift, 0) + (0, 0, 0, W0) with offset
+ * TESSERACT_LATTICE_OFFSET_CELLS and W0 TESSERACT_SLICE_W_CELLS in cells, and
+ * with x, y, z reduced into [-P/2, P/2) of the period
+ * P = TESSERACT_LATTICE_PERIOD_CELLS cellSize, so a short drift keeps the
+ * eye's own cell indices. The
+ * slice rotates about the eye, not the world origin: the drift enters
+ * untilted, so neither a long drift nor the SO(4) rotation moves the eye
+ * across the lattice, and eye w stays within |eye| + W0 of the w = 0
+ * hyperplane. The field is periodic on the wrap, so the reduction changes no
+ * pixel.
+ */
+struct TesseractSliceFrame {
+  std::array<std::array<double, 4>, 3> axes{};
+  std::array<double, 4> eye{};
+};
+
+/** @brief Slice frame of @p rotation (column-major SO(4)) and 4D eye point (see TesseractSliceFrame). */
+TesseractSliceFrame tesseractSliceFrame(const std::array<float, 16> &rotation, float sceneScale,
+                                        float cellSize, const glm::vec3 &eye,
+                                        const glm::dvec3 &drift);
 
 /// Level of the Cayley-Dickson algebra whose emanation table the panes show (dim 1024).
 inline constexpr int TESSERACT_EMANATION_LEVEL = 10;
@@ -211,7 +249,8 @@ private:
   /// Fills emanationTrail_ for the frame's walk step and returns the shader uniforms.
   EmanationTrail updateEmanationTrail(const TesseractFrameInputs &inputs);
   /// Additive second draw of shader/tesseract_panes.frag over the lattice.
-  void drawEmanationPanes(const TesseractFrameInputs &inputs, const EmanationTrail &trail);
+  void drawEmanationPanes(const TesseractFrameInputs &inputs, const TesseractSliceFrame &slice,
+                          const EmanationTrail &trail);
 
   gl::GLuint program_ = 0;
   gl::GLuint panesProgram_ = 0;
@@ -238,7 +277,7 @@ private:
  * sky regime, ascending; tesseract/emanation_table.h skyRegimeStruts),
  * wrapped. With it off, emanationStrut clamped to [1, TESSERACT_EMANATION_MAX_STRUT].
  */
-int tesseractEmanationStrut(bool ride, float clockSeconds, float dwellSeconds, int manualStrut);
+int tesseractEmanationStrut(bool ride, double clockSeconds, float dwellSeconds, int manualStrut);
 
 /// Near clip plane of the tesseract view, in world units from the eye.
 inline constexpr float TESSERACT_NEAR_PLANE = 0.05f;
