@@ -15,11 +15,23 @@
 // Omega = 1 / (r^(3/2) + a) (BPT 1972, M = 1, time in GM/c^3), so the
 // differential rotation shears it into a trailing spiral. Unbounded shear
 // winds every feature into a sub-pixel azimuthal stripe, so two copies of the
-// pattern, offset by half of K_DTB_WINDING_PERIOD, each age only through one
-// period and cross-fade; the blend keeps the pitch of the spirals bounded
-// while the pattern keeps rotating.
+// pattern, offset by half a period, each age only through one period and
+// cross-fade. The shear phase per e-fold in radius is 1.5 Omega age, so a
+// period P bounds it at 1.5 Omega P. The disk is cut into radial bands a
+// factor 2 wide, each aging through K_DTB_WINDING_ORBITS orbital periods of
+// its central radius and blended with its neighbor near the band edge.
+// Within a band P is constant, so the age has no radial derivative and the
+// bound 3 pi K_DTB_WINDING_ORBITS Omega(r) / Omega(band) holds one spiral
+// pitch across the disk, as MRI turbulence decorrelates on the local orbital
+// time. P stays piecewise constant in radius: a P(r) that varies
+// continuously puts fract(t / P(r)) into the radial derivative, which grows
+// with t without bound.
 
-const float K_DTB_WINDING_PERIOD = 240.0;
+const float K_DTB_WINDING_ORBITS = 0.5;
+// Radius ratio between neighboring band centers (ln 2 in ln r) and the
+// fraction of each band edge over which neighbors blend.
+const float K_DTB_BAND_LOG_WIDTH = 0.6931472;
+const float K_DTB_BAND_BLEND = 0.15;
 // Azimuth embedded on a circle of this radius in noise space: about 19
 // first-octave features around the disk.
 const float K_DTB_AZIMUTH_SCALE = 3.0;
@@ -78,28 +90,53 @@ float dtbPattern(float rM, float phi, float omega, float age, float seed) {
   return dtbFbm(q);
 }
 
+// Adds band `band`'s cross-faded pattern at radius rM, weighted by
+// bandWeight, to n and its squared weights to w2. The band's period is
+// K_DTB_WINDING_ORBITS orbits at its central radius exp(band * ln 2).
+void dtbAddBand(float band, float rM, float phi, float a, float tM, float bandWeight,
+                inout float n, inout float w2) {
+  float rBand = exp(band * K_DTB_BAND_LOG_WIDTH);
+  float period = K_DTB_WINDING_ORBITS * 6.2831853 * ((rBand * sqrt(rBand)) + a);
+  float omega = 1.0 / ((rM * sqrt(rM)) + a);
+  float cycle = tM / period;
+  float ageA = fract(cycle) * period;
+  float ageB = fract(cycle + 0.5) * period;
+  // Seeds stay bounded as epochs accumulate, so the noise coordinate keeps
+  // its float resolution over long sessions.
+  float seedA = (211.0 * fract(floor(cycle) * 0.6180340)) + (53.0 * band);
+  float seedB = (211.0 * fract(floor(cycle + 0.5) * 0.7548777)) + (53.0 * band) + 101.0;
+  // Triangle weights: each copy fades in and out over its own period, and the
+  // two weights sum to 1.
+  float weightA = 1.0 - abs((2.0 * fract(cycle)) - 1.0);
+  float nA = dtbPattern(rM, phi, omega, ageA, seedA);
+  float nB = dtbPattern(rM, phi, omega, ageB, seedB);
+  n += bandWeight * ((weightA * nA) + ((1.0 - weightA) * nB));
+  w2 += bandWeight * bandWeight *
+        ((weightA * weightA) + ((1.0 - weightA) * (1.0 - weightA)));
+}
+
 // Emissivity factor at radius rM (units of M), azimuth phi, spin a (M = 1),
 // coordinate time tM (GM/c^3), and log-normal width sigma.
 float bhDiskTurbulenceFactor(float rM, float phi, float a, float tM, float sigma) {
   if (sigma <= 0.0 || rM <= 0.0) {
     return 1.0;
   }
-  float omega = 1.0 / ((rM * sqrt(rM)) + a);
-  float cycle = tM / K_DTB_WINDING_PERIOD;
-  float ageA = fract(cycle) * K_DTB_WINDING_PERIOD;
-  float ageB = fract(cycle + 0.5) * K_DTB_WINDING_PERIOD;
-  float epochA = floor(cycle);
-  float epochB = floor(cycle + 0.5);
-  // Triangle weights: each copy fades in and out over its own period, and the
-  // two weights sum to 1.
-  float weightA = 1.0 - abs((2.0 * fract(cycle)) - 1.0);
-  float nA = dtbPattern(rM, phi, omega, ageA, 37.0 * epochA);
-  float nB = dtbPattern(rM, phi, omega, ageB, (37.0 * epochB) + 101.0);
-  float n = (weightA * nA) + ((1.0 - weightA) * nB);
-  // Blending two independent fields shrinks the variance by
-  // w^2 + (1 - w)^2; dividing by its square root keeps unit variance.
-  float spread = sqrt((weightA * weightA) + ((1.0 - weightA) * (1.0 - weightA)));
-  float g = (n * K_DTB_NOISE_NORM) / spread;
+  // Nearest band center and the signed offset from it, in band widths. The
+  // neighbor's weight rises to 1/2 at the midpoint between centers, where
+  // both bands agree, so the blend is continuous with a continuous slope.
+  float x = log(rM) / K_DTB_BAND_LOG_WIDTH;
+  float band = floor(x + 0.5);
+  float offset = x - band;
+  float neighborWeight = 0.5 * smoothstep(0.5 - K_DTB_BAND_BLEND, 0.5, abs(offset));
+  float n = 0.0;
+  float w2 = 0.0;
+  dtbAddBand(band, rM, phi, a, tM, 1.0 - neighborWeight, n, w2);
+  if (neighborWeight > 0.0) {
+    dtbAddBand(band + sign(offset), rM, phi, a, tM, neighborWeight, n, w2);
+  }
+  // Blending independent fields shrinks the variance to the sum of squared
+  // weights; dividing by its square root keeps unit variance.
+  float g = (n * K_DTB_NOISE_NORM) / sqrt(w2);
   return exp((sigma * g) - (0.5 * sigma * sigma));
 }
 

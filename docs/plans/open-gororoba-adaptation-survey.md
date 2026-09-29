@@ -251,7 +251,8 @@ draws with replacement and is not a permutation (its doc says so).
 It multiplies the disk emissivity by exp(sigma g - sigma^2/2), with g a
 four-octave trilinear value-noise fbm scaled to unit variance, orbiting at
 Omega = 1 / (r^1.5 + a), and it bounds the shear winding with two cross-faded
-copies of period 240 M. That file is the target for B1 and B2.
+copies per radial band, each band a factor 2 in radius wide and aging through
+half an orbit of its central radius. That file is the target for B1 and B2.
 
 ### B1. Integer PCG hash for the disk texture
 
