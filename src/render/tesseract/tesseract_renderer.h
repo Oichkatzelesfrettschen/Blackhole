@@ -2,12 +2,12 @@
  * @file tesseract_renderer.h
  * @brief GL pass for the speculative tesseract scene mode.
  *
- * Draws the segments of buildSceneSegments as instanced camera-facing ribbons
- * (shader/tesseract.vert + shader/tesseract.frag) into the scene HDR target,
- * so the bloom and ACES tonemap passes treat the scene like the black-hole
- * frame. The pass owns its program, vertex array, instance buffer, and
- * framebuffer; its uniforms bind directly and stay outside the interop
- * uniform registry, which describes the geodesic integrator alone.
+ * Raymarches the SDF lattice of shader/tesseract.frag over the fullscreen
+ * triangle of shader/simple.vert into the scene HDR target, so the bloom and
+ * ACES tonemap passes treat the scene like the black-hole frame. The pass
+ * owns its program, fullscreen VAO, and framebuffer; its uniforms bind
+ * directly and stay outside the interop uniform registry, which describes the
+ * geodesic integrator alone.
  */
 
 #ifndef BLACKHOLE_RENDER_TESSERACT_TESSERACT_RENDERER_H
@@ -91,24 +91,23 @@ struct TesseractFrameInputs {
   gl::GLuint targetTexture = 0;
   int width = 0;
   int height = 0;
-  glm::mat4 viewProjection{1.0f};
+  glm::vec3 eye{0.0f};              ///< World-space eye position, drift included.
+  glm::mat3 cameraBasis{1.0f};      ///< Columns (right, up, forward), buildCameraBasis order.
+  float fovScale = 1.0f;            ///< tan(fovDeg / 2), the bhRayDir convention.
   std::array<float, 16> rotation{}; ///< Column-major SO(4) matrix (toColumnMajor).
   int projectionMode = 0;           ///< 0 perspective along w, 1 stereographic.
   float perspectiveDistance = 3.0f; ///< Eye position d on the w axis.
   float sceneScale = 1.0f;          ///< World units per projected unit.
-  float timeSpan = 10.0f;           ///< Library time extent T.
-  float litMoment = 0.0f;           ///< Library time of the lit moment.
-  int selectedStrand = 0;           ///< Feature index highlighted along its tube.
-  float markerTime = 0.0f;          ///< Library time of the selected tube marker.
-  float litWidth = 0.5f;            ///< Gaussian width of the lit moment.
-  float pulseTime = 0.0f;           ///< Library time of the gravity-message pulse.
+  float corridorPeriod = 10.0f;     ///< Depth period of the SO(4) shear and light bands.
+  float cellSize = 2.2f;            ///< Lattice cell period ("Corridor density").
+  float nowDepth = 0.0f;            ///< Depth (mod corridorPeriod) of the static "now" band.
+  float nowWidth = 0.5f;            ///< Gaussian width of the "now" band.
+  float pulseDepth = 0.0f;          ///< Depth (mod corridorPeriod) of the gravity-message pulse.
   float pulseWidth = 0.35f;         ///< Gaussian width of the pulse.
   bool pulseEnabled = false;        ///< Draw the pulse.
-  int pulseStrand = 0;              ///< Strand (feature index) carrying the pulse.
-  float lineWidthPx = 2.5f;         ///< Ribbon width in pixels.
-  float edgeIntensity = 1.0f;       ///< Tesseract edge radiance scale.
-  float strandIntensity = 1.0f;     ///< World-tube radiance scale.
-  float sliceIntensity = 1.0f;      ///< Lit-moment room outline radiance scale.
+  float strandGlow = 1.0f;          ///< Fiber and frame emissive scale.
+  float fogDensity = 0.35f;         ///< Aerial-perspective fog into the void.
+  int qualityTier = 0; ///< 0 dense, 1 sparse (Mesa llvmpipe and other slow rasterizers).
 };
 
 /**
@@ -127,14 +126,14 @@ public:
   TesseractRenderer(TesseractRenderer &&) = delete;
   TesseractRenderer &operator=(TesseractRenderer &&) = delete;
 
-  /** @brief Clear the target and draw every scene segment into it. */
+  /** @brief Clear the target and raymarch the lattice into it. */
   void render(const TesseractFrameInputs &inputs);
 
   /** @brief Release all GL objects; safe to call repeatedly. */
   void shutdown();
 
   /**
-   * @brief Recompile shader/tesseract.{vert,frag} for shader hot reload.
+   * @brief Recompile shader/simple.vert + shader/tesseract.frag for shader hot reload.
    *
    * On success the new program replaces the old one and the call returns
    * true. On a read, compile, or link failure the last working program stays
@@ -143,15 +142,23 @@ public:
    */
   bool reloadShaders();
 
+  /**
+   * @brief Whether the live GL_RENDERER string names Mesa's llvmpipe.
+   *
+   * Queried once and cached; llvmpipe executes fragment shaders on the CPU
+   * via LLVM JIT, so renderTesseractScene defaults the quality tier to sparse
+   * there unless the UI has already set it explicitly.
+   */
+  bool isLlvmpipe();
+
 private:
-  void ensureResources(float timeSpan);
+  void ensureResources();
 
   gl::GLuint program_ = 0;
   gl::GLuint vao_ = 0;
-  gl::GLuint vbo_ = 0;
   gl::GLuint fbo_ = 0;
-  gl::GLsizei instanceCount_ = 0;
-  float builtTimeSpan_ = -1.0f;
+  bool llvmpipeChecked_ = false;
+  bool llvmpipeDetected_ = false;
 };
 
 /// Near clip plane of the tesseract view, in world units from the eye.
@@ -170,16 +177,19 @@ inline constexpr float TESSERACT_MIN_PERSPECTIVE_DISTANCE = 2.1f;
  *
  * The record exposure rule (record_mode.h) with the tesseract's own target.
  * The profiles' exposures place the disk's luminance L99 at display 0.9,
- * which the emissive ribbons do not share, so applyRecordProfileSetup
- * replaces them in the tesseract scene. The ribbons are saturated colors
- * that ACES clips per channel, so the statistic is the 99th percentile of the
- * per-pixel max channel over ribbon pixels of the raw frame
- * (tesseract_exposure_gl_test): 1.97 to 2.68 across the default animation,
- * median 2.4. ACES^-1(0.9^2.35) = 0.900 over 2.4 maps the brightest ribbons
- * to display 0.875-0.912 at the showcase-orbit gamma and the 0.012 clear
- * color to 0.059; cinematic's gamma 2.25 maps both slightly higher.
+ * which the raymarched lattice does not share, so applyRecordProfileSetup
+ * replaces them in the tesseract scene. The statistic is the 99th percentile
+ * of every pixel's max channel over the raw frame (tesseract_exposure_gl_test):
+ * unlike the retired ribbon pass, a solid lattice fills most of the frame, so
+ * this is not a small bright-pixel subset. Because the pass shows a local
+ * neighborhood of an endless corridor, whether the narrow now/pulse highlight
+ * band falls near the camera at a given moment varies with drift and
+ * rotation, so the raw p99 itself ranges roughly 0.05 to 1.3 across the
+ * default animation and lens choices tesseract_exposure_gl_test samples,
+ * median near 0.65. TESSERACT_RECORD_EXPOSURE times that median, through the
+ * ACES curve and the showcase-orbit gamma, lands near display 0.9.
  */
-inline constexpr float TESSERACT_RECORD_EXPOSURE = 0.375f;
+inline constexpr float TESSERACT_RECORD_EXPOSURE = 1.4f;
 /// Fraction of a recorded frame's room between the tesseract's center and the
 /// nearer frame edge that the bounding sphere fills on the tighter axis, below
 /// 1 so the sphere, a conservative bound, stays in frame (tesseractFraming).

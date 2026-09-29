@@ -1,6 +1,6 @@
 /**
  * @file tesseract_renderer.cpp
- * @brief Instanced-ribbon GL pass for the speculative tesseract scene.
+ * @brief SDF-raymarch GL pass for the speculative tesseract scene.
  */
 
 #include "render/tesseract/tesseract_renderer.h"
@@ -36,6 +36,7 @@
 
 #include "hud_overlay.h"
 #include "input.h"
+#include "render.h"
 #include "render/render_state.h"
 #include "render/tesseract/so4.h"
 #include "render/tesseract/tesseract_geometry.h"
@@ -46,10 +47,6 @@ using namespace gl;
 namespace blackhole {
 namespace {
 
-// Pieces per tesseract edge; enough that stereographic arcs read as curves.
-constexpr std::size_t EDGE_SUBDIVISIONS = 24;
-// Points per world-tube polyline; the lit-moment Gaussian spans several.
-constexpr std::size_t TUBE_SAMPLES = 96;
 // Largest frame time one animation step consumes, in seconds.
 constexpr float MAX_ANIMATION_STEP_S = 0.25f;
 
@@ -128,10 +125,6 @@ void TesseractRenderer::shutdown() {
     glDeleteProgram(program_);
     program_ = 0;
   }
-  if (vbo_ != 0) {
-    glDeleteBuffers(1, &vbo_);
-    vbo_ = 0;
-  }
   if (vao_ != 0) {
     glDeleteVertexArrays(1, &vao_);
     vao_ = 0;
@@ -140,8 +133,6 @@ void TesseractRenderer::shutdown() {
     glDeleteFramebuffers(1, &fbo_);
     fbo_ = 0;
   }
-  instanceCount_ = 0;
-  builtTimeSpan_ = -1.0f;
 }
 
 bool TesseractRenderer::reloadShaders() {
@@ -151,54 +142,40 @@ bool TesseractRenderer::reloadShaders() {
   // createShaderProgram throws const char* on compile or link failure and
   // std::string when a source file cannot be read.
   try {
-    const GLuint fresh = createShaderProgram(std::string("shader/tesseract.vert"),
+    const GLuint fresh = createShaderProgram(std::string("shader/simple.vert"),
                                              std::string("shader/tesseract.frag"));
     glDeleteProgram(program_);
     program_ = fresh;
-    std::cout << "[HotReload] Reloaded shader/tesseract.{vert,frag}\n";
+    std::cout << "[HotReload] Reloaded shader/tesseract.frag\n";
     return true;
   } catch (const char *error) {
-    std::cerr << "[HotReload] tesseract shaders kept: " << error << '\n';
+    std::cerr << "[HotReload] tesseract shader kept: " << error << '\n';
   } catch (const std::string &error) {
-    std::cerr << "[HotReload] tesseract shaders kept: " << error << '\n';
+    std::cerr << "[HotReload] tesseract shader kept: " << error << '\n';
   }
   return false;
 }
 
-void TesseractRenderer::ensureResources(float timeSpan) {
+bool TesseractRenderer::isLlvmpipe() {
+  if (!llvmpipeChecked_) {
+    llvmpipeChecked_ = true;
+    const auto *rendererString = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
+    llvmpipeDetected_ = rendererString != nullptr &&
+                        std::string_view(rendererString).find("llvmpipe") != std::string_view::npos;
+  }
+  return llvmpipeDetected_;
+}
+
+void TesseractRenderer::ensureResources() {
   if (program_ == 0) {
-    program_ = createShaderProgram(std::string("shader/tesseract.vert"),
+    program_ = createShaderProgram(std::string("shader/simple.vert"),
                                    std::string("shader/tesseract.frag"));
   }
   if (fbo_ == 0) {
     glCreateFramebuffers(1, &fbo_);
   }
   if (vao_ == 0) {
-    glCreateVertexArrays(1, &vao_);
-    glCreateBuffers(1, &vbo_);
-    constexpr auto stride = static_cast<GLsizei>(sizeof(tesseract::SegmentInstance));
-    glVertexArrayVertexBuffer(vao_, 0, vbo_, 0, stride);
-    glVertexArrayBindingDivisor(vao_, 0, 1);
-    // Attributes are the a, b, meta, prev, and next vec4 members, 16 bytes apart.
-    for (GLuint attrib = 0; attrib < tesseract::SEGMENT_INSTANCE_ATTRIBUTES; ++attrib) {
-      glEnableVertexArrayAttrib(vao_, attrib);
-      glVertexArrayAttribFormat(vao_, attrib, 4, GL_FLOAT, GL_FALSE,
-                                attrib * static_cast<GLuint>(4 * sizeof(float)));
-      glVertexArrayAttribBinding(vao_, attrib, 0);
-    }
-  }
-  // The world-tube layout maps library time through T, so a new T rebuilds it.
-  if (timeSpan != builtTimeSpan_) {
-    tesseract::SceneSegmentOptions options;
-    options.timeSpan = timeSpan;
-    options.tubeSamples = TUBE_SAMPLES;
-    options.edgeSubdivisions = EDGE_SUBDIVISIONS;
-    const std::vector<tesseract::SegmentInstance> segments = tesseract::buildSceneSegments(options);
-    glNamedBufferData(vbo_,
-                      static_cast<GLsizeiptr>(segments.size() * sizeof(tesseract::SegmentInstance)),
-                      segments.data(), GL_STATIC_DRAW);
-    instanceCount_ = static_cast<GLsizei>(segments.size());
-    builtTimeSpan_ = timeSpan;
+    vao_ = createQuadVAO();
   }
 }
 
@@ -206,50 +183,45 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   if (inputs.targetTexture == 0 || inputs.width <= 0 || inputs.height <= 0) {
     return;
   }
-  ensureResources(inputs.timeSpan);
-
+  // Capture state before ensureResources(): createQuadVAO's classic (non-DSA)
+  // glGenVertexArrays/glBindVertexArray path changes the current VAO binding
+  // on the pass's first call, so capturing after it would save that VAO as
+  // the caller's own and restore() would never rebind the caller's real one.
   SavedGlState saved;
   saved.capture();
+
+  ensureResources();
 
   glNamedFramebufferTexture(fbo_, GL_COLOR_ATTACHMENT0, inputs.targetTexture, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
   glViewport(0, 0, inputs.width, inputs.height);
   glDisable(GL_DEPTH_TEST);
-  // Deep-space background; alpha 1 marks every pixel as far for the scene
-  // target's depth-in-alpha convention.
-  glClearColor(0.004f, 0.005f, 0.012f, 1.0f);
-  glClear(GL_COLOR_BUFFER_BIT);
-
-  // Ribbons are emissive: radiance adds, destination alpha stays 1.
-  glEnable(GL_BLEND);
-  glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
-  glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ZERO, GL_ONE);
+  glDisable(GL_BLEND);
 
   glUseProgram(program_);
-  glUniformMatrix4fv(uniformLocation(program_, "rotation4"), 1, GL_FALSE, inputs.rotation.data());
-  glUniformMatrix4fv(uniformLocation(program_, "viewProjection"), 1, GL_FALSE,
-                     glm::value_ptr(inputs.viewProjection));
   glUniform2f(uniformLocation(program_, "resolution"), static_cast<float>(inputs.width),
               static_cast<float>(inputs.height));
+  glUniform3fv(uniformLocation(program_, "eye"), 1, glm::value_ptr(inputs.eye));
+  glUniformMatrix3fv(uniformLocation(program_, "cameraBasis"), 1, GL_FALSE,
+                     glm::value_ptr(inputs.cameraBasis));
+  glUniform1f(uniformLocation(program_, "fovScale"), inputs.fovScale);
+  glUniformMatrix4fv(uniformLocation(program_, "rotation4"), 1, GL_FALSE, inputs.rotation.data());
   glUniform1i(uniformLocation(program_, "projectionMode"), inputs.projectionMode);
   glUniform1f(uniformLocation(program_, "perspectiveDistance"), inputs.perspectiveDistance);
   glUniform1f(uniformLocation(program_, "sceneScale"), inputs.sceneScale);
-  glUniform1f(uniformLocation(program_, "timeSpan"), inputs.timeSpan);
-  glUniform1f(uniformLocation(program_, "litMoment"), inputs.litMoment);
-  glUniform1i(uniformLocation(program_, "selectedStrand"), inputs.selectedStrand);
-  glUniform1f(uniformLocation(program_, "markerTime"), inputs.markerTime);
-  glUniform1f(uniformLocation(program_, "lineWidthPx"), inputs.lineWidthPx);
-  glUniform1f(uniformLocation(program_, "litWidth"), inputs.litWidth);
-  glUniform1f(uniformLocation(program_, "pulseTime"), inputs.pulseTime);
+  glUniform1f(uniformLocation(program_, "corridorPeriod"), inputs.corridorPeriod);
+  glUniform1f(uniformLocation(program_, "cellSize"), inputs.cellSize);
+  glUniform1f(uniformLocation(program_, "nowDepth"), inputs.nowDepth);
+  glUniform1f(uniformLocation(program_, "nowWidth"), inputs.nowWidth);
+  glUniform1f(uniformLocation(program_, "pulseDepth"), inputs.pulseDepth);
   glUniform1f(uniformLocation(program_, "pulseWidth"), inputs.pulseWidth);
   glUniform1i(uniformLocation(program_, "pulseEnabled"), inputs.pulseEnabled ? 1 : 0);
-  glUniform1i(uniformLocation(program_, "pulseStrand"), inputs.pulseStrand);
-  glUniform1f(uniformLocation(program_, "edgeIntensity"), inputs.edgeIntensity);
-  glUniform1f(uniformLocation(program_, "strandIntensity"), inputs.strandIntensity);
-  glUniform1f(uniformLocation(program_, "sliceIntensity"), inputs.sliceIntensity);
+  glUniform1f(uniformLocation(program_, "strandGlow"), inputs.strandGlow);
+  glUniform1f(uniformLocation(program_, "fogDensity"), inputs.fogDensity);
+  glUniform1i(uniformLocation(program_, "qualityTier"), inputs.qualityTier);
 
   glBindVertexArray(vao_);
-  glDrawArraysInstanced(GL_TRIANGLES, 0, 6, instanceCount_);
+  glDrawArrays(GL_TRIANGLES, 0, 6);
 
   saved.restore();
 }
@@ -275,8 +247,8 @@ SpeculativeLabelLayout layoutSpeculativeLabel(int renderWidth, int renderHeight)
   // lines occupy (n * lineHeight(1) + 4) * s down, pad included.
   const auto fitScale = [availableWidth, availableHeight,
                          unitLineHeight](const std::vector<std::string> &lines) {
-    const float widest = std::accumulate(
-        lines.begin(), lines.end(), 0.0f, [](float acc, const std::string &line) {
+    const float widest =
+        std::accumulate(lines.begin(), lines.end(), 0.0f, [](float acc, const std::string &line) {
           return std::max(acc, HudOverlay::measureText(line, 1.0f).x);
         });
     const float blockHeight = (static_cast<float>(lines.size()) * unitLineHeight) + 4.0f;
@@ -402,11 +374,10 @@ void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
                             const std::optional<TesseractRecordFrame> &record) {
   auto &tg = rs.tesseract;
   tg.timeSpan = std::max(tg.timeSpan, 0.5f);
+  tg.cellSize = std::max(tg.cellSize, 0.3f);
   tg.litMoment = std::clamp(tg.litMoment, 0.0f, tg.timeSpan);
   tg.pulseNow = std::clamp(tg.pulseNow, 0.0f, tg.timeSpan);
   tg.pulsePast = std::clamp(tg.pulsePast, 0.0f, tg.pulseNow);
-  tg.pulseStrand =
-      std::clamp(tg.pulseStrand, 0, static_cast<int>(tesseract::bedroomFeatures().size()) - 1);
 
   const float pulseSpan = tg.pulseNow - tg.pulsePast;
   if (record.has_value()) {
@@ -417,6 +388,7 @@ void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
     tg.orientation = motion.orientation;
     tg.pulseTravel = motion.pulseTravel;
     tg.orientationInitialized = true;
+    tg.driftDistance = tg.driftSpeed * static_cast<float>(seconds);
   } else {
     if (!tg.orientationInitialized) {
       const tesseract::TesseractMotion reset = tesseract::tesseractMotionAt(
@@ -431,6 +403,7 @@ void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
                                                    static_cast<double>(step) *
                                                        static_cast<double>(tg.rotationSpeed));
     tg.pulseTravel = tesseract::advancePulseTravel(tg.pulseTravel, step * tg.pulseSpeed, pulseSpan);
+    tg.driftDistance += step * tg.driftSpeed;
   }
 }
 
@@ -444,6 +417,10 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
   const float aspect = static_cast<float>(std::max(rs.targets.renderWidth, 1)) /
                        static_cast<float>(std::max(rs.targets.renderHeight, 1));
 
+  if (!tg.qualityUserSet && tg.renderer.isLlvmpipe()) {
+    tg.quality = RenderState::TesseractGroup::Quality::Sparse;
+  }
+
   TesseractFrameInputs inputs;
   inputs.targetTexture = rs.targets.texBlackhole;
   inputs.width = rs.targets.renderWidth;
@@ -454,26 +431,27 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
       tg.viewDistance, tg.fovDeg,
       tesseractBoundingRadius(stereographic, tg.sceneScale, tg.perspectiveDistance), aspect,
       record.has_value() ? std::optional<TesseractRecordCamera>(record->camera) : std::nullopt);
-  inputs.viewProjection = tesseractViewProjection(cameraBasis, focusDirection, framing.viewDistance,
-                                                  framing.fovDeg, aspect);
+  // Eye placement mirrors tesseractView, with a forward drift added so the
+  // default view floats through the corridor instead of orbiting a static
+  // object (Cooper floats through the tesseract rather than around it).
+  const glm::vec3 forward = glm::column(cameraBasis, 2);
+  inputs.eye = (-focusDirection * framing.viewDistance) + (forward * tg.driftDistance);
+  inputs.cameraBasis = cameraBasis;
+  inputs.fovScale = std::tan(glm::radians(framing.fovDeg) * 0.5f);
   inputs.rotation = tesseract::toColumnMajor(rotation);
   inputs.projectionMode = stereographic ? 1 : 0;
   inputs.perspectiveDistance = std::max(tg.perspectiveDistance, TESSERACT_MIN_PERSPECTIVE_DISTANCE);
   inputs.sceneScale = tg.sceneScale;
-  inputs.timeSpan = tg.timeSpan;
-  inputs.litMoment = tg.litMoment;
-  inputs.selectedStrand = static_cast<int>(tg.selection.featureIndex);
-  inputs.markerTime = tesseract::selectedTubeMarker(
-      tesseract::bedroomFeatures(), tg.selection, tg.litMoment, tg.timeSpan).w;
-  inputs.litWidth = std::max(tg.litWidth, 0.01f);
-  inputs.pulseTime = tg.pulseNow - tg.pulseTravel;
+  inputs.corridorPeriod = tg.timeSpan;
+  inputs.cellSize = tg.cellSize;
+  inputs.nowDepth = tg.litMoment;
+  inputs.nowWidth = std::max(tg.litWidth, 0.01f);
+  inputs.pulseDepth = tg.pulseNow - tg.pulseTravel;
   inputs.pulseWidth = std::max(tg.pulseWidth, 0.01f);
   inputs.pulseEnabled = tg.pulseEnabled;
-  inputs.pulseStrand = tg.pulseStrand;
-  inputs.lineWidthPx = std::max(tg.lineWidthPx, 1.0f);
-  inputs.edgeIntensity = tg.edgeIntensity;
-  inputs.strandIntensity = tg.strandIntensity;
-  inputs.sliceIntensity = tg.sliceIntensity;
+  inputs.strandGlow = std::max(tg.strandGlow, 0.0f);
+  inputs.fogDensity = std::max(tg.fogDensity, 0.0f);
+  inputs.qualityTier = static_cast<int>(tg.quality);
   tg.renderer.render(inputs);
 }
 

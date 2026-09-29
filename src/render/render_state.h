@@ -42,7 +42,6 @@
 #include "render/renderer_contract.h"
 #include "render/terminal_counts.h"
 #include "render/tesseract/so4.h"
-#include "render/tesseract/tesseract_geometry.h"
 #include "render/tesseract/tesseract_renderer.h"
 #include "rmlui_overlay.h"
 #include "tools/compare_harness.h"
@@ -185,11 +184,14 @@ struct RenderState {
 
   /**
    * @brief Speculative tesseract scene (Thorne, The Science of Interstellar
-   *        ch. 29-31): SO(4) rotation, projection, and library-of-time
-   *        parameters. Render-only; none of it feeds the physics.
+   *        ch. 29-31): SO(4) rotation, projection, and rectilinear-lattice
+   *        corridor parameters. Render-only; none of it feeds the physics.
    */
   struct TesseractGroup {
     enum class Projection { Perspective = 0, Stereographic = 1 };
+    /// Raymarch cost tier: Dense on a real GPU, Sparse on a slow rasterizer
+    /// such as Mesa llvmpipe (fewer march steps, fewer strands, no wiggle).
+    enum class Quality { Dense = 0, Sparse = 1 };
     Projection projection = Projection::Perspective;
     /// Angular rates of qL and qR as pure quaternions: each frame advances
     /// qL <- exp(ds leftRate) qL (advanceOrientation), ds = rotationSpeed * dt.
@@ -201,25 +203,26 @@ struct RenderState {
     float rotationSpeed = 1.0f; ///< ds per second of frame time while animating.
     blackhole::tesseract::So4Pair<double> orientation{}; ///< Accumulated (qL, qR).
     bool orientationInitialized = false; ///< False re-seeds orientation from resetPhase.
-    float pulseTravel = 0.0f;            ///< Library time the pulse has run back from t_now.
+    float pulseTravel = 0.0f;            ///< Depth the pulse has run back from t_now.
     float perspectiveDistance = 3.0f;
     float sceneScale = 1.3f;
     float viewDistance = TESSERACT_DEFAULT_VIEW_DISTANCE;
     float fovDeg = 50.0f;
-    float timeSpan = 10.0f; ///< Library time extent T of every world-tube.
-    float litMoment = 6.0f; ///< Library time the lit moment is centered on.
-    blackhole::tesseract::FeatureSelection selection{};
+    float timeSpan = 10.0f; ///< Depth period T of the SO(4) shear and the light bands.
+    float litMoment = 6.0f; ///< Depth (mod T) the static "now" band is centered on.
     float litWidth = 0.5f;
     bool pulseEnabled = true;
-    int pulseStrand = 2;     ///< Middle shelf book.
-    float pulseSpeed = 1.5f; ///< Library time per wall second.
-    float pulseNow = 10.0f;  ///< Library time the pulse leaves (t_now).
-    float pulsePast = 6.0f;  ///< Library time the pulse reaches (t_past).
+    float pulseSpeed = 1.5f; ///< Depth units per wall second.
+    float pulseNow = 10.0f;  ///< Depth the pulse leaves (t_now).
+    float pulsePast = 6.0f;  ///< Depth the pulse reaches (t_past).
     float pulseWidth = 0.35f;
-    float lineWidthPx = 2.5f;
-    float edgeIntensity = 0.9f;
-    float strandIntensity = 1.0f;
-    float sliceIntensity = 1.6f;
+    float cellSize = 3.4f;       ///< Lattice cell period ("Corridor density").
+    float driftSpeed = 0.6f;     ///< Forward camera drift, world units per second.
+    float driftDistance = 0.0f; ///< Accumulated forward drift.
+    float strandGlow = 1.0f;    ///< Fiber and frame emissive scale.
+    float fogDensity = 0.35f;   ///< Aerial-perspective fog into the void.
+    Quality quality = Quality::Dense;
+    bool qualityUserSet = false; ///< True once the UI has set quality explicitly.
     TesseractRenderer renderer;
     HudOverlay speculativeLabel;
     int speculativeLabelWidth = 0;  ///< Render width the label layout was fitted to.

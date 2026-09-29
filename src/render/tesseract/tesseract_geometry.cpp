@@ -1,6 +1,7 @@
 /**
  * @file tesseract_geometry.cpp
- * @brief 4-cube complex, 4D->3D projections, and library-of-time strands.
+ * @brief 4-cube complex, 4D->3D projections, SO(4) motion, and the
+ *        rectilinear lattice's pure math.
  */
 
 #include "render/tesseract/tesseract_geometry.h"
@@ -9,12 +10,11 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <iterator>
-#include <vector>
 
 #include <glm/common.hpp>
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_int3.hpp>
 #include <glm/geometric.hpp>
 
 #include "render/tesseract/so4.h"
@@ -29,56 +29,8 @@ constexpr std::size_t bit(std::size_t axis) {
   return std::size_t{1} << axis;
 }
 
-// Segments between consecutive @p points, each with its neighbors' points;
-// meta x, y, and w come from @p meta per segment. An open polyline caps its
-// two ends; a closed one also joins the last point back to the first and
-// wraps the neighbors, so no end draws a cap.
-template <typename MetaFn>
-void appendPolyline(std::vector<SegmentInstance> &out, const std::vector<glm::vec4> &points,
-                    bool closed, SegmentKind kind, MetaFn meta) {
-  const std::size_t n = points.size();
-  if (n < 2) {
-    return;
-  }
-  const std::size_t count = closed ? n : n - 1;
-  for (std::size_t k = 0; k < count; ++k) {
-    const bool first = !closed && k == 0;
-    const bool last = !closed && k + 1 == count;
-    SegmentInstance seg;
-    seg.a = points.at(k);
-    seg.b = points.at((k + 1) % n);
-    seg.prev = first ? seg.a : points.at((k + n - 1) % n);
-    seg.next = last ? seg.b : points.at((k + 2) % n);
-    const glm::vec3 xyw = meta(k);
-    seg.meta = glm::vec4(xyw.x, xyw.y, packSegmentTag(kind, first, last), xyw.z);
-    out.push_back(seg);
-  }
-}
-
-glm::vec3 unusedMeta(std::size_t /*segment*/) {
-  return {-1.0f, -1.0f, -1.0f};
-}
-
-// Points from @p a toward @p b at k / pieces for k in [0, pieces), then b
-// when @p withEnd holds.
-void appendSubdividedPoints(std::vector<glm::vec4> &points, const glm::vec4 &a, const glm::vec4 &b,
-                            std::size_t pieces, bool withEnd) {
-  const auto steps = static_cast<float>(pieces);
-  for (std::size_t k = 0; k < pieces; ++k) {
-    points.push_back(a + ((b - a) * (static_cast<float>(k) / steps)));
-  }
-  if (withEnd) {
-    points.push_back(b);
-  }
-}
-
-void appendSubdivided(std::vector<SegmentInstance> &out, const glm::vec4 &a, const glm::vec4 &b,
-                      std::size_t pieces, SegmentKind kind) {
-  std::vector<glm::vec4> points;
-  points.reserve(pieces + 1);
-  appendSubdividedPoints(points, a, b, pieces, true);
-  appendPolyline(out, points, false, kind, unusedMeta);
-}
+/// Smallest lattice cell size latticeLocalPosition/latticeCellIndex divide by.
+constexpr float LATTICE_MIN_CELL_SIZE = 1e-4f;
 
 } // namespace
 
@@ -146,104 +98,33 @@ StereographicPoint projectStereographic(const glm::vec4 &p) {
   return out;
 }
 
-std::vector<LibraryFeature> bedroomFeatures() {
-  std::vector<LibraryFeature> features;
-  features.reserve(13);
-  // Shelf: five books along x on the back wall.
-  constexpr std::array<const char *, 5> bookNames = {"Book 1", "Book 2", "Book 3", "Book 4",
-                                                     "Book 5"};
-  constexpr std::array<float, 5> bookPositions = {-0.6f, -0.3f, 0.0f, 0.3f, 0.6f};
-  for (std::size_t index = 0; index < bookNames.size(); ++index) {
-    features.push_back({.kind = FeatureKind::Shelf,
-                        .position = glm::vec3(bookPositions.at(index), 0.55f, -0.7f),
-                        .name = bookNames.at(index)});
+glm::vec3 latticeLocalPosition(const glm::vec3 &p, float cellSize) {
+  const float size = std::max(cellSize, LATTICE_MIN_CELL_SIZE);
+  return p - (size * glm::round(p / size));
+}
+
+glm::ivec3 latticeCellIndex(const glm::vec3 &p, float cellSize) {
+  const float size = std::max(cellSize, LATTICE_MIN_CELL_SIZE);
+  const glm::vec3 index = glm::round(p / size);
+  return {static_cast<int>(index.x), static_cast<int>(index.y), static_cast<int>(index.z)};
+}
+
+float hueDegrees(const glm::vec3 &rgb) {
+  const float maxC = std::max({rgb.r, rgb.g, rgb.b});
+  const float minC = std::min({rgb.r, rgb.g, rgb.b});
+  const float delta = maxC - minC;
+  if (delta <= 1e-6f) {
+    return 0.0f;
   }
-  // Window: four frame corners on the +x wall.
-  features.push_back({.kind = FeatureKind::Window,
-                      .position = glm::vec3(0.75f, 0.0f, -0.4f),
-                      .name = "Window lower back corner"});
-  features.push_back({.kind = FeatureKind::Window,
-                      .position = glm::vec3(0.75f, 0.0f, 0.4f),
-                      .name = "Window lower front corner"});
-  features.push_back({.kind = FeatureKind::Window,
-                      .position = glm::vec3(0.75f, 0.6f, 0.4f),
-                      .name = "Window upper front corner"});
-  features.push_back({.kind = FeatureKind::Window,
-                      .position = glm::vec3(0.75f, 0.6f, -0.4f),
-                      .name = "Window upper back corner"});
-  // Desk: four corners of the desk top.
-  features.push_back({.kind = FeatureKind::Desk,
-                      .position = glm::vec3(-0.7f, -0.35f, 0.05f),
-                      .name = "Desk back left corner"});
-  features.push_back({.kind = FeatureKind::Desk,
-                      .position = glm::vec3(-0.1f, -0.35f, 0.05f),
-                      .name = "Desk back right corner"});
-  features.push_back({.kind = FeatureKind::Desk,
-                      .position = glm::vec3(-0.1f, -0.35f, 0.55f),
-                      .name = "Desk front right corner"});
-  features.push_back({.kind = FeatureKind::Desk,
-                      .position = glm::vec3(-0.7f, -0.35f, 0.55f),
-                      .name = "Desk front left corner"});
-  return features;
-}
-
-glm::vec4 selectedTubeMarker(const std::vector<LibraryFeature> &features,
-                             FeatureSelection selection, float litMoment, float timeSpan) {
-  return {features.at(selection.featureIndex).position, std::clamp(litMoment, 0.0f, timeSpan)};
-}
-
-std::vector<SegmentInstance> selectedTubeSegments(const std::vector<SegmentInstance> &segments,
-                                                  FeatureSelection selection) {
-  std::vector<SegmentInstance> selected;
-  const auto inSelectedTube = [selection](const SegmentInstance &segment) {
-    return segmentKind(segment) == SegmentKind::WorldTube &&
-           static_cast<std::size_t>(segment.meta.w) == selection.featureIndex;
-  };
-  std::ranges::copy_if(segments, std::back_inserter(selected), inSelectedTube);
-  return selected;
-}
-
-std::vector<std::array<std::size_t, 2>> bedroomOutline() {
-  return {// Shelf line through the five books.
-          {0, 1},
-          {1, 2},
-          {2, 3},
-          {3, 4},
-          // Window frame loop.
-          {5, 6},
-          {6, 7},
-          {7, 8},
-          {8, 5},
-          // Desk top loop.
-          {9, 10},
-          {10, 11},
-          {11, 12},
-          {12, 9}};
-}
-
-std::vector<OutlinePolyline> outlinePolylines() {
-  std::vector<OutlinePolyline> lines;
-  for (const auto &link : bedroomOutline()) {
-    if (lines.empty() || lines.back().closed || lines.back().features.back() != link.at(0)) {
-      lines.push_back({.features = {link.at(0)}, .closed = false});
-    }
-    OutlinePolyline &line = lines.back();
-    line.features.push_back(link.at(1));
-    line.closed = line.features.size() > 2 && line.features.back() == line.features.front();
+  float hue = 0.0f;
+  if (maxC == rgb.r) {
+    hue = 60.0f * std::fmod((rgb.g - rgb.b) / delta, 6.0f);
+  } else if (maxC == rgb.g) {
+    hue = 60.0f * (((rgb.b - rgb.r) / delta) + 2.0f);
+  } else {
+    hue = 60.0f * (((rgb.r - rgb.g) / delta) + 4.0f);
   }
-  return lines;
-}
-
-std::vector<glm::vec4> extrudeWorldTube(const glm::vec3 &point, float timeSpan,
-                                        std::size_t samples) {
-  const std::size_t count = std::max<std::size_t>(samples, 2);
-  const auto last = static_cast<float>(count - 1);
-  std::vector<glm::vec4> tube;
-  tube.reserve(count);
-  for (std::size_t k = 0; k < count; ++k) {
-    tube.emplace_back(point, timeSpan * (static_cast<float>(k) / last));
-  }
-  return tube;
+  return hue < 0.0f ? hue + 360.0f : hue;
 }
 
 glm::vec4 libraryToTesseract(const glm::vec4 &p, float timeSpan) {
@@ -287,60 +168,6 @@ TesseractMotion tesseractMotionAt(const std::array<float, 3> &leftRate,
   motion.pulseTravel = advancePulseTravel(
       0.0f, static_cast<float>(static_cast<double>(pulseSpeed) * seconds), pulseSpan);
   return motion;
-}
-
-float packSegmentTag(SegmentKind kind, bool capA, bool capB) {
-  const int tag = static_cast<int>(kind) | (capA ? SEGMENT_CAP_A : 0) | (capB ? SEGMENT_CAP_B : 0);
-  return static_cast<float>(tag);
-}
-
-SegmentKind segmentKind(const SegmentInstance &segment) {
-  return static_cast<SegmentKind>(static_cast<int>(std::lround(segment.meta.z)) &
-                                  SEGMENT_KIND_MASK);
-}
-
-bool segmentCapped(const SegmentInstance &segment, bool endB) {
-  const int bit = endB ? SEGMENT_CAP_B : SEGMENT_CAP_A;
-  return (static_cast<int>(std::lround(segment.meta.z)) & bit) != 0;
-}
-
-std::vector<SegmentInstance> buildSceneSegments(const SceneSegmentOptions &options) {
-  std::vector<SegmentInstance> segments;
-  const TesseractMesh mesh = buildTesseract();
-  const std::size_t pieces = std::max<std::size_t>(options.edgeSubdivisions, 1);
-  for (const TesseractEdge &edge : mesh.edges) {
-    appendSubdivided(segments, mesh.vertices.at(edge.a), mesh.vertices.at(edge.b), pieces,
-                     SegmentKind::TesseractEdge);
-  }
-
-  const std::vector<LibraryFeature> features = bedroomFeatures();
-  for (std::size_t strand = 0; strand < features.size(); ++strand) {
-    const std::vector<glm::vec4> tube =
-        extrudeWorldTube(features.at(strand).position, options.timeSpan, options.tubeSamples);
-    std::vector<glm::vec4> points(tube.size());
-    std::ranges::transform(tube, points.begin(), [&options](const glm::vec4 &sample) {
-      return libraryToTesseract(sample, options.timeSpan);
-    });
-    appendPolyline(segments, points, false, SegmentKind::WorldTube, [&tube, strand](std::size_t k) {
-      return glm::vec3(tube.at(k).w, tube.at(k + 1).w, static_cast<float>(strand));
-    });
-  }
-
-  const auto corner = [&features](std::size_t index) {
-    return glm::vec4(features.at(index).position, 0.0f);
-  };
-  for (const OutlinePolyline &line : outlinePolylines()) {
-    std::vector<glm::vec4> points;
-    for (std::size_t k = 0; k + 1 < line.features.size(); ++k) {
-      appendSubdividedPoints(points, corner(line.features.at(k)), corner(line.features.at(k + 1)),
-                             pieces, false);
-    }
-    if (!line.closed) {
-      points.push_back(corner(line.features.back()));
-    }
-    appendPolyline(segments, points, line.closed, SegmentKind::LitSlice, unusedMeta);
-  }
-  return segments;
 }
 
 } // namespace blackhole::tesseract
