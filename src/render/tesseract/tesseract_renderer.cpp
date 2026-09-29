@@ -8,7 +8,9 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <chrono>
 #include <cstddef>
+#include <future>
 #include <iostream>
 #include <numeric>
 #include <optional>
@@ -147,6 +149,11 @@ void TesseractRenderer::shutdown() {
     glDeleteFramebuffers(1, &fbo_);
     fbo_ = 0;
   }
+  if (pendingTable_.valid()) {
+    pendingTable_.wait();
+    pendingTable_ = {};
+  }
+  pendingStrut_ = 0;
   if (emanationTexture_ != 0) {
     glDeleteTextures(1, &emanationTexture_);
     emanationTexture_ = 0;
@@ -212,12 +219,36 @@ void TesseractRenderer::ensureResources() {
   }
 }
 
-void TesseractRenderer::bakeEmanation(int strut) {
+void TesseractRenderer::bakeEmanation(int strut, bool blocking) {
   if (emanationTexture_ != 0 && strut == emanationStrut_) {
     return;
   }
-  const tesseract::EmanationTable table =
-      tesseract::createStruttedEt(TESSERACT_EMANATION_LEVEL, strut);
+  if (pendingTable_.valid()) {
+    const bool ready =
+        pendingTable_.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+    if (ready || blocking || emanationTexture_ == 0) {
+      const int builtStrut = pendingStrut_;
+      const tesseract::EmanationTable built = pendingTable_.get();
+      if (builtStrut == strut) {
+        uploadEmanation(strut, built);
+        return;
+      }
+    } else {
+      // One build runs at a time; a strut requested meanwhile starts after it.
+      return;
+    }
+  }
+  if (blocking || emanationTexture_ == 0) {
+    uploadEmanation(strut, tesseract::createStruttedEt(TESSERACT_EMANATION_LEVEL, strut));
+    return;
+  }
+  pendingStrut_ = strut;
+  pendingTable_ = std::async(std::launch::async, [strut] {
+    return tesseract::createStruttedEt(TESSERACT_EMANATION_LEVEL, strut);
+  });
+}
+
+void TesseractRenderer::uploadEmanation(int strut, const tesseract::EmanationTable &table) {
   if (emanationTexture_ == 0) {
     glCreateTextures(GL_TEXTURE_2D, 1, &emanationTexture_);
     glTextureStorage2D(emanationTexture_, 1, GL_R16I, TESSERACT_EMANATION_SIZE,
@@ -313,7 +344,8 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   saved.capture();
 
   ensureResources();
-  bakeEmanation(std::clamp(inputs.emanationStrut, 1, TESSERACT_EMANATION_MAX_STRUT));
+  bakeEmanation(std::clamp(inputs.emanationStrut, 1, TESSERACT_EMANATION_MAX_STRUT),
+                inputs.emanationBakeBlocking);
   glBindTextureUnit(static_cast<GLuint>(TESSERACT_EMANATION_UNIT), emanationTexture_);
 
   glNamedFramebufferTexture(fbo_, GL_COLOR_ATTACHMENT0, inputs.targetTexture, 0);
@@ -606,6 +638,7 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
   const float walkClock = std::max(tg.emanationClock, 0.0f) / walkPeriod;
   inputs.emanationWalkStep = static_cast<int>(std::floor(walkClock));
   inputs.emanationWalkPhase = walkClock - std::floor(walkClock);
+  inputs.emanationBakeBlocking = record.has_value();
   tg.renderer.render(inputs);
 }
 

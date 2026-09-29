@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstddef>
+#include <future>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -118,6 +119,9 @@ struct TesseractFrameInputs {
   bool emanationWalk = true;    ///< Draw the xor-triple pulse walk.
   int emanationWalkStep = 0;    ///< Step index of the walk (floor(clock / period)).
   float emanationWalkPhase = 0.0f; ///< Fraction of the current step elapsed, in [0, 1).
+  /// Build a changed table before drawing instead of on a worker thread; record
+  /// frames set it so every frame shows the strut its clock selects.
+  bool emanationBakeBlocking = false;
 };
 
 /// Level of the Cayley-Dickson algebra whose emanation table the panes show (dim 1024).
@@ -188,8 +192,16 @@ public:
 
 private:
   void ensureResources();
-  /// Builds and uploads the table of @p strut unless it is the baked one.
-  void bakeEmanation(int strut);
+  /**
+   * Makes the texture show the table of @p strut. The first table, and every
+   * table when @p blocking is set, is built before drawing; otherwise a
+   * changed strut is built on a worker thread (about 30 ms for a level-10
+   * table) while the previous table stays bound, and uploaded on the first
+   * render after it finishes.
+   */
+  void bakeEmanation(int strut, bool blocking);
+  /// Uploads @p table as the texture and derives the walk and fill of @p strut.
+  void uploadEmanation(int strut, const tesseract::EmanationTable &table);
 
   /// Walk cells (level-10 row, column pairs) and lead value the shaders read.
   struct EmanationTrail {
@@ -212,6 +224,8 @@ private:
   std::vector<tesseract::WalkCell> emanationWalk_; ///< One period of the walk of the baked table.
   std::vector<int> emanationWalkValues_;           ///< Table value at each walk cell.
   std::vector<tesseract::WalkCell> emanationTrail_;
+  std::future<tesseract::EmanationTable> pendingTable_; ///< Worker build of pendingStrut_.
+  int pendingStrut_ = 0;
   bool llvmpipeChecked_ = false;
   bool llvmpipeDetected_ = false;
 };

@@ -11,12 +11,14 @@
  */
 
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <GLFW/glfw3.h>
@@ -95,6 +97,7 @@ void expectTextureMatchesCpu(TesseractRenderer &renderer, GLuint target, int str
   inputs.width = TARGET_SIZE;
   inputs.height = TARGET_SIZE;
   inputs.emanationStrut = strut;
+  inputs.emanationBakeBlocking = true;
   renderer.render(inputs);
   ASSERT_EQ(glGetError(), GL_NO_ERROR);
   ASSERT_EQ(renderer.emanationBakedStrut(), strut);
@@ -317,6 +320,37 @@ TEST_F(EmanationTableGlTest, BakedTextureHoldsTheCpuTableAcrossStrutChanges) {
   glDeleteTextures(1, &target);
 }
 
+// An interactive strut change builds the new table on a worker thread: the
+// render that requests it keeps the previous table bound, and a later render
+// uploads the finished table cell for cell.
+TEST_F(EmanationTableGlTest, InteractiveStrutChangeKeepsTheOldTableUntilTheBuildFinishes) {
+  const GLuint target = createColorTexture32f(TARGET_SIZE, TARGET_SIZE);
+  {
+    TesseractRenderer renderer;
+    expectTextureMatchesCpu(renderer, target, 17);
+    TesseractFrameInputs inputs;
+    inputs.targetTexture = target;
+    inputs.width = TARGET_SIZE;
+    inputs.height = TARGET_SIZE;
+    inputs.emanationStrut = 129;
+    renderer.render(inputs);
+    ASSERT_EQ(glGetError(), GL_NO_ERROR);
+    EXPECT_EQ(renderer.emanationBakedStrut(), 17) << "the change must not build on the render thread";
+    // A level-10 build takes tens of milliseconds; 400 renders 10 ms apart
+    // bound the wait at 4 s.
+    for (int attempt = 0; attempt < 400 && renderer.emanationBakedStrut() != 129; ++attempt) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      renderer.render(inputs);
+    }
+    ASSERT_EQ(renderer.emanationBakedStrut(), 129);
+    const tess::EmanationTable cpu = tess::createStruttedEt(tess::EMANATION_RENDER_LEVEL, 129);
+    EXPECT_EQ(readTexture(renderer.emanationTexture()), cpu.value);
+    EXPECT_EQ(renderer.emanationDmzCount(), 9096U);
+    renderer.shutdown();
+  }
+  glDeleteTextures(1, &target);
+}
+
 // The trail the pass uploads is the CPU generator's walk, and every cell of it
 // is a filled texel of the baked table.
 TEST_F(EmanationTableGlTest, PulseWalkUploadedToTheShaderOnlyVisitsFilledCells) {
@@ -332,6 +366,7 @@ TEST_F(EmanationTableGlTest, PulseWalkUploadedToTheShaderOnlyVisitsFilledCells) 
         inputs.emanationStrut = strut;
         inputs.emanationWalk = true;
         inputs.emanationWalkStep = step;
+        inputs.emanationBakeBlocking = true;
         renderer.render(inputs);
         ASSERT_EQ(glGetError(), GL_NO_ERROR);
 
