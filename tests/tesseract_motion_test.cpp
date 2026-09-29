@@ -120,7 +120,11 @@ std::array<float, 16> tiltedRotation() {
 
 constexpr float SLICE_SCENE_SCALE = 1.3f;
 constexpr float SLICE_CELL = 12.0f;
-const glm::vec3 SLICE_EYE(0.4f, -0.3f, 8.0f);
+constexpr std::array<float, 3> SLICE_EYE_COORDS{0.4f, -0.3f, 8.0f};
+
+glm::vec3 sliceEye() {
+  return {SLICE_EYE_COORDS[0], SLICE_EYE_COORDS[1], SLICE_EYE_COORDS[2]};
+}
 
 // Shifting the drift by whole hash periods along x, y, and z moves the wrapped
 // eye point by nothing, so the field the shaders read is unchanged.
@@ -130,9 +134,9 @@ TEST(TesseractSliceFrame, DriftByWholePeriodsLeavesTheEyePoint) {
       static_cast<double>(blackhole::TESSERACT_LATTICE_PERIOD_CELLS) * static_cast<double>(SLICE_CELL);
   const glm::dvec3 drift(3.7, -1.2, 25.0);
   const auto base =
-      blackhole::tesseractSliceFrame(rotation, SLICE_SCENE_SCALE, SLICE_CELL, SLICE_EYE, drift);
+      blackhole::tesseractSliceFrame(rotation, SLICE_SCENE_SCALE, SLICE_CELL, sliceEye(), drift);
   const auto shifted = blackhole::tesseractSliceFrame(
-      rotation, SLICE_SCENE_SCALE, SLICE_CELL, SLICE_EYE,
+      rotation, SLICE_SCENE_SCALE, SLICE_CELL, sliceEye(),
       drift + glm::dvec3(5.0 * period, -3.0 * period, 700.0 * period));
   for (std::size_t r = 0; r < 4; ++r) {
     EXPECT_NEAR(base.eye.at(r), shifted.eye.at(r), 1e-6) << "component " << r;
@@ -149,11 +153,11 @@ TEST(TesseractSliceFrame, DriftByWholePeriodsLeavesTheEyePoint) {
 TEST(TesseractSliceFrame, LongDriftKeepsTheEyeNearTheWZeroHyperplane) {
   const std::array<float, 16> rotation = tiltedRotation();
   const auto still = blackhole::tesseractSliceFrame(rotation, SLICE_SCENE_SCALE, SLICE_CELL,
-                                                    SLICE_EYE, glm::dvec3(0.0));
+                                                    sliceEye(), glm::dvec3(0.0));
   const auto drifted = blackhole::tesseractSliceFrame(
-      rotation, SLICE_SCENE_SCALE, SLICE_CELL, SLICE_EYE, glm::dvec3(0.0, 0.0, -1.0e6));
+      rotation, SLICE_SCENE_SCALE, SLICE_CELL, sliceEye(), glm::dvec3(0.0, 0.0, -1.0e6));
   EXPECT_DOUBLE_EQ(still.eye[3], drifted.eye[3]);
-  const glm::dvec3 eye(SLICE_EYE);
+  const glm::dvec3 eye(sliceEye());
   const double reach = std::sqrt((eye.x * eye.x) + (eye.y * eye.y) + (eye.z * eye.z)) +
                        (2.0 * static_cast<double>(SLICE_CELL));
   EXPECT_LT(std::abs(drifted.eye[3]), reach);
@@ -161,7 +165,7 @@ TEST(TesseractSliceFrame, LongDriftKeepsTheEyeNearTheWZeroHyperplane) {
 
 TEST(TesseractSliceFrame, AxesAreOrthonormal) {
   const auto slice = blackhole::tesseractSliceFrame(tiltedRotation(), SLICE_SCENE_SCALE, SLICE_CELL,
-                                                    SLICE_EYE, glm::dvec3(0.0));
+                                                    sliceEye(), glm::dvec3(0.0));
   for (std::size_t i = 0; i < 3; ++i) {
     for (std::size_t j = 0; j < 3; ++j) {
       double dot = 0.0;

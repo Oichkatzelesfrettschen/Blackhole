@@ -579,7 +579,7 @@ TesseractSliceFrame tesseractSliceFrame(const std::array<float, 16> &rotation, f
   const Vec4 third = axpy(blended[2], -dot(blended[2], slice.axes[0]), slice.axes[0]);
   slice.axes[2] = normalized(axpy(third, -dot(third, slice.axes[1]), slice.axes[1]));
 
-  const double cell = static_cast<double>(cellSize);
+  const auto cell = static_cast<double>(cellSize);
   const std::array<double, 3> local{
       static_cast<double>(eye.x) + (TESSERACT_LATTICE_OFFSET_CELLS[0] * cell),
       static_cast<double>(eye.y) + (TESSERACT_LATTICE_OFFSET_CELLS[1] * cell),
