@@ -68,15 +68,15 @@
       }
     },
     {
-      "name": "cuda-only",
-      "displayName": "CUDA Desktop Release",
-      "description": "Desktop application with CUDA backend enabled and Blender bridge disabled",
+      "name": "cuda",
+      "displayName": "Desktop Release with CUDA",
+      "description": "The Blackhole desktop application with the optional CUDA trace accelerator built in; OpenGL stays the default backend. Blender bridge disabled",
       "inherits": "release",
-      "binaryDir": "${sourceDir}/build/CUDA-Only/Release",
-      "installDir": "${sourceDir}/install/CUDA-Only/Release",
+      "binaryDir": "${sourceDir}/build/CUDA/Release",
+      "installDir": "${sourceDir}/install/CUDA/Release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/CUDA-Only/Release/generators/conan_toolchain.cmake",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/CUDA/Release/generators/conan_toolchain.cmake",
         "ENABLE_CUDA": "ON",
         "ENABLE_BLENDER_BRIDGE": "OFF",
         "ENABLE_DESKTOP_APP": "ON",
@@ -518,8 +518,8 @@
       "configurePreset": "glsl-only"
     },
     {
-      "name": "cuda-only",
-      "configurePreset": "cuda-only"
+      "name": "cuda",
+      "configurePreset": "cuda"
     },
     {
       "name": "blender-bridge",
@@ -645,8 +645,8 @@
       }
     },
     {
-      "name": "cuda-only",
-      "configurePreset": "cuda-only",
+      "name": "cuda",
+      "configurePreset": "cuda",
       "output": {
         "outputOnFailure": true
       }
@@ -777,21 +777,21 @@
       ]
     },
     {
-      "name": "cuda-only",
-      "displayName": "CUDA-Only Workflow",
-      "description": "Configure, build, and test the CUDA desktop product",
+      "name": "cuda",
+      "displayName": "CUDA Workflow",
+      "description": "Configure, build, and test the desktop application with the CUDA accelerator",
       "steps": [
         {
           "type": "configure",
-          "name": "cuda-only"
+          "name": "cuda"
         },
         {
           "type": "build",
-          "name": "cuda-only"
+          "name": "cuda"
         },
         {
           "type": "test",
-          "name": "cuda-only"
+          "name": "cuda"
         }
       ]
     },
