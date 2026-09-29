@@ -52,9 +52,9 @@ if [[ -n "${CMAKE_PRESET}" ]]; then
       PRESET_BUILD_TYPE="Release"
       PRESET_OUTPUT_DIR_REL="build/GLSL-Only"
       ;;
-    cuda-only)
+    cuda)
       PRESET_BUILD_TYPE="Release"
-      PRESET_OUTPUT_DIR_REL="build/CUDA-Only"
+      PRESET_OUTPUT_DIR_REL="build/CUDA"
       ;;
     blender-bridge)
       PRESET_BUILD_TYPE="Release"

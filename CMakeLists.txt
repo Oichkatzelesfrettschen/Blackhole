@@ -391,7 +391,7 @@ endif()
 # ============================================================================
 
 option(ENABLE_DESKTOP_APP "Build the desktop Blackhole application" ON)
-option(ENABLE_DESKTOP_VARIANTS "Build dedicated desktop GLSL/CUDA executables" ON)
+option(ENABLE_DESKTOP_VARIANTS "Build the dedicated BlackholeGLSL desktop executable" ON)
 option(ENABLE_BENCHMARKS "Build benchmark executables" ON)
 option(ENABLE_TOOLS "Build CLI/helper tools" ON)
 
@@ -1247,7 +1247,7 @@ add_custom_target(blackhole_source_revision
   VERBATIM)
 
 function(add_blackhole_desktop_target target_name)
-  set(options CUDA_ONLY GLSL_ONLY)
+  set(options GLSL_ONLY)
   cmake_parse_arguments(BH_DESKTOP "${options}" "" "" ${ARGN})
 
   add_executable(${target_name} ${PROJECT_SRC_FILES} ${THIRDPARTY_SRC_FILES} ${HEADER_FILES}
@@ -1336,9 +1336,6 @@ function(add_blackhole_desktop_target target_name)
   endif()
   if(BH_DESKTOP_GLSL_ONLY)
     target_compile_definitions(${target_name} PRIVATE BLACKHOLE_APP_VARIANT_GLSL_ONLY=1)
-  endif()
-  if(BH_DESKTOP_CUDA_ONLY)
-    target_compile_definitions(${target_name} PRIVATE BLACKHOLE_APP_VARIANT_CUDA_ONLY=1)
   endif()
 
   target_include_directories(${target_name} PRIVATE
@@ -1435,9 +1432,6 @@ if(ENABLE_DESKTOP_APP)
   add_blackhole_desktop_target(${CMAKE_PROJECT_NAME})
   if(ENABLE_DESKTOP_VARIANTS)
     add_blackhole_desktop_target(BlackholeGLSL GLSL_ONLY)
-    if(ENABLE_CUDA)
-      add_blackhole_desktop_target(BlackholeCUDA CUDA_ONLY)
-    endif()
   endif()
 endif()
 

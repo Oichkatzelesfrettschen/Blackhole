@@ -234,17 +234,17 @@ can be built independently without relying on undocumented target assumptions.
 | Preset | Purpose | Conan install directory |
 |--------|---------|-------------------------|
 | `glsl-only` | Shared desktop UI with GLSL path only | `build/GLSL-Only/Release` |
-| `cuda-only` | Shared desktop UI with CUDA enabled | `build/CUDA-Only/Release` |
+| `cuda` | The desktop application with the optional CUDA trace accelerator | `build/CUDA/Release` |
 | `blender-bridge` | Blender bridge without desktop app or benchmarks | `build/BlenderBridge/Release` |
 | `full-dev` | Shared desktop UI, CUDA, Blender bridge, tools, tests | `build/FullDev/RelWithDebInfo` |
 
 Example:
 
 ```bash
-./scripts/conan_install.sh Release build/CUDA-Only/Release
-cmake --preset cuda-only
-cmake --build --preset cuda-only
-ctest --preset cuda-only
+./scripts/conan_install.sh Release build/CUDA/Release
+cmake --preset cuda
+cmake --build --preset cuda
+ctest --preset cuda
 ```
 
 ## Build Options

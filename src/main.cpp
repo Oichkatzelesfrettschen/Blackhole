@@ -147,16 +147,6 @@
 // Preprocessor guards select declarations and code for the configured build.
 #define BLACKHOLE_APP_VARIANT_GLSL_ONLY 0 // NOLINT(cppcoreguidelines-macro-usage)
 #endif
-#ifndef BLACKHOLE_APP_VARIANT_CUDA_ONLY
-// Preprocessor guards select declarations and code for the configured build.
-#define BLACKHOLE_APP_VARIANT_CUDA_ONLY 0 // NOLINT(cppcoreguidelines-macro-usage)
-#endif
-#if BLACKHOLE_APP_VARIANT_GLSL_ONLY && BLACKHOLE_APP_VARIANT_CUDA_ONLY
-#error "Blackhole desktop variant cannot be both GLSL-only and CUDA-only"
-#endif
-#if BLACKHOLE_APP_VARIANT_CUDA_ONLY && !BLACKHOLE_HAS_CUDA
-#error "Blackhole CUDA-only desktop variant requires BLACKHOLE_HAS_CUDA=1"
-#endif
 #if BLACKHOLE_HAS_CUDA
 #include "cuda/cuda_render_manager.h"
 #endif
@@ -164,11 +154,7 @@
 namespace {
 
 constexpr bool K_APP_VARIANT_GLSL_ONLY = BLACKHOLE_APP_VARIANT_GLSL_ONLY != 0;
-constexpr bool K_APP_VARIANT_CUDA_ONLY = BLACKHOLE_APP_VARIANT_CUDA_ONLY != 0;
 constexpr const char *windowTitle() {
-  if (K_APP_VARIANT_CUDA_ONLY) {
-    return "BlackholeCUDA";
-  }
   return K_APP_VARIANT_GLSL_ONLY ? "BlackholeGLSL" : "Blackhole";
 }
 
@@ -872,7 +858,7 @@ RenderDispatchOptions deriveRenderDispatch(RenderState &rs, const Settings &sett
   bool const computeSupported = ShaderManager::instance().canUseComputeShaders();
   bool const computeActive = rs.dispatch.contract.backend == RenderBackend::Compute && computeSupported;
   bool const compareActive =
-      rs.compare.compareComputeFragment && computeSupported && !K_APP_VARIANT_CUDA_ONLY;
+      rs.compare.compareComputeFragment && computeSupported;
   bool const compareBaselineActive = rs.compare.compareBaselineEnabled && compareActive;
   bool const adiskEnabledEffective = rs.disk.adiskEnabled && !compareBaselineActive &&
       rs.dispatch.contract.radiative != blackhole::RadiativeModel::BackgroundOnly;
@@ -1028,10 +1014,6 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const Settings &setti
     rs.recording.recordCurRs = schwarzschildRadius;
     rs.recording.recordCurIsco = iscoRadius;
 #if BLACKHOLE_HAS_CUDA
-    if (K_APP_VARIANT_CUDA_ONLY) {
-      rs.dispatch.contract.backend = RenderBackend::Cuda;
-      rs.compare.compareComputeFragment = false;
-    }
     rs.dispatch.cudaManager.setEnabled(rs.dispatch.contract.backend == RenderBackend::Cuda);
 #endif
     const auto dispatch = deriveRenderDispatch(rs, settings);
@@ -1877,9 +1859,6 @@ int main(int argc, char **argv) {
       rs.display.renderScale = 1.0f;
     }
     applyEnvironmentConfig(rs, cli.sceneName);
-    if (K_APP_VARIANT_CUDA_ONLY) {
-      rs.dispatch.contract.backend = RenderBackend::Cuda;
-    }
     if (const auto backend = blackhole::rendererBackendFromName(cli.rendererBackend)) {
       rs.dispatch.contract.backend = *backend;
     }
