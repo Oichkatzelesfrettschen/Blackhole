@@ -1454,7 +1454,9 @@ TEST_F(KerrShaderCaptureTest, DiskSegmentClipsChordsToTheAnnulus) {
     double crossX;
     double rOut;
   };
-  for (const Crossing cross : {Crossing{7.0, 200.0}, Crossing{29.0, 30.0}, Crossing{50.0, 200.0}}) {
+  for (const Crossing cross :
+       {Crossing{.crossX = 7.0, .rOut = 200.0}, Crossing{.crossX = 29.0, .rOut = 30.0},
+        Crossing{.crossX = 50.0, .rOut = 200.0}}) {
     const double crossX = cross.crossX;
     const double heightSlope = 0.2 / crossX;
     const double reference = referenceDiskColumn(crossX, incl, cross.rOut, heightSlope);
