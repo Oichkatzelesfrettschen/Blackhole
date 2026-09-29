@@ -304,10 +304,17 @@ void applySceneEnvironment(RenderState &rs, std::string_view sceneName) {
   }
   rs.scene.mode = startupSceneMode(sceneName);
   rs.scene.envApplied = true;
-  // BLACKHOLE_TESSERACT_EMANATION=0 hides the emanation panes;
+  // BLACKHOLE_TESSERACT_EMANATION=0 hides the emanation panes, and
+  // BLACKHOLE_TESSERACT_WALK=0 and BLACKHOLE_TESSERACT_NESTING=0 drop the pulse walk and zoom nesting;
   // BLACKHOLE_TESSERACT_STRUT=S pins the strut and stops the balloon ride.
   if (const char *paneEnv = std::getenv("BLACKHOLE_TESSERACT_EMANATION")) {
     rs.tesseract.emanationEnabled = std::string_view(paneEnv) != "0";
+  }
+  if (const char *walkEnv = std::getenv("BLACKHOLE_TESSERACT_WALK")) {
+    rs.tesseract.emanationWalk = std::string_view(walkEnv) != "0";
+  }
+  if (const char *nestEnv = std::getenv("BLACKHOLE_TESSERACT_NESTING")) {
+    rs.tesseract.emanationNesting = std::string_view(nestEnv) != "0";
   }
   if (const char *strutEnv = std::getenv("BLACKHOLE_TESSERACT_STRUT")) {
     char *end = nullptr;

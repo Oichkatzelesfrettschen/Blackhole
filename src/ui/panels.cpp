@@ -1026,6 +1026,9 @@ void renderTesseractCorridorControls(RenderState::TesseractGroup &tg) {
   ImGui::Text("Showing S = %d",
               blackhole::tesseractEmanationStrut(tg.emanationRide, tg.emanationClock,
                                                  tg.emanationDwell, tg.emanationStrut));
+  ImGui::Checkbox("Zoom nesting (near panes show lower levels)", &tg.emanationNesting);
+  ImGui::Checkbox("Xor-triple pulse walk", &tg.emanationWalk);
+  ImGui::SliderFloat("Walk step (s)", &tg.emanationWalkPeriod, 0.1f, 3.0f);
   ImGui::SliderFloat("Pane glow", &tg.emanationGain, 0.0f, 4.0f);
   ImGui::SeparatorText("Pulse and now band");
   ImGui::SliderFloat("Now depth", &tg.litMoment, 0.0f, tg.timeSpan);

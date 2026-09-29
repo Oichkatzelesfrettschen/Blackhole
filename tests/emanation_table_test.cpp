@@ -27,8 +27,13 @@ using blackhole::tesseract::cdBasisMulSign;
 using blackhole::tesseract::createStruttedEt;
 using blackhole::tesseract::dmzValueByClosedForm;
 using blackhole::tesseract::EmanationTable;
+using blackhole::tesseract::expandToLevel;
+using blackhole::tesseract::minLevelForStrut;
+using blackhole::tesseract::primaryCopyPosition;
 using blackhole::tesseract::regimeAddress;
 using blackhole::tesseract::skyRegimeStruts;
+using blackhole::tesseract::WalkCell;
+using blackhole::tesseract::xorTripleWalk;
 
 constexpr int RENDER_LEVEL = 10;
 constexpr std::size_t BOX_KITE_CELLS = 24;
@@ -181,6 +186,117 @@ TEST(EmanationTable, Theorem11EmbedsTheLowerLevelAsTwoSubBlocks) {
   }
 }
 
+TEST(EmanationTable, MinLevelIsTheSmallestLevelHoldingTheStrut) {
+  EXPECT_EQ(minLevelForStrut(1), 4);
+  EXPECT_EQ(minLevelForStrut(7), 4);
+  EXPECT_EQ(minLevelForStrut(9), 5);
+  EXPECT_EQ(minLevelForStrut(17), 6);
+  EXPECT_EQ(minLevelForStrut(129), 9);
+  EXPECT_EQ(minLevelForStrut(257), 10);
+  EXPECT_EQ(minLevelForStrut(511), 10);
+}
+
+// Zoom nesting: the level-n table is the level-(n+1) table with its central
+// cross removed, i.e. its four corner blocks, cell for cell.
+TEST(EmanationTable, LowerLevelTableIsTheFourCornersOfTheNextLevel) {
+  for (const int s : {9, 17, 33, 129}) {
+    for (int n = minLevelForStrut(s); n < RENDER_LEVEL; ++n) {
+      const EmanationTable small = createStruttedEt(n, s);
+      const EmanationTable large = createStruttedEt(n + 1, s);
+      const int k = small.tone.k;
+      ASSERT_EQ(large.tone.k, (2 * k) + 2);
+      std::size_t compared = 0;
+      for (int r = 0; r < k; ++r) {
+        for (int c = 0; c < k; ++c) {
+          ASSERT_EQ(large.at(primaryCopyPosition(n, r), primaryCopyPosition(n, c)), small.at(r, c))
+              << "S=" << s << " level " << n << " r=" << r << " c=" << c;
+          ++compared;
+        }
+      }
+      EXPECT_EQ(compared, static_cast<std::size_t>(k) * static_cast<std::size_t>(k));
+    }
+  }
+}
+
+// The composite map the shader applies: every level's table sits inside the level-10 texture.
+TEST(EmanationTable, EveryLevelEmbedsInTheRenderedLevel) {
+  const int s = 17;
+  const EmanationTable top = createStruttedEt(RENDER_LEVEL, s);
+  for (int n = minLevelForStrut(s); n < RENDER_LEVEL; ++n) {
+    const EmanationTable small = createStruttedEt(n, s);
+    const int k = small.tone.k;
+    for (int r = 0; r < k; ++r) {
+      for (int c = 0; c < k; ++c) {
+        ASSERT_EQ(top.at(expandToLevel(n, RENDER_LEVEL, r), expandToLevel(n, RENDER_LEVEL, c)),
+                  small.at(r, c))
+            << "level " << n << " r=" << r << " c=" << c;
+      }
+    }
+  }
+}
+
+// The DMZ set is closed under xor triples: (a, b) filled makes (a, a ^ b) and
+// (b, a ^ b) filled, so the walk's xor step never leaves the filled cells.
+TEST(EmanationTable, FilledCellsAreClosedUnderXorTriples) {
+  for (const int s : {9, 17, 129}) {
+    const EmanationTable table = createStruttedEt(RENDER_LEVEL, s);
+    const int k = table.tone.k;
+    std::vector<int> position(static_cast<std::size_t>(table.tone.g), -1);
+    for (int i = 0; i < k; ++i) {
+      position[static_cast<std::size_t>(table.tone.lo[static_cast<std::size_t>(i)])] = i;
+    }
+    for (int r = 0; r < k; ++r) {
+      for (int c = 0; c < k; ++c) {
+        if (table.at(r, c) == 0) {
+          continue;
+        }
+        const int a = table.tone.lo[static_cast<std::size_t>(r)];
+        const int b = table.tone.lo[static_cast<std::size_t>(c)];
+        const int third = position[static_cast<std::size_t>(a ^ b)];
+        ASSERT_GE(third, 0) << "S=" << s;
+        ASSERT_NE(table.at(r, third), 0) << "S=" << s << " r=" << r << " c=" << c;
+        ASSERT_NE(table.at(c, third), 0) << "S=" << s << " r=" << r << " c=" << c;
+      }
+    }
+  }
+}
+
+// Rules of the walk: even steps follow (a, b) -> (a, a ^ b) within the row, odd
+// steps stay in the column. Returns the number of distinct cells visited.
+std::size_t checkWalkRules(const EmanationTable &table, const std::vector<WalkCell> &walk, int s) {
+  std::set<std::pair<int, int>> distinct;
+  for (std::size_t i = 0; i < walk.size(); ++i) {
+    EXPECT_NE(table.at(walk[i].row, walk[i].col), 0) << "S=" << s << " step " << i;
+    distinct.insert({walk[i].row, walk[i].col});
+    if (i + 1 == walk.size()) {
+      break;
+    }
+    if (i % 2 == 1) {
+      EXPECT_EQ(walk[i + 1].col, walk[i].col) << "S=" << s << " step " << i;
+      continue;
+    }
+    EXPECT_EQ(walk[i + 1].row, walk[i].row) << "S=" << s << " step " << i;
+    const int label = table.tone.lo[static_cast<std::size_t>(walk[i].row)] ^
+                      table.tone.lo[static_cast<std::size_t>(walk[i].col)];
+    EXPECT_EQ(table.tone.lo[static_cast<std::size_t>(walk[i + 1].col)], label)
+        << "S=" << s << " step " << i;
+  }
+  return distinct.size();
+}
+
+// The walk the renderer uploads: every step lands on a filled cell, and the
+// walk visits more cells than one xor-triple orbit holds (sparse tables close
+// into shorter cycles).
+TEST(EmanationTable, XorTripleWalkOnlyVisitsFilledCells) {
+  for (const int s : {9, 17, 65, 129, 257}) {
+    const EmanationTable table = createStruttedEt(RENDER_LEVEL, s);
+    const std::vector<WalkCell> walk =
+        xorTripleWalk(table, blackhole::tesseract::EMANATION_WALK_LENGTH);
+    ASSERT_EQ(walk.size(), static_cast<std::size_t>(blackhole::tesseract::EMANATION_WALK_LENGTH));
+    EXPECT_GE(checkWalkRules(table, walk, s), 16U) << "S=" << s;
+  }
+}
+
 TEST(EmanationTable, ClosedFormPredicateMatchesTheBuilderOnEveryCell) {
   for (const int s : {17, 129}) {
     const EmanationTable table = createStruttedEt(RENDER_LEVEL, s);
@@ -190,8 +306,9 @@ TEST(EmanationTable, ClosedFormPredicateMatchesTheBuilderOnEveryCell) {
       for (int c = 0; c < k; ++c) {
         int expected = 0;
         if (c != r && r + c != k - 1) {
-          expected = dmzValueByClosedForm(dim, table.tone.x, table.tone.lo[static_cast<std::size_t>(r)],
-                                          table.tone.lo[static_cast<std::size_t>(c)]);
+          expected =
+              dmzValueByClosedForm(dim, table.tone.x, table.tone.lo[static_cast<std::size_t>(r)],
+                                   table.tone.lo[static_cast<std::size_t>(c)]);
         }
         ASSERT_EQ(table.at(r, c), expected) << "S=" << s << " r=" << r << " c=" << c;
       }

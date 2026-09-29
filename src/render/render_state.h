@@ -230,6 +230,11 @@ struct RenderState {
     float emanationDwell = 8.0f; ///< Seconds the ride holds each strut.
     int emanationStrut = 17;     ///< Strut S in [1, 511] when the ride is off.
     float emanationGain = 1.0f;  ///< Pane emissive scale.
+    /// Panes nearer the eye show lower-level tables (Theorem 11 zoom nesting).
+    bool emanationNesting = true;
+    /// Pulse walking the table's xor triples (emanation_table.h xorTripleWalk).
+    bool emanationWalk = true;
+    float emanationWalkPeriod = 0.5f; ///< Seconds per walk step.
     float emanationClock = 0.0f; ///< Seconds the ride has run (wall time, or the record clock).
     TesseractRenderer renderer;
     HudOverlay speculativeLabel;

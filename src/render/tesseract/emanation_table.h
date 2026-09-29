@@ -79,6 +79,43 @@ constexpr int cdBasisMulSign(int dim, int p, int q) {
   return sign;
 }
 
+/** @brief Tone-row labels per row and column at level @p n: 2^(n-1) - 2. */
+constexpr int toneRowSize(int n) {
+  return (1 << (n - 1)) - 2;
+}
+
+/** @brief Smallest level whose tone row admits strut @p s: 2^(n-1) > s, and n >= 4. */
+constexpr int minLevelForStrut(int s) {
+  int n = EMANATION_MIN_LEVEL;
+  while ((1 << (n - 1)) <= s) {
+    ++n;
+  }
+  return n;
+}
+
+/**
+ * @brief Position in the level-(n+1) table of position @p p of the level-n table.
+ *
+ * Theorem 11 (de Marrais, "The 42 Assessors", arXiv:0704.0026 as cited in
+ * open_gororoba theorem11.rs): the level-n table of a strut is the primary
+ * copy inside the level-(n+1) table of the same strut. In tone-row order the
+ * copy is the four corner blocks of the larger table, each half a level-n
+ * table wide, with the central cross of K(n+1) - K(n) rows and columns cut out,
+ * so the map keeps the first half of the positions and shifts the second half.
+ */
+constexpr int primaryCopyPosition(int n, int p) {
+  const int k = toneRowSize(n);
+  return p < k / 2 ? p : p + (toneRowSize(n + 1) - k);
+}
+
+/** @brief Position @p p of the level-@p n table as a position in the level-@p top table. */
+constexpr int expandToLevel(int n, int top, int p) {
+  for (int level = n; level < top; ++level) {
+    p = primaryCopyPosition(level, p);
+  }
+  return p;
+}
+
 /** @brief Tone row of level @p n and strut @p s: K assessor low indices, mirror-paired. */
 struct ToneRow {
   int n = 0;
@@ -193,6 +230,70 @@ inline EmanationTable createStruttedEt(int n, int s) {
     }
   }
   return table;
+}
+
+/** @brief A cell of an emanation table, by tone-row position. */
+struct WalkCell {
+  int row = 0;
+  int col = 0;
+  friend bool operator==(const WalkCell &, const WalkCell &) = default;
+};
+
+/// Cells in one period of the pulse walk.
+inline constexpr int EMANATION_WALK_LENGTH = 128;
+
+/**
+ * @brief Xor-triple walk over the filled cells of @p table.
+ *
+ * Step k of the walk leaves cell (a, b), labels a = lo[row] and b = lo[col],
+ * by the rule (a, b) -> (a, a ^ b) for even k, and for odd k moves down the
+ * column to the next filled row (cyclic). The xor step lands on a filled cell
+ * because the DMZ set is closed under the triples {a, b, a ^ b}: the emanation
+ * value of (a, b) is +-(a ^ b), and (a, a ^ b) and (b, a ^ b) are DMZ cells
+ * whenever (a, b) is. The column step searches filled cells, so every cell of
+ * the walk is filled. The walk starts at the first filled cell at or after
+ * row K/4, column K/3 in row-major order. Returns @p length cells, or none
+ * for an empty table. This is a walk on the XOR triples of the table, not a
+ * traversal of box-kite cycles.
+ */
+inline std::vector<WalkCell> xorTripleWalk(const EmanationTable &table, int length) {
+  const int k = table.tone.k;
+  std::vector<int> position(static_cast<std::size_t>(table.tone.g), -1);
+  for (int i = 0; i < k; ++i) {
+    position[static_cast<std::size_t>(table.tone.lo[static_cast<std::size_t>(i)])] = i;
+  }
+  const int cells = k * k;
+  int start = -1;
+  for (int step = 0; step < cells && start < 0; ++step) {
+    const int index = ((((k / 4) * k) + (k / 3)) + step) % cells;
+    if (table.at(index / k, index % k) != 0) {
+      start = index;
+    }
+  }
+  std::vector<WalkCell> walk;
+  if (start < 0) {
+    return walk;
+  }
+  walk.reserve(static_cast<std::size_t>(length));
+  WalkCell cell{.row = start / k, .col = start % k};
+  for (int step = 0; step < length; ++step) {
+    walk.push_back(cell);
+    if (step % 2 == 0) {
+      const int label = table.tone.lo[static_cast<std::size_t>(cell.row)] ^
+                        table.tone.lo[static_cast<std::size_t>(cell.col)];
+      const int next = position[static_cast<std::size_t>(label)];
+      if (next >= 0 && table.at(cell.row, next) != 0) {
+        cell.col = next;
+      }
+    } else {
+      int row = (cell.row + 1) % k;
+      while (table.at(row, cell.col) == 0) {
+        row = (row + 1) % k;
+      }
+      cell.row = row;
+    }
+  }
+  return walk;
 }
 
 /**

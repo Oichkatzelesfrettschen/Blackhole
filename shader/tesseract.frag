@@ -37,20 +37,14 @@
  * with exp(-kappa |p4.w|), the distance of the sampled point from the w = 0
  * hyperplane in the world frame. Output is linear HDR radiance with alpha 1.
  *
- * Emanation panes. The planes p4.z = m cellSize, which face the corridor
- * axis, carry the strutted emanation table of the 1024-dimensional
- * Cayley-Dickson algebra (src/render/tesseract/emanation_table.h, baked by the
- * CPU into an R16I texture). Each pane tile shows the whole 510 x 510 table,
- * indexed by the two in-plane periodic slice coordinates (p4.x, p4.y), with the
- * y and x beams along its edges. A filled (zero-divisor) cell glows: the high
- * bits of |value| = a ^ b (the table sub-block) set the hue, the sign picks
- * warm or cool. The panes are additive and analytic: p4 is affine in the ray
- * parameter, so a pane crossing is a division, the table is read at the first
- * EMANATION_PANES crossings before the ray's hit, and the march never touches
- * the texture.
+ * The emanation-table panes are a separate additive pass,
+ * shader/tesseract_panes.frag, sharing the slice frame of
+ * shader/include/tesseract_slice.glsl.
  */
 
 #include "include/interop_raygen.glsl"
+#include "include/tesseract_slice.glsl"
+#include "include/tesseract_emanation_palette.glsl"
 
 layout(location = 0) out vec4 fragColor;
 
@@ -58,12 +52,9 @@ uniform vec2 resolution;
 uniform vec3 eye;
 uniform mat3 cameraBasis; // columns (right, up, forward), buildCameraBasis order.
 uniform float fovScale;   // tan(fovDeg / 2)
-uniform mat4 rotation4;   // SO(4) matrix of v -> qL v conj(qR), column-major.
 uniform int projectionMode;
 uniform float perspectiveDistance;
-uniform float sceneScale;     // Slice-frame tilt gain: blend toward rotation4.
 uniform float corridorPeriod; // World units of depth before the light bands repeat.
-uniform float cellSize;       // Lattice cell period ("Corridor density").
 uniform float nowDepth;       // Depth (mod corridorPeriod) of the static "now" highlight band.
 uniform float nowWidth;
 uniform float pulseDepth; // Depth (mod corridorPeriod) of the traveling gravity-message pulse.
@@ -72,13 +63,10 @@ uniform int pulseEnabled;
 uniform float strandGlow;
 uniform float fogDensity;
 uniform int qualityTier; // 0 dense (real GPUs), 1 sparse (Mesa llvmpipe and other slow rasterizers).
-uniform int emanationEnabled;
-uniform float emanationGain;
-uniform float emanationFill; // Filled fraction of the addressable table cells.
-
-// Level-10 emanation table, signed values in tone-row order, 0 = not filled.
-// Binding matches TESSERACT_EMANATION_UNIT in tesseract_renderer.h.
-layout(binding = 3) uniform isampler2D emanationTable;
+// Hue of the traveling pulse: the lead cell of the emanation pulse walk
+// (tesseract_panes.frag), when the panes are on.
+uniform int pulseTintEnabled;
+uniform int emanationLeadValue; // Table value at the lead cell.
 
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
@@ -122,14 +110,6 @@ const float STRAND_W_TWIST = 0.6;
 // Halo: analytic bloom from the nearest-strand distance along the march.
 const float HALO_RADIUS_FRACTION = 0.05;
 const float HALO_GAIN = 0.03;
-// exp(-kappa |p4.w|): 4D depth cue.
-const float W_DIM_KAPPA = 0.06;
-// Slice hyperplane offset along w, in cells.
-const float SLICE_W_CELLS = 0.25;
-// Lattice offset in cells: places the default eye (world x = y = 0, depth
-// drift along z) in the open middle of a cell, slightly off the corridor axis.
-const vec3 LATTICE_OFFSET_CELLS = vec3(0.53, 0.47, 0.5);
-
 const float SURFACE_EPS_FRACTION = 0.0004;
 const float MIN_STEP_FRACTION = 0.0008;
 // The fold to the nearest angular sector under-estimates strand proximity
@@ -137,35 +117,6 @@ const float MIN_STEP_FRACTION = 0.0008;
 const float STEP_SCALE = 0.6;
 const float MAX_MARCH_CELLS = 24.0;
 const float GRAZE_ACCEPT_FOOTPRINTS = 4.0;
-// Fog: transmittance exp(-(t / fogDistance)^FOG_EXPONENT). The exponent above 1
-// keeps the first cells clear and closes the corridor steeply beyond
-// fogDistance, so the vanishing point reads as depth, not as uniform haze.
-// fogDistance is FOG_CELLS cells at the default fogDensity (0.35) and scales
-// inversely with the slider.
-const float FOG_EXPONENT = 1.8;
-const float FOG_CELLS = 3.5;
-const float FOG_REFERENCE_DENSITY = 0.35;
-
-// Emanation panes: table edge (2^9 - 2), pane crossings read per family, and
-// the pixel footprint in table cells beyond which the table averages to its
-// mean fill.
-const int EMANATION_SIZE = 510;
-const int EMANATION_PANES = 4;
-const float EMANATION_BLUR_START = 1.0;
-const float EMANATION_BLUR_END = 3.0;
-const float EMANATION_GAIN = 0.08;
-const float EMANATION_REFERENCE_FILL = 0.3;
-const float EMANATION_GLOW_CORE = 0.35;
-const float EMANATION_GLOW_EDGE = 1.05;
-const vec3 EMANATION_WARM_LOW = vec3(1.0, 0.34, 0.08);
-const vec3 EMANATION_WARM_HIGH = vec3(1.0, 0.78, 0.40);
-const vec3 EMANATION_COOL_LOW = vec3(0.06, 0.20, 0.33);
-const vec3 EMANATION_COOL_HIGH = vec3(0.21, 0.39, 0.54);
-
-// Slice frame, set once per fragment by buildSliceFrame().
-vec4 gF0;
-vec4 gF1;
-vec4 gF2;
 // Tier index and 4D-cue-free brightness of the nearest strand of the last
 // field evaluation.
 float gTierBrightness = 1.0;
@@ -190,24 +141,6 @@ vec2 hash21(vec2 p) {
   ivec2 i = ivec2(round(p * 16.0));
   uint h = pcgHash(uint(i.x) + pcgHash(uint(i.y) + 0x9e3779b9u));
   return vec2(float(h & 0xFFFFu), float(pcgHash(h) & 0xFFFFu)) / 65535.0;
-}
-
-// Orthonormal 4x3 slice frame: the columns of rotation4 blended toward the
-// identity (blend = 0.10 sceneScale, 0.13 at the default 1.3, capped at 0.6 so
-// the blend never cancels), then Gram-Schmidt orthonormalized.
-void buildSliceFrame() {
-  float blend = clamp(0.10 * sceneScale, 0.0, 0.6);
-  vec4 a0 = mix(vec4(1.0, 0.0, 0.0, 0.0), rotation4[0], blend);
-  vec4 a1 = mix(vec4(0.0, 1.0, 0.0, 0.0), rotation4[1], blend);
-  vec4 a2 = mix(vec4(0.0, 0.0, 1.0, 0.0), rotation4[2], blend);
-  gF0 = normalize(a0);
-  gF1 = normalize(a1 - (gF0 * dot(a1, gF0)));
-  gF2 = normalize(a2 - (gF0 * dot(a2, gF0)) - (gF1 * dot(a2, gF1)));
-}
-
-vec4 slicePoint(vec3 p) {
-  vec3 q = p + (LATTICE_OFFSET_CELLS * cellSize);
-  return (gF0 * q.x) + (gF1 * q.y) + (gF2 * q.z) + vec4(0.0, 0.0, 0.0, SLICE_W_CELLS * cellSize);
 }
 
 // One beam family: transverse 4D coordinates @p ct, axial coordinate @p s,
@@ -272,97 +205,6 @@ vec3 estimateNormal(vec3 p, float e) {
   const vec2 k = vec2(1.0, -1.0);
   return normalize((k.xyy * mapDistance(p + (k.xyy * e))) + (k.yyx * mapDistance(p + (k.yyx * e))) +
                    (k.yxy * mapDistance(p + (k.yxy * e))) + (k.xxx * mapDistance(p + (k.xxx * e))));
-}
-
-// World-frame 4D depth cue.
-float wDim(float w) {
-  return exp(-W_DIM_KAPPA * abs(w));
-}
-
-float fogTransmittance(float t, float fogDistance) {
-  return exp(-pow(t / fogDistance, FOG_EXPONENT));
-}
-
-// Glow color of a table value. The high bits of |v| = a ^ b name the table
-// sub-block the cell lies in (the nesting of successive doublings), so the
-// hue steps by block, and the low bits modulate brightness; a positive edge
-// sign glows warm amber, a negative one muted cool blue.
-vec3 emanationColor(int v) {
-  int magnitude = abs(v);
-  float block = float(magnitude >> 6) / 7.0;
-  float detail = 0.75 + (0.25 * float(magnitude & 7) / 7.0);
-  vec3 color = v >= 0 ? mix(EMANATION_WARM_LOW, EMANATION_WARM_HIGH, block)
-                      : mix(EMANATION_COOL_LOW, EMANATION_COOL_HIGH, block);
-  return color * detail;
-}
-
-// Radiance of the table at pane coordinates @p uv (table cells per pane
-// tile, 0..510): each filled cell in the 3 x 3 neighborhood contributes a
-// soft round glow of about one cell radius, joined by max so overlapping
-// cells do not sum past a single cell's color. The glow thickens the
-// one-cell lines of sparse tables into readable strokes and doubles as the
-// antialiasing kernel.
-vec3 emanationGlow(vec2 uv) {
-  ivec2 home = ivec2(floor(uv));
-  vec3 glow = vec3(0.0);
-  for (int dy = -1; dy <= 1; ++dy) {
-    for (int dx = -1; dx <= 1; ++dx) {
-      ivec2 cell = home + ivec2(dx, dy);
-      if (any(lessThan(cell, ivec2(0))) || any(greaterThanEqual(cell, ivec2(EMANATION_SIZE)))) {
-        continue;
-      }
-      int v = texelFetch(emanationTable, cell, 0).r;
-      if (v == 0) {
-        continue;
-      }
-      float dist = length(uv - (vec2(cell) + 0.5));
-      float weight = 1.0 - smoothstep(EMANATION_GLOW_CORE, EMANATION_GLOW_EDGE, dist);
-      glow = max(glow, emanationColor(v) * weight);
-    }
-  }
-  return glow;
-}
-
-// Additive light of the emanation panes along a ray up to @p tEnd: the planes
-// p4.z = m cellSize, which face the corridor axis, so the tile of each is seen
-// face-on and the beams along its edges frame it. p4 is affine in the ray
-// parameter t, so the first EMANATION_PANES crossings ahead of the eye are
-// divisions and the table is read once per crossing.
-vec3 emanationPanes(vec3 rayDir, float tEnd, float fogDistance) {
-  vec4 a = slicePoint(eye);
-  vec4 b = (gF0 * rayDir.x) + (gF1 * rayDir.y) + (gF2 * rayDir.z);
-  float incidence = abs(b.z);
-  if (incidence < 1e-4) {
-    return vec3(0.0);
-  }
-  float pixelAngle = fovScale / max(resolution.y, 1.0);
-  float texelSize = cellSize / float(EMANATION_SIZE);
-  float dir = b.z > 0.0 ? 1.0 : -1.0;
-  float u0 = a.z / cellSize;
-  float first = dir > 0.0 ? floor(u0) + 1.0 : ceil(u0) - 1.0;
-  float grazing = smoothstep(0.03, 0.3, incidence);
-  vec3 meanLight = emanationFill * mix(EMANATION_WARM_LOW, EMANATION_WARM_HIGH, 0.5);
-  vec3 sum = vec3(0.0);
-  for (int j = 0; j < EMANATION_PANES; ++j) {
-    float plane = first + (dir * float(j));
-    float t = ((plane * cellSize) - a.z) / b.z;
-    if (t <= 0.0 || t >= tEnd) {
-      break;
-    }
-    vec4 q = a + (b * t);
-    // Tile coordinates: the two in-plane periodic slice coordinates.
-    vec2 uv = fract(q.xy / cellSize) * float(EMANATION_SIZE);
-    // Pixel footprint in table cells; beyond a few cells the table reads as its mean.
-    float footprint = (t * pixelAngle) / (max(incidence, 0.05) * texelSize);
-    vec3 light = mix(emanationGlow(uv), meanLight,
-                     smoothstep(EMANATION_BLUR_START, EMANATION_BLUR_END, footprint));
-    // A pane closer than a fraction of a cell would fill the frame with one table cell.
-    float nearFade = smoothstep(0.25, 0.7, t / cellSize);
-    sum += light * (grazing * nearFade * fogTransmittance(t, fogDistance) * wDim(q.w));
-  }
-  // Equal mean pane energy across struts: sparse tables glow brighter per cell.
-  float sparsity = clamp(EMANATION_REFERENCE_FILL / max(emanationFill, 0.01), 0.15, 3.0);
-  return sum * (EMANATION_GAIN * sparsity * emanationGain * strandGlow);
 }
 
 // Sphere-traces from @p rayOrigin along @p rayDir. Returns the travelled
@@ -435,8 +277,13 @@ vec3 shadeHit(vec3 p, vec3 rayDir, float footprint) {
     float pulse = pulseEnabled != 0 ? gaussian(depthPattern, mod(pulseDepth, period), pulseWidth) : 0.0;
     // Round fiber: brightest on the axis, falling off across the width.
     float core = pow(facing, 1.5);
+    // The traveling pulse takes the hue of the walk's lead cell while panes are on.
+    vec3 pulseTint = vec3(1.0);
+    if (pulseTintEnabled != 0) {
+      pulseTint = mix(vec3(1.0), emanationColor(emanationLeadValue, 10) * 2.0, 0.5);
+    }
     radiance = mix(STRAND_HALO_COLOR, STRAND_CORE_COLOR, core) * (0.25 + (0.75 * core)) *
-               tierBrightness * (1.0 + lit + (1.8 * pulse));
+               tierBrightness * (vec3(1.0 + lit) + (1.8 * pulse * pulseTint));
     radius = tierRadius;
   } else {
     float rim = pow(1.0 - facing, 4.0);
@@ -453,7 +300,7 @@ vec3 shadeHit(vec3 p, vec3 rayDir, float footprint) {
 void main() {
   buildSliceFrame();
   vec3 rayDir = bhRayDir(gl_FragCoord.xy, resolution, fovScale, cameraBasis);
-  float fogDistance = FOG_CELLS * cellSize * FOG_REFERENCE_DENSITY / max(fogDensity, 1e-3);
+  float fogDistance = fogDistanceFor(fogDensity);
 
   bool hit;
   vec3 halo;
@@ -463,10 +310,6 @@ void main() {
   vec3 shaded = hit ? shadeHit(eye + (rayDir * travelled), rayDir, footprint) : vec3(0.0);
   float extinction = fogTransmittance(travelled, fogDistance);
   vec3 color = (shaded * extinction) + (halo * strandGlow) + (VOID_COLOR * (1.0 - extinction));
-  if (emanationEnabled != 0) {
-    float tEnd = hit ? travelled : MAX_MARCH_CELLS * cellSize;
-    color += emanationPanes(rayDir, tEnd, fogDistance);
-  }
 
   fragColor = vec4(color, 1.0);
 }
