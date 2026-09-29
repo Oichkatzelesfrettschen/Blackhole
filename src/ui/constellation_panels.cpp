@@ -282,7 +282,7 @@ void drawObjectives(ConstellationUiState &uiState,
   ImGui::End();
 }
 
-void drawBriefing(ConstellationUiState &uiState) {
+void drawBriefing(const ConstellationUiState &uiState) {
   if (uiState.hideBriefing) {
     return;
   }
@@ -293,7 +293,8 @@ void drawBriefing(ConstellationUiState &uiState) {
       if (step.complete) {
         ImGui::Text("[x] %.*s", static_cast<int>(step.title.size()), step.title.data());
       } else if (index == briefing.currentIndex) {
-        ImGui::SeparatorText(step.title.data());
+        const std::string title(step.title);
+        ImGui::SeparatorText(title.c_str());
         ImGui::TextWrapped("%s", step.body.c_str());
       } else {
         ImGui::TextDisabled("[ ] %.*s", static_cast<int>(step.title.size()), step.title.data());

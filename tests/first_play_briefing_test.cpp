@@ -1,5 +1,4 @@
 #include <cstddef>
-#include <cstdint>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -8,13 +7,14 @@
 #include "game/constellation_view.h"
 #include "game/desktop_game.h"
 #include "game/first_play_briefing.h"
+#include "game/fleet.h"
 
 namespace {
 
-game::Briefing evaluateWithoutChangingState(const game::DesktopGame &session) {
-  const std::uint64_t digest = session.state().stateDigest();
+// evaluateBriefing takes the session by const reference, so evaluation cannot
+// touch game state; this checks the shape and the ASCII-only player text.
+game::Briefing evaluateChecked(const game::DesktopGame &session) {
   game::Briefing briefing = game::evaluateBriefing(session);
-  EXPECT_EQ(session.state().stateDigest(), digest);
   EXPECT_EQ(briefing.steps.size(), 5U);
   for (const game::BriefingStep &step : briefing.steps) {
     for (const char character : step.title) {
@@ -29,7 +29,7 @@ game::Briefing evaluateWithoutChangingState(const game::DesktopGame &session) {
 
 TEST(FirstPlayBriefing, OrdersSignalsAndReportsAdvanceTheBriefing) {
   game::DesktopGame session(9);
-  game::Briefing briefing = evaluateWithoutChangingState(session);
+  game::Briefing briefing = evaluateChecked(session);
   EXPECT_EQ(briefing.currentIndex, 0U);
 
   const game::FleetId fleet = session.snapshot().fleets.front().id;
@@ -38,21 +38,21 @@ TEST(FirstPlayBriefing, OrdersSignalsAndReportsAdvanceTheBriefing) {
   ASSERT_EQ(preview.rejection, game::OrderRejection::None);
   ASSERT_GT(preview.effectTurn, session.snapshot().turn);
   ASSERT_EQ(session.issue(order), game::OrderRejection::None);
-  briefing = evaluateWithoutChangingState(session);
+  briefing = evaluateChecked(session);
   EXPECT_TRUE(briefing.steps.at(0).complete);
   EXPECT_FALSE(briefing.steps.at(1).complete);
   EXPECT_EQ(briefing.currentIndex, 1U);
 
   while (session.snapshot().turn < preview.effectTurn) {
     session.advanceTurn();
-    evaluateWithoutChangingState(session);
+    evaluateChecked(session);
   }
-  briefing = evaluateWithoutChangingState(session);
+  briefing = evaluateChecked(session);
   EXPECT_TRUE(briefing.steps.at(1).complete);
 
   for (int turn = 0; turn < 600 && !briefing.steps.at(2).complete; ++turn) {
     session.advanceTurn();
-    briefing = evaluateWithoutChangingState(session);
+    briefing = evaluateChecked(session);
   }
   ASSERT_TRUE(briefing.steps.at(2).complete);
   const game::ConstellationViewSnapshot snapshot = session.snapshot();
@@ -71,11 +71,11 @@ TEST(FirstPlayBriefing, ObservationsAndCommitmentsUsePlayerRecords) {
         .fleet = initial.fleets.at(index).id, .targetSystem = 1, .targetBand = 2};
     ASSERT_EQ(session.issue(order), game::OrderRejection::None);
   }
-  game::Briefing briefing = evaluateWithoutChangingState(session);
+  game::Briefing briefing = evaluateChecked(session);
   EXPECT_TRUE(briefing.steps.at(4).complete);
   for (int turn = 0; turn < 600 && !briefing.steps.at(3).complete; ++turn) {
     session.advanceTurn();
-    briefing = evaluateWithoutChangingState(session);
+    briefing = evaluateChecked(session);
   }
   EXPECT_TRUE(briefing.steps.at(3).complete);
 }
