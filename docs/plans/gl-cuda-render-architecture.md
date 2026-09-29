@@ -15,6 +15,118 @@ Tags: [CODE] observed in the tree at this commit (file named); [PUB]
 published or vendor-documented; [INF] design inference from those
 observations, with its falsifier stated where it drives a decision.
 
+## 0. OpenGL is the renderer
+
+OpenGL 4.6 with GLSL 460 is the product renderer and the reference for every
+image. The owner set this constraint: the project is an OpenGL experience,
+GLSL is the standards-compliant implementation, and CUDA is at most an
+additional compute engine on NVIDIA hardware. Every appearance feature lands
+in GLSL; CUDA gains no shading code. The default build already follows it
+[CODE]: `ENABLE_CUDA` is `OFF` (`CMakeLists.txt`), `RendererContract`
+starts on `RenderBackend::Fragment`, and the CUDA path always presented
+through a GL texture. The defect is duplication, not the default.
+
+### 0.1 Decision history
+
+| Decision | Source | Recorded reason | Effect |
+|---|---|---|---|
+| OpenGL fragment ray-march | fork of rossning92/Blackhole (initial commit 2020-08-29) | real-time black hole rendering in OpenGL | the GLSL renderer this tree grew from |
+| GL compute tracer `geodesic_trace.comp` | shares `interop_trace.glsl` with the fragment path | a compute path inside the standard API | the standards-compliant compute engine |
+| CUDA backend | commit 527a20d, 2026-03-19, trailer Claude Sonnet 4.6 | kernel-engineering experiment "following YSU-Engine kernel patterns": FP16 storage, 2-ray ILP, SM-gated variants; no platform reason recorded | a trace kernel that blits into a GL texture |
+| CUDA shading growth | commits ec11c1f, d8f872b, a6f5789, 1c16e32 and others, 2026-03-19..20, trailers Claude Sonnet 4.6 and Opus 4.6 | feature parity: LUTs, galaxy cubemap, wiregrid, GRMHD emissivity ported into CUDA within two days | CUDA became a second renderer (section 2) |
+| `BlackholeCUDA` desktop variant | `add_blackhole_desktop_target(BlackholeCUDA CUDA_ONLY)` | a CUDA-only product build | makes the second renderer a shipped product |
+
+No recorded decision chose CUDA over OpenGL, Vulkan, or any other API.
+
+### 0.2 Stage 0 measurement
+
+RTX 4070 Ti, driver 615.71.09, CUDA 13.4, GL_RENDERER "NVIDIA GeForce RTX
+4070 Ti/PCIe/SSE2"; 1920x1080, default camera, 300 steps at step 0.1,
+median of the last 30 of 60 frames, three repetitions alternating backends.
+GL times are the timer query around the dispatch; CUDA times are the kernel
+alone from Nsight Systems (`cuda_gpu_kern_sum`).
+
+| Workload | GL fragment | GL compute | CUDA FP32 baseline |
+|---|---|---|---|
+| sky only (`background-only`) | 5.15 ms | 4.61 ms | 2.83 ms |
+| volumetric disk (`volumetric-rte`, the default) | 13.0 ms | 12.1 ms | not comparable: the CUDA disk lacks flare, taper, and turbulence |
+
+- The CUDA FP32 baseline runs one ray per thread and traces 1.63 times
+  faster than GL compute. The coarsened 2-ray kernel adds about 1.4 times on
+  the thin-disk scene (1.84 ms against 2.56 ms baseline). [INF] The base gap
+  is unexplained: candidates are `--use_fast_math` in the CUDA library, the
+  image and terminal-SSBO writes in GL compute, and workgroup shape. A CUDA
+  build without fast math separates the first.
+- GL compute beats GL fragment by 7% on the default volumetric disk, so
+  compute is the faster GL backend today.
+- Auto-selection picks `FP16_H2_ILP` on this card, which is slower than FP32
+  on the escaped-ray workload (3.32 ms against 2.83 ms): the registry
+  selects by SM version and register budget, not by workload.
+- The sky-only frames match by eye; their 5% mean absolute error is larger
+  than GL fragment against GL compute (0.06%) and smaller than CUDA
+  coarsened against CUDA baseline (6.7%), so it does not certify equivalence
+  and the twin tests remain the equivalence evidence. [INF] Hand-written
+  cubemap sampling in CUDA is the likely share of the sky difference.
+
+### 0.3 Decided roles
+
+The owner set the backend roles:
+
+- **OpenGL does everything everywhere**: tracing, shading, sky, overlays,
+  post-processing, and presentation, on every vendor. It is the default and
+  the reference.
+- **CUDA is an optional trace accelerator on NVIDIA.** It writes terminal
+  records into a GL buffer and GL shades them (section 5, stage 3). The CUDA
+  shading copies and the hand-written sky sampler retire.
+- **OptiX accelerates the CUDA tracer when the driver provides it**, using
+  the RT cores. The runtime loads `libnvoptix.so.1` and queries the OptiX
+  function table, the pattern of open_gororoba's `gororoba_optix` crate, so
+  a build without OptiX, or a driver without it, falls back to the plain CUDA
+  trace. The OptiX 9.1 development headers are installed here.
+- **`BlackholeCUDA` retires.** One desktop application ships; CUDA and OptiX
+  are backend options inside NVIDIA builds of it.
+
+[INF] RT cores traverse a BVH and intersect straight rays with triangles,
+curves, spheres, and custom AABB primitives. A geodesic is curved, and the
+tracer already advances it as straight chords, so OptiX fits as the
+chord-against-scene query: each chord becomes an `optixTrace` with `tmax` equal
+to the chord length against a BVH of the scene's geometry, while the Kerr
+stepping stays on the SMs. The win scales with the geometry the chords test.
+It is small for the single analytic disk annulus and grows with GRMHD bricks
+as AABB primitives, tesseract beams, and meshes. Falsifier: time the
+intersection share of the CUDA kernel first; if intersection is under 20% of
+kernel time on the target scenes, OptiX cannot gain more than 1.25 times.
+
+### 0.4 Stack path, late 2026
+
+1. **Now: GL-primary, CUDA as an optional trace accelerator.** Retire the
+   CUDA shading copies and the `BlackholeCUDA` variant behind the
+   terminal-record seam. GL compute becomes the default GL backend once it
+   covers every radiative model the fragment path does.
+2. **Close the trace gap inside GL.** Port the 2-ray coarsening to
+   `geodesic_trace.comp` and tune the workgroup shape; if GL compute comes
+   within 1.2 times of CUDA FP32, CUDA's trace role ends and CUDA keeps only
+   the double-precision and analytic-Kerr roles (section 4), or retires.
+3. **One source for the shared kernels** (stage 2): the zero-dependency
+   GLSL-subset shim first. Slang is the named escalation if the shim fails
+   on the Kerr step: it is a Khronos-hosted open-source project whose
+   compiler emits GLSL, SPIR-V, CUDA, WGSL, and Metal from one source [PUB,
+   shader-slang.org], and it is not installed here (the `slang` package on
+   this host is the S-Lang terminal library).
+4. **SPIR-V as a build artifact, not a new API.** glslang 1.4.357 and
+   spirv-cross are installed; compiling the GLSL to SPIR-V in the
+   `validate-shaders` target keeps a Vulkan 1.4 or WebGPU front end reachable
+   without committing to one. OpenGL 4.6 consumes SPIR-V directly
+   (`ARB_gl_spirv`) [PUB].
+5. **OptiX behind the CUDA trace**, after the terminal-record seam and the
+   intersection-share measurement in section 0.3.
+6. **A new API only for a named need.** OpenGL 4.6 remains fully supported
+   by NVIDIA and implemented by Mesa, including Zink over Vulkan [PUB, Mesa
+   26.2 release notes]. Vulkan earns a port for async compute, multi-GPU, or
+   macOS through MoltenVK; WebGPU for a browser build, since Chrome, Edge,
+   Safari 26, and Firefox 141 on Windows ship it, with Firefox on Linux still
+   behind a flag [PUB, gpuweb implementation status].
+
 ## 1. The four render paths
 
 The user's premise is that OpenGL presents and CUDA computes. The tree
@@ -423,7 +535,10 @@ so every later move is measured.
 [CODE] paths named inline. [PUB] items: the CUDA runtime API's OpenGL
 interoperability (`cudaGraphicsGLRegisterBuffer`, `cudaGraphicsGLRegisterImage`,
 `cudaGraphicsMapResources`) is documented in NVIDIA's CUDA runtime API
-reference, not fetched here; Slang is a shading language project hosted by
-Khronos, not evaluated for this tree. The Kerr and disk physics behind the
+reference, not fetched here. Section 0.3: Slang targets and Khronos hosting,
+https://shader-slang.org/ and the Khronos Slang Initiative press release;
+WebGPU shipping status, https://github.com/gpuweb/gpuweb/wiki/Implementation-Status;
+Mesa OpenGL 4.6 and Zink, https://docs.mesa3d.org/relnotes/26.2.0 (all read
+2026-09-29). The Kerr and disk physics behind the
 shared kernels is cited in `docs/physics/spacetime-and-disk-dynamics.md` and
 `docs/physics/accretion-flow-appearance.md`.
