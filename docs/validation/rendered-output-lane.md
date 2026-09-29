@@ -151,7 +151,9 @@ annulus shows no emission. The disk outer edge is `K_DISK_OUTER_RADIUS_RS`
 (20 r_s) in `render/renderer_contract.h`, and `settings_persistence_test`
 holds the GLSL and CUDA copies equal to it. A settings file written before
 `K_PRESENTATION_SCHEMA_VERSION` takes the default camera, sky, and exposure
-once on load.
+once on load. Fresh-settings frames at the earlier and the current
+defaults: [before](figures/default-scene-before.jpg),
+[after](figures/default-scene-after.jpg).
 
 ## Scope
 
