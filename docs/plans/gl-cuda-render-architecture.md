@@ -68,13 +68,41 @@ alone from Nsight Systems (`cuda_gpu_kern_sum`).
   and the twin tests remain the equivalence evidence. [INF] Hand-written
   cubemap sampling in CUDA is the likely share of the sky difference.
 
-### 0.3 Stack path, late 2026
+### 0.3 Decided roles
 
-1. **Now: GL-primary, CUDA as an optional trace accelerator.** CUDA writes
-   terminal records into a GL buffer and GL shades them (section 5, stage 3);
-   the CUDA shading copies, the hand-written sky sampler, and the
-   `BlackholeCUDA` variant retire. GL compute becomes the default GL backend
-   once it covers every radiative model the fragment path does.
+The owner set the backend roles:
+
+- **OpenGL does everything everywhere**: tracing, shading, sky, overlays,
+  post-processing, and presentation, on every vendor. It is the default and
+  the reference.
+- **CUDA is an optional trace accelerator on NVIDIA.** It writes terminal
+  records into a GL buffer and GL shades them (section 5, stage 3). The CUDA
+  shading copies and the hand-written sky sampler retire.
+- **OptiX accelerates the CUDA tracer when the driver provides it**, using
+  the RT cores. The runtime loads `libnvoptix.so.1` and queries the OptiX
+  function table, the pattern of open_gororoba's `gororoba_optix` crate, so
+  a build without OptiX, or a driver without it, falls back to the plain CUDA
+  trace. The OptiX 9.1 development headers are installed here.
+- **`BlackholeCUDA` retires.** One desktop application ships; CUDA and OptiX
+  are backend options inside NVIDIA builds of it.
+
+[INF] RT cores traverse a BVH and intersect straight rays with triangles,
+curves, spheres, and custom AABB primitives. A geodesic is curved, and the
+tracer already advances it as straight chords, so OptiX fits as the
+chord-against-scene query: each chord becomes an `optixTrace` with `tmax` equal
+to the chord length against a BVH of the scene's geometry, while the Kerr
+stepping stays on the SMs. The win scales with the geometry the chords test.
+It is small for the single analytic disk annulus and grows with GRMHD bricks
+as AABB primitives, tesseract beams, and meshes. Falsifier: time the
+intersection share of the CUDA kernel first; if intersection is under 20% of
+kernel time on the target scenes, OptiX cannot gain more than 1.25 times.
+
+### 0.4 Stack path, late 2026
+
+1. **Now: GL-primary, CUDA as an optional trace accelerator.** Retire the
+   CUDA shading copies and the `BlackholeCUDA` variant behind the
+   terminal-record seam. GL compute becomes the default GL backend once it
+   covers every radiative model the fragment path does.
 2. **Close the trace gap inside GL.** Port the 2-ray coarsening to
    `geodesic_trace.comp` and tune the workgroup shape; if GL compute comes
    within 1.2 times of CUDA FP32, CUDA's trace role ends and CUDA keeps only
@@ -90,7 +118,9 @@ alone from Nsight Systems (`cuda_gpu_kern_sum`).
    `validate-shaders` target keeps a Vulkan 1.4 or WebGPU front end reachable
    without committing to one. OpenGL 4.6 consumes SPIR-V directly
    (`ARB_gl_spirv`) [PUB].
-5. **A new API only for a named need.** OpenGL 4.6 remains fully supported
+5. **OptiX behind the CUDA trace**, after the terminal-record seam and the
+   intersection-share measurement in section 0.3.
+6. **A new API only for a named need.** OpenGL 4.6 remains fully supported
    by NVIDIA and implemented by Mesa, including Zink over Vulkan [PUB, Mesa
    26.2 release notes]. Vulkan earns a port for async compute, multi-GPU, or
    macOS through MoltenVK; WebGPU for a browser build, since Chrome, Edge,
