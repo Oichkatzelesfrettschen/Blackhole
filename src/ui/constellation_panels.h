@@ -22,6 +22,7 @@ struct ConstellationUiState {
   game::OrbitLane lane = game::OrbitLane::Prograde;
   game::StationKeeping station = game::StationKeeping::Orbit;
   game::OrderRejection lastRejection = game::OrderRejection::None;
+  bool hideBriefing = false;
   std::string saveMessage;
   std::int64_t advancedTurns = 0; ///< Turns the last "Advance to next report" ran.
 };

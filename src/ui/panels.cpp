@@ -1073,6 +1073,11 @@ void renderTesseractPanel(RenderState &rs) {
   ImGui::End();
 }
 
+namespace {
+// Share of the scene column under the render that holds the Proper Time briefing.
+constexpr float K_BRIEFING_FRACTION = 0.30f;
+} // namespace
+
 void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace) {
   ImGui::DockBuilderRemoveNode(dockspaceId);
   ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
@@ -1086,15 +1091,20 @@ void resetLayout(ImGuiID dockspaceId, WorkspaceKind workspace) {
   const ImGuiID dockLeftDownId = ImGui::DockBuilderSplitNode(
       dockLeftId, ImGuiDir_Down, workspace == WorkspaceKind::ProperTime ? 0.42f : 0.50f, nullptr,
       &dockLeftId);
-  ImGui::DockBuilderDockWindow("Viewport", dockMainId);
   if (workspace == WorkspaceKind::ProperTime) {
+    // The briefing gets its own strip under the render so a first-time player
+    // sees it beside Operations instead of behind a tab; the render keeps the
+    // main node's selected tab.
+    const ImGuiID dockBriefingId = ImGui::DockBuilderSplitNode(
+        dockMainId, ImGuiDir_Down, K_BRIEFING_FRACTION, nullptr, &dockMainId);
+    ImGui::DockBuilderDockWindow("Briefing", dockBriefingId);
     ImGui::DockBuilderDockWindow("System/Strategic Map", dockLeftDownId);
     ImGui::DockBuilderDockWindow("Operations", dockLeftId);
     ImGui::DockBuilderDockWindow("Intelligence", dockLeftId);
     ImGui::DockBuilderDockWindow("Objectives", dockLeftId);
     ImGui::DockBuilderDockWindow("Event Log", dockLeftDownId);
-    ImGui::DockBuilderDockWindow("Physical Viewport", dockMainId);
   }
+  ImGui::DockBuilderDockWindow("Viewport", dockMainId);
   ImGui::DockBuilderDockWindow("Settings", dockLeftId);
   ImGui::DockBuilderDockWindow("Display", dockLeftId);
   ImGui::DockBuilderDockWindow("Background", dockLeftId);

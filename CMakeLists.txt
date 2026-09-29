@@ -1685,6 +1685,7 @@ set(CAMPAIGN_SRC_FILES
   "${PROJECT_SOURCE_DIR}/src/game/constellation.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/constellation_session.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/desktop_game.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/first_play_briefing.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/realtime_driver.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/campaign_story.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/event_loader.cpp"
@@ -4860,6 +4861,17 @@ if(BUILD_TESTING)
   target_link_libraries(desktop_game_test PRIVATE blackhole_campaign GTest::gtest_main)
   add_test(NAME desktop_game_validation COMMAND desktop_game_test)
   set_tests_properties(desktop_game_validation PROPERTIES TIMEOUT 120 LABELS "campaign;determinism;ui")
+
+  add_executable(first_play_briefing_test
+    "${PROJECT_SOURCE_DIR}/tests/first_play_briefing_test.cpp")
+  target_compile_options(first_play_briefing_test PRIVATE ${PROJECT_WARNINGS})
+  if(ENABLE_FAST_MATH)
+    target_compile_options(first_play_briefing_test PRIVATE -fno-fast-math)
+  endif()
+  target_link_libraries(first_play_briefing_test PRIVATE blackhole_campaign GTest::gtest_main)
+  add_test(NAME first_play_briefing_validation COMMAND first_play_briefing_test)
+  set_tests_properties(first_play_briefing_validation PROPERTIES
+    TIMEOUT 120 LABELS "campaign;determinism;ui")
 
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/campaign_task_graph_test.cpp")
     add_executable(campaign_task_graph_test
