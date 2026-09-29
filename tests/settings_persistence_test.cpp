@@ -122,7 +122,7 @@ TEST_F(SettingsPersistence, FreshSettingsCarryTheRuleExposureAndSkyIntensity) {
   auto &manager = SettingsManager::instance();
   const auto output = testDirectory() / "fresh.json";
   ASSERT_TRUE(manager.save(output.string()));
-  EXPECT_TRUE(readText(output).contains("\"toneExposure\": 4.9,"));
+  EXPECT_TRUE(readText(output).contains("\"toneExposure\": 2.5,"));
 }
 
 TEST_F(SettingsPersistence, FileBeforeThePresentationSchemaTakesTheDefaultPresentation) {

@@ -23,27 +23,31 @@
 inline constexpr float K_DEFAULT_CAMERA_DISTANCE = 150.0f;
 inline constexpr float K_DEFAULT_CAMERA_PITCH_DEG = 5.0f;
 
-/// Tone-map exposure of fresh settings: the record exposure rule
-/// (render/record_mode.h) at the default camera, diskBrightness 0.25, and
-/// gamma 2.5. The raw disk's 99th-percentile luminance there is 0.167, and
-/// ACES^-1(0.9^2.5) / 0.167 = 0.855 / 0.167 = 5.1; 4.9 lies within the
-/// percentile's frame-to-frame spread.
-inline constexpr float K_DEFAULT_TONE_EXPOSURE = 4.9f;
+/// Tone-map exposure of fresh settings at the default camera, the volumetric
+/// disk (RendererContract), diskBrightness 0.25, and gamma 2.5. The raw disk's
+/// 99th-percentile luminance L99 there is 0.70 on NVIDIA GL, so the record
+/// exposure rule (render/record_mode.h) would give ACES^-1(0.9^2.5) / 0.70 =
+/// 1.2. Exposure 2.5 instead puts L99 at display 0.96 and keeps the Doppler
+/// asymmetry visible: the 90th-percentile disk luminance of the approaching
+/// third of the frame displays 1.21 times that of the receding third (raw
+/// ratio 1.77). Above about 4 the ACES shoulder compresses the display ratio
+/// toward 1.1 and the inner disk clips to white.
+inline constexpr float K_DEFAULT_TONE_EXPOSURE = 2.5f;
 
 /// Version of the presentation defaults: camera pose, sky, and exposure. A
 /// settings file written at an older version (or with no
 /// presentationSchemaVersion key) takes those fields from fresh Settings once
 /// on load and keeps every other saved field. Bump it whenever a default below
 /// changes how a fresh frame looks.
-inline constexpr int K_PRESENTATION_SCHEMA_VERSION = 1;
+inline constexpr int K_PRESENTATION_SCHEMA_VERSION = 2;
 
 /// Background intensity of fresh settings: the rule's sky target at
 /// K_DEFAULT_TONE_EXPOSURE for the default backdrop (jwst_carina_cosmic_cliffs,
 /// off by default so the star-field cubemap shows). Its raw 99th-percentile
 /// luminance is 0.347 at intensity 1 above the disk from the default camera,
-/// linear in the intensity, and ACES^-1(0.8^2.5) / (4.9 * 0.347) = 0.26 puts it
-/// at display 0.8.
-inline constexpr float K_DEFAULT_BACKGROUND_INTENSITY = 0.26f;
+/// linear in the intensity, and ACES^-1(0.8^2.5) / (2.5 * 0.347) =
+/// 0.438 / 0.868 = 0.50 puts it at display 0.8.
+inline constexpr float K_DEFAULT_BACKGROUND_INTENSITY = 0.5f;
 
 struct Settings {
   int workspaceSchemaVersion = 0;

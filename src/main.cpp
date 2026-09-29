@@ -1645,13 +1645,14 @@ GLuint viewportDisplayTexture(const RenderState &rs, GLuint finalTexture) {
 // Workspace captures take a canonical workspace and an explicit framebuffer
 // size, and exclude the scene exports, which own the frame loop's exit.
 // An explicit export size wins, then the fixed reference-scene extent, then
-// the docked viewport.
-int renderTargetExtent(int exportExtent, bool referenceScene, float viewportExtent) {
+// the docked viewport in framebuffer pixels, rounded so a fractional display
+// scale lands on the pixel grid ImGui draws the viewport image to.
+int renderTargetExtent(int exportExtent, bool referenceScene, float viewportPixels) {
   if (exportExtent > 0) {
     return exportExtent;
   }
   return referenceScene ? blackhole::K_REFERENCE_SCENE_EXTENT
-                        : static_cast<int>(viewportExtent);
+                        : static_cast<int>(std::lround(viewportPixels));
 }
 
 bool workspaceCaptureOptionsValid(const platform::CliOptions &cli) {
@@ -1972,11 +1973,15 @@ int main(int argc, char **argv) {
                        ImGuiWindowFlags_NoTitleBar);
       ImVec2 viewportSize = ImGui::GetContentRegionAvail();
 
-      // Resize render targets to match viewport
-      const int targetWidth =
-          renderTargetExtent(cli.exportWidth, !cli.referenceScene.empty(), viewportSize.x);
-      const int targetHeight =
-          renderTargetExtent(cli.exportHeight, !cli.referenceScene.empty(), viewportSize.y);
+      // Render targets match the viewport in framebuffer pixels. ImGui
+      // measures the viewport in window points, which a scaled desktop maps to
+      // DisplayFramebufferScale pixels each; a target sized in points is
+      // resampled up to the framebuffer and blurs every pixel.
+      const ImVec2 pixelScale = ImGui::GetIO().DisplayFramebufferScale;
+      const int targetWidth = renderTargetExtent(cli.exportWidth, !cli.referenceScene.empty(),
+                                                 viewportSize.x * pixelScale.x);
+      const int targetHeight = renderTargetExtent(cli.exportHeight, !cli.referenceScene.empty(),
+                                                  viewportSize.y * pixelScale.y);
       if (targetWidth > 0 && targetHeight > 0 &&
           (targetWidth != rs.targets.renderWidth || targetHeight != rs.targets.renderHeight)) {
         recreateRenderTargets(rs, targetWidth, targetHeight);

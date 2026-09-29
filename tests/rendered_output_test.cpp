@@ -593,11 +593,14 @@ TEST(RenderedOutput, CriticalRegionExhaustion) {
 }
 
 // The fresh desktop frame shows the disk as a lit band rather than a dark
-// surface over the sky. Under the record exposure rule (render/record_mode.h)
-// a disk pixel below 1% of the disk's 99th-percentile raw luminance displays
-// as black, so such pixels mark disk area that hides the sky while showing no
-// emission; a disk edge far beyond the emitting radii makes them the majority.
-// The disk also leaves most of the frame to the sky and the shadow.
+// surface over the sky. Disk pixels are those whose ray the disk stops: a
+// thin-surface hit, or volumetric gas whose transmittance falls below the
+// trace's opaque cutoff; translucent gas lets the ray escape and shows the
+// sky. Under the record exposure rule (render/record_mode.h) a disk pixel
+// below 1% of the disk's 99th-percentile raw luminance displays as black, so
+// such pixels mark disk area that hides the sky while showing no emission; a
+// disk edge far beyond the emitting radii makes them the majority. The disk
+// also leaves most of the frame to the sky and the shadow.
 TEST(RenderedOutput, DefaultSceneDiskStaysLit) {
   if (!contextAvailable()) {
     GTEST_SKIP() << "GL 4.6 context unavailable";
@@ -606,9 +609,10 @@ TEST(RenderedOutput, DefaultSceneDiskStaysLit) {
   std::vector<float> disk;
   std::size_t captured = 0;
   for (std::size_t index = 0; index < frame.terminals.size(); ++index) {
-    if (frame.terminals.at(index) == BH_TERMINAL_DISK_HIT) {
+    const auto terminal = frame.terminals.at(index);
+    if (terminal == BH_TERMINAL_DISK_HIT || terminal == BH_TERMINAL_OPAQUE_MEDIUM) {
       disk.push_back(frame.raw.at(index));
-    } else if (frame.terminals.at(index) == BH_TERMINAL_HORIZON) {
+    } else if (terminal == BH_TERMINAL_HORIZON) {
       ++captured;
     }
   }

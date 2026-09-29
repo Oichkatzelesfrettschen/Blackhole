@@ -10,7 +10,13 @@
  * several winding periods. Falsifiers: a noise normalization off by the
  * measured standard deviation (the mean drifts by exp(sigma^2 (k^2 - 1) / 2)),
  * a cross-fade whose weights do not sum to 1 (the texture pulses in time), or
- * a sigma = 0 path that still evaluates the noise. Skips without GL 4.6.
+ * a sigma = 0 path that still evaluates the noise. The winding bound is
+ * checked by the radial structure the shear leaves: sign changes of the
+ * exponent per e-fold in radius at 6 M and at 40 M, whose ratio stays near 1
+ * when each radius ages its pattern through the same number of local orbits.
+ * A 240 M aging period fixed in coordinate time measures about 3.4, and a
+ * period continuous in radius, whose fract(t / P(r)) winds without bound,
+ * about 12. Skips without GL 4.6.
  */
 
 #include <cmath>
@@ -47,6 +53,40 @@ void main() {
   float tM = 1000.0 * w;
   result[2 * i] = bhDiskTurbulenceFactor(rM, phi, 0.0, tM, 0.6);
   result[2 * i + 1] = bhDiskTurbulenceFactor(rM, phi, 0.0, tM, 0.0);
+}
+)";
+
+// One invocation per radial line: an azimuth and a late coordinate time,
+// sampled at K_LINE_SAMPLES log-uniform radii across one e-fold starting at
+// 6 M (result[2i]) and at 40 M (result[2i + 1]). The exponent's sign flips
+// where ln(factor) crosses -sigma^2 / 2.
+constexpr std::size_t K_LINES = 256;
+const char *const K_WINDING_SHADER = R"(
+#version 460 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) buffer Output { float result[]; };
+#include "include/disk_turbulence.glsl"
+const int K_LINE_SAMPLES = 2048;
+float crossingsPerEfold(float r0, float phi, float tM) {
+  const float sigma = 0.6;
+  float count = 0.0;
+  float previous = 0.0;
+  for (int k = 0; k < K_LINE_SAMPLES; ++k) {
+    float rM = r0 * exp(float(k) / float(K_LINE_SAMPLES));
+    float g = log(bhDiskTurbulenceFactor(rM, phi, 0.0, tM, sigma)) + (0.5 * sigma * sigma);
+    if (k > 0 && (g > 0.0) != (previous > 0.0)) {
+      count += 1.0;
+    }
+    previous = g;
+  }
+  return count;
+}
+void main() {
+  uint i = gl_GlobalInvocationID.x;
+  float phi = 6.2831853 * fract(float(i) * 0.6180340);
+  float tM = 200.0 + (2000.0 * fract(float(i) * 0.7548777));
+  result[2 * i] = crossingsPerEfold(6.0, phi, tM);
+  result[2 * i + 1] = crossingsPerEfold(40.0, phi, tM);
 }
 )";
 
@@ -100,3 +140,29 @@ TEST_F(DiskTurbulenceShaderTest, MeanStaysOneAndZeroWidthIsExact) {
 }
 
 } // namespace
+
+TEST_F(DiskTurbulenceShaderTest, WindingKeepsOnePitchAcrossRadii) {
+  const GLuint program = bhtest::createComputeProgram(K_WINDING_SHADER);
+  GLuint ssbo = 0;
+  glCreateBuffers(1, &ssbo);
+  glNamedBufferData(ssbo, static_cast<GLsizeiptr>(sizeof(float) * 2 * K_LINES), nullptr,
+                    GL_DYNAMIC_DRAW);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+  const std::vector<float> out =
+      bhtest::runComputeProgram(program, ssbo, 2 * K_LINES, K_LINES / 64);
+  glDeleteBuffers(1, &ssbo);
+  glDeleteProgram(program);
+
+  double inner = 0.0;
+  double outer = 0.0;
+  for (std::size_t i = 0; i < K_LINES; ++i) {
+    inner += static_cast<double>(out.at(2 * i));
+    outer += static_cast<double>(out.at((2 * i) + 1));
+  }
+  ASSERT_GT(outer, 0.0) << "the pattern must vary along a radial line";
+  // Equal winding ages both radii through the same shear phase, so the
+  // crossing densities match up to sampling noise; the file comment lists
+  // the ratios the unbounded and fixed-period windings produce.
+  EXPECT_LT(inner / outer, 1.5) << "inner " << inner << ", outer " << outer;
+  EXPECT_GT(inner / outer, 1.0 / 1.5) << "inner " << inner << ", outer " << outer;
+}
