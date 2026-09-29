@@ -1,18 +1,21 @@
 /**
  * @file tesseract_geometry.h
  * @brief Speculative tesseract scene geometry: the 4-cube, its 4D->3D
- *        projections, and the "library of time" world-tubes.
+ *        projections, the SO(4) motion, and the rectilinear lattice's pure
+ *        math (cell indexing, periodicity, palette hue).
  *
  * Render-only content for the Tesseract scene mode, after Thorne, The Science
  * of Interstellar ch. 29-31; none of it is physics. Points of R^4 are
  * glm::vec4 ordered (x, y, z, w), the layout so4.h uses, so a rotation from
  * so4FromPair applies to them directly.
  *
- * The library of time extrudes a few bedroom feature points (shelf, window,
- * desk) along w = t for t in [0, T]: each point becomes a 4D polyline, its
- * world-tube. The renderer maps [0, T] onto the tesseract's w extent [-1, 1]
- * with libraryToTesseract, lights one moment with a Gaussian in t, and runs a
- * "gravity message" pulse backward along one strand.
+ * The raymarch fragment shader (shader/tesseract.frag) builds a rectilinear
+ * lattice of cells by domain repetition (latticeLocalPosition/
+ * latticeCellIndex, mirrored in GLSL) and shears it along the depth axis by
+ * running a w-seed derived from world depth through the SO(4) rotation and a
+ * 4D->3D projection, exactly as libraryToTesseract and the projections below
+ * describe; litMomentEmission's Gaussian lights one depth band and the same
+ * shape drives the gravity-message pulse.
  */
 
 #ifndef BLACKHOLE_RENDER_TESSERACT_TESSERACT_GEOMETRY_H
@@ -20,11 +23,11 @@
 
 #include <array>
 #include <cstddef>
-#include <string_view>
 #include <vector>
 
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_int3.hpp>
 
 #include "render/tesseract/so4.h"
 
@@ -92,7 +95,7 @@ inline constexpr float EMISSION_MIN_WIDTH = 1e-4f;
  * p = xyz * d / max(d - w, PERSPECTIVE_MIN_DEPTH). Points nearer the eye
  * (larger w) project larger, so the w = +1 cell of the 4-cube appears as the
  * outer cube; the clamp bounds points at or behind the eye. Mirrors
- * projectPerspective in shader/tesseract.vert operation for operation.
+ * projectPerspective in shader/tesseract.frag operation for operation.
  */
 glm::vec3 projectPerspective(const glm::vec4 &p, float eyeDistance);
 
@@ -111,59 +114,40 @@ struct StereographicPoint {
  * fade = smoothstep(STEREOGRAPHIC_MIN_DENOM, STEREOGRAPHIC_FADE_END, 1 - w).
  * Away from the clamp the south pole maps to the origin, the equator w = 0 to
  * the unit sphere, and |p|^2 = (1 + w) / (1 - w). Mirrors
- * projectStereographic in shader/tesseract.vert operation for operation.
+ * projectStereographic in shader/tesseract.frag operation for operation.
  */
 StereographicPoint projectStereographic(const glm::vec4 &p);
 
-/** @brief Bedroom furniture a library strand belongs to. */
-enum class FeatureKind { Shelf, Window, Desk };
+/**
+ * @brief Local offset of @p p within the lattice cell that contains it.
+ *
+ * p - cellSize * round(p / cellSize): the modulo-domain-repetition pattern
+ * shader/tesseract.frag evaluates per raymarch sample, mirrored here so its
+ * periodicity is checkable without a GPU. @p cellSize is floored at 1e-4 to
+ * keep the division finite.
+ */
+glm::vec3 latticeLocalPosition(const glm::vec3 &p, float cellSize);
 
-/** @brief One bedroom feature point in the unit room [-1, 1]^3. */
-struct LibraryFeature {
-  FeatureKind kind = FeatureKind::Shelf;
-  glm::vec3 position{0.0f};
-  std::string_view name;
-};
-
-/** @brief Selected bedroom strand, independent of the drawing pass. */
-struct FeatureSelection {
-  std::size_t featureIndex = 2;
-};
-
-/** @brief Selected feature point at the clamped library moment. */
-glm::vec4 selectedTubeMarker(const std::vector<LibraryFeature> &features,
-                             FeatureSelection selection, float litMoment, float timeSpan);
-
-/** @brief Procedural bedroom: five shelf books, four window and four desk corners. */
-std::vector<LibraryFeature> bedroomFeatures();
-
-/** @brief Feature-index pairs that sketch the shelf line, window frame, and desk top. */
-std::vector<std::array<std::size_t, 2>> bedroomOutline();
-
-/** @brief One connected run of bedroomOutline links. */
-struct OutlinePolyline {
-  std::vector<std::size_t> features; ///< Feature indices in order; a closed run repeats its first.
-  bool closed = false;               ///< The run ends where it began.
-};
+/** @brief Integer index (round(p / cellSize) componentwise) of the lattice cell holding @p p. */
+glm::ivec3 latticeCellIndex(const glm::vec3 &p, float cellSize);
 
 /**
- * @brief bedroomOutline chained into connected runs.
+ * @brief Warm color the raymarch strand fibers emit.
  *
- * Consecutive links that share an endpoint extend one run, and a run that
- * returns to its first feature is closed. buildSceneSegments draws each run
- * as one polyline: the ribbons blend additively, so links drawn as separate
- * capped pieces would overlap their caps at every shared corner, and a closed
- * run joins all its corners on miters with no caps at all.
+ * shader/tesseract.frag's STRAND_COLOR mirrors this value; hueDegrees checks
+ * it lands in the amber/gold band without a GPU.
  */
-std::vector<OutlinePolyline> outlinePolylines();
+[[nodiscard]] inline glm::vec3 strandColor() noexcept {
+  return {1.0f, 0.68f, 0.32f};
+}
 
 /**
- * @brief World-tube of a fixed point: samples (xyz, t_k), t_k = T k / (n - 1).
+ * @brief Hue in degrees [0, 360) of a linear RGB color on the standard HSV wheel.
  *
- * The polyline runs from w = 0 to w = T with @p samples points (at least 2).
+ * 0 and 360 are red, 120 green, 240 blue; an achromatic input (max == min)
+ * returns 0.
  */
-std::vector<glm::vec4> extrudeWorldTube(const glm::vec3 &point, float timeSpan,
-                                        std::size_t samples);
+float hueDegrees(const glm::vec3 &rgb);
 
 /** @brief Map library time w in [0, T] onto the tesseract's w extent [-1, 1]. */
 glm::vec4 libraryToTesseract(const glm::vec4 &p, float timeSpan);
@@ -221,72 +205,6 @@ TesseractMotion tesseractMotionAt(const std::array<float, 3> &leftRate,
                                   const std::array<float, 3> &rightRate, double resetPhase,
                                   double rotationSpeed, float pulseSpeed, float pulseSpan,
                                   double seconds);
-
-/** @brief Kind of a segment, held in the low bits of SegmentInstance::meta.z. */
-enum class SegmentKind { TesseractEdge = 0, WorldTube = 1, LitSlice = 2 };
-
-/// meta.z bits holding the SegmentKind.
-inline constexpr int SEGMENT_KIND_MASK = 3;
-/// meta.z bit set when endpoint a ends its polyline and draws a cap.
-inline constexpr int SEGMENT_CAP_A = 4;
-/// meta.z bit set when endpoint b ends its polyline and draws a cap.
-inline constexpr int SEGMENT_CAP_B = 8;
-
-/**
- * @brief One instanced line segment for shader/tesseract.vert.
- *
- * a and b are tesseract-space endpoints; meta = (tA, tB, tag, strand), where
- * the tag packs the SegmentKind with SEGMENT_CAP_A and SEGMENT_CAP_B; prev and
- * next are the neighboring polyline points before a and after b, bit-equal to
- * the neighbors' own endpoints, and repeat a or b at a capped end. The ribbons
- * blend additively, so a segment extends past an endpoint by its half width
- * only where the endpoint ends a polyline, and at an interior joint both
- * segments place their corners on the shared miter computed from prev, a, b,
- * and next: the quads meet edge to edge, so each pixel of a straight or
- * curved run is covered once whatever the subdivision count. A LitSlice
- * segment carries w = 0 in its points and the vertex shader substitutes the
- * lit moment for w and t, so the room outline follows the slider without a
- * buffer upload. SEGMENT_INSTANCE_ATTRIBUTES vec4 attributes, 80 bytes per
- * instance.
- */
-struct SegmentInstance {
-  glm::vec4 a{0.0f};
-  glm::vec4 b{0.0f};
-  glm::vec4 meta{0.0f};
-  glm::vec4 prev{0.0f};
-  glm::vec4 next{0.0f};
-};
-
-/** @brief World-tube segments belonging to the selected feature. */
-std::vector<SegmentInstance> selectedTubeSegments(const std::vector<SegmentInstance> &segments,
-                                                  FeatureSelection selection);
-
-/// vec4 attributes per SegmentInstance, at locations 0 through 4 in member order.
-inline constexpr unsigned SEGMENT_INSTANCE_ATTRIBUTES = 5;
-
-/** @brief meta.z tag of a segment of @p kind with the given end caps. */
-float packSegmentTag(SegmentKind kind, bool capA, bool capB);
-
-/** @brief SegmentKind of @p segment, decoded from its meta.z tag. */
-SegmentKind segmentKind(const SegmentInstance &segment);
-
-/** @brief Whether endpoint a (@p endB false) or b of @p segment draws a cap. */
-bool segmentCapped(const SegmentInstance &segment, bool endB);
-
-/** @brief Tessellation parameters for buildSceneSegments. */
-struct SceneSegmentOptions {
-  float timeSpan = 10.0f;       ///< Library time extent T.
-  std::size_t tubeSamples = 48; ///< Points per world-tube polyline.
-  std::size_t edgeSubdivisions =
-      16; ///< Pieces per edge and outline link (curves under stereographic).
-};
-
-/**
- * @brief Every segment of the scene: subdivided tesseract edges, the world-tube
- *        strands (strand index = feature index), and the lit-moment room outline
- *        as one polyline per outlinePolylines run.
- */
-std::vector<SegmentInstance> buildSceneSegments(const SceneSegmentOptions &options);
 
 } // namespace blackhole::tesseract
 

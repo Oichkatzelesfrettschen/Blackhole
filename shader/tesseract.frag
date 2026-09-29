@@ -1,76 +1,351 @@
 #version 460 core
+#extension GL_GOOGLE_include_directive : enable
 /**
  * @file tesseract.frag
- * @brief Emissive shading for the speculative tesseract scene ribbons.
+ * @brief Speculative tesseract scene: sphere-traced 3D hyperplane slice of a
+ *        periodic 4D field of thickened 2-planes, dressed with helical strands.
  *
  * Render-only content (Thorne, The Science of Interstellar ch. 29-31); not
- * physics. Tesseract edges glow a cool blue, world-tube strands a dim amber
- * brightened by the lit-moment Gaussian exp(-(t - litMoment)^2 / (2 w^2)),
- * and the gravity-message
- * pulse adds a travelling Gaussian at library time pulseTime on strand
- * pulseStrand. The profile across each ribbon falls off smoothly so bloom
- * reads the ribbons as light rather than as flat bars. Output is linear HDR
- * radiance, summed additively into the scene target; alpha is 1.
+ * physics. Design: docs/plans/tesseract-interstellar-visuals.md, after
+ * R1-R4 of the hyperdimensional projection research note. Runs over the
+ * fullscreen triangle of shader/simple.vert, one ray per pixel from bhRayDir
+ * (shader/include/interop_raygen.glsl).
+ *
+ * Field. A 4D point is p4 = F * (p + offset) + (0, 0, 0, W0), where F is an
+ * orthonormal 4x3 slice frame built from the SO(4) matrix rotation4 blended
+ * toward the identity (sceneScale sets the blend), so the slice tilts slowly
+ * against the lattice as the left-isoclinic rotation animates. In the lattice
+ * cell of period cellSize, three families of thickened 2-planes (a beam axis
+ * plus w, omitting the two transverse axes) slice to tubes along x, y, and z:
+ * a cubic lattice of thin beams receding down corridors in every direction.
+ * Distances are exact 4D distances, a lower bound of the slice distance, so
+ * sphere tracing never overshoots.
+ *
+ * Strands. Around every beam wind two helical shells of thin strands (three
+ * inner, two outer, opposite twist). A strand's phase advances with arc length
+ * and with p4.w, so the weave shifts as the slice moves through w. The
+ * angular-sector fold is seam-free (the sector index shifts by the sector
+ * count across the atan branch cut, a full turn). Each strand hashes to one of
+ * three tiers of brightness and radius.
+ *
+ * Shading. Strands are emissive fibers: a bright core that falls off across the
+ * fiber width, plus a soft halo accumulated along the march from the distance
+ * to the nearest strand (analytic bloom, no extra pass), so a fiber thinner
+ * than a pixel still contributes light instead of aliasing. Beams are dark
+ * bronze with a rim and a narrow specular streak, kept under the 0.4 bloom
+ * threshold. Radiance falls with exponential extinction along the ray and
+ * with exp(-kappa |p4.w|), the distance of the sampled point from the w = 0
+ * hyperplane in the world frame. Output is linear HDR radiance with alpha 1.
  */
 
-layout(location = 0) in float vLibraryTime;
-layout(location = 1) noperspective in float vAcross; // Screen-space, as tesseract.vert writes it.
-layout(location = 2) in float vFade;
-layout(location = 3) flat in int vKind;
-layout(location = 4) flat in int vStrand;
-
-uniform float litMoment;
-uniform int selectedStrand;
-uniform float markerTime;
-uniform float litWidth;
-uniform float pulseTime;
-uniform float pulseWidth;
-uniform int pulseEnabled;
-uniform int pulseStrand;
-uniform float edgeIntensity;
-uniform float strandIntensity;
-uniform float sliceIntensity;
+#include "include/interop_raygen.glsl"
 
 layout(location = 0) out vec4 fragColor;
 
-const int KIND_EDGE = 0;
-const int KIND_WORLD_TUBE = 1;
+uniform vec2 resolution;
+uniform vec3 eye;
+uniform mat3 cameraBasis; // columns (right, up, forward), buildCameraBasis order.
+uniform float fovScale;   // tan(fovDeg / 2)
+uniform mat4 rotation4;   // SO(4) matrix of v -> qL v conj(qR), column-major.
+uniform int projectionMode;
+uniform float perspectiveDistance;
+uniform float sceneScale;     // Slice-frame tilt gain: blend toward rotation4.
+uniform float corridorPeriod; // World units of depth before the light bands repeat.
+uniform float cellSize;       // Lattice cell period ("Corridor density").
+uniform float nowDepth;       // Depth (mod corridorPeriod) of the static "now" highlight band.
+uniform float nowWidth;
+uniform float pulseDepth; // Depth (mod corridorPeriod) of the traveling gravity-message pulse.
+uniform float pulseWidth;
+uniform int pulseEnabled;
+uniform float strandGlow;
+uniform float fogDensity;
+uniform int qualityTier; // 0 dense (real GPUs), 1 sparse (Mesa llvmpipe and other slow rasterizers).
 
-const vec3 EDGE_COLOR = vec3(0.35, 0.55, 1.0);
-const vec3 STRAND_COLOR = vec3(0.9, 0.62, 0.28);
-const vec3 SLICE_COLOR = vec3(1.0, 0.82, 0.55);
-const vec3 PULSE_COLOR = vec3(0.65, 0.92, 1.0);
+const float PI = 3.14159265359;
+const float TAU = 6.28318530718;
 
-// Mirrors litMomentEmission in src/render/tesseract/tesseract_geometry.cpp
-// (EMISSION_MIN_WIDTH = 1e-4); tests/tesseract_geometry_test.cpp checks it.
+// Mirrors EMISSION_MIN_WIDTH in src/render/tesseract/tesseract_geometry.cpp.
 const float EMISSION_MIN_WIDTH = 1e-4;
 
+const int MATERIAL_BEAM = 0;
+const int MATERIAL_STRAND = 1;
+
+// Dark bronze; the rim and specular terms below carry the metallic read.
+const vec3 BEAM_COLOR = vec3(0.30, 0.16, 0.07);
+const vec3 BEAM_RIM_COLOR = vec3(1.0, 0.62, 0.28);
+// Strand core (hot amber-white) and halo (deeper amber).
+const vec3 STRAND_CORE_COLOR = vec3(1.0, 0.66, 0.26);
+const vec3 STRAND_HALO_COLOR = vec3(1.0, 0.50, 0.15);
+const vec3 VOID_COLOR = vec3(0.0004, 0.0003, 0.0008);
+
+// Beam ceiling: BEAM_COLOR * 0.08 + rim 0.16 + specular 0.10 stays under the
+// 0.4 bloom brightness-pass threshold; only strands bloom.
+const float BEAM_RIM_GAIN = 0.16;
+const float BEAM_SPEC_GAIN = 0.10;
+
+// Geometry as fractions of cellSize.
+const float BEAM_RADIUS_FRACTION = 0.012;
+const float SHELL_RADIUS_FRACTION[2] = float[2](0.05, 0.11);
+const float SHELL_PITCH_FRACTION[2] = float[2](0.50, 0.85);
+const int SHELL_STRANDS[2] = int[2](3, 1);
+const float SHELL_DIRECTION[2] = float[2](1.0, -1.0);
+// Strand radius per tier (dim, mid, bright) and emissive scale per tier.
+const float TIER_RADIUS_FRACTION[3] = float[3](0.0045, 0.0060, 0.0085);
+const float TIER_BRIGHTNESS[3] = float[3](0.08, 0.22, 1.30);
+// Beyond this transverse distance from a beam axis the strand shells are
+// replaced by their conservative lower bound.
+const float STRAND_CULL_FRACTION = 0.26;
+// Fraction of beams that carry strand shells.
+const float STRAND_BEAM_FRACTION = 0.45;
+// The w-phase rate of the helices (radians per cellSize of p4.w).
+const float STRAND_W_TWIST = 0.6;
+
+// Halo: analytic bloom from the nearest-strand distance along the march.
+const float HALO_RADIUS_FRACTION = 0.05;
+const float HALO_GAIN = 0.03;
+// exp(-kappa |p4.w|): 4D depth cue.
+const float W_DIM_KAPPA = 0.06;
+// Slice hyperplane offset along w, in cells.
+const float SLICE_W_CELLS = 0.25;
+// Lattice offset in cells: places the default eye (world x = y = 0, depth
+// drift along z) in the open middle of a cell, slightly off the corridor axis.
+const vec3 LATTICE_OFFSET_CELLS = vec3(0.53, 0.47, 0.5);
+
+const float SURFACE_EPS_FRACTION = 0.0004;
+const float MIN_STEP_FRACTION = 0.0008;
+// The fold to the nearest angular sector under-estimates strand proximity
+// slightly, and the slice frame is only near-isometric: step conservatively.
+const float STEP_SCALE = 0.6;
+const float MAX_MARCH_CELLS = 24.0;
+const float GRAZE_ACCEPT_FOOTPRINTS = 4.0;
+// Fog: transmittance exp(-(t / fogDistance)^FOG_EXPONENT). The exponent above 1
+// keeps the first cells clear and closes the corridor steeply beyond
+// fogDistance, so the vanishing point reads as depth, not as uniform haze.
+// fogDistance is FOG_CELLS cells at the default fogDensity (0.35) and scales
+// inversely with the slider.
+const float FOG_EXPONENT = 1.8;
+const float FOG_CELLS = 3.5;
+const float FOG_REFERENCE_DENSITY = 0.35;
+
+// Slice frame, set once per fragment by buildSliceFrame().
+vec4 gF0;
+vec4 gF1;
+vec4 gF2;
+// Tier index and 4D-cue-free brightness of the nearest strand of the last
+// field evaluation.
+float gTierBrightness = 1.0;
+float gTierRadius = 0.006;
+
+// Mirrors litMomentEmission in src/render/tesseract/tesseract_geometry.cpp.
 float gaussian(float x, float center, float width) {
   float u = (x - center) / max(width, EMISSION_MIN_WIDTH);
   return exp(-0.5 * u * u);
 }
 
-void main() {
-  float across = 1.0 - abs(vAcross);
-  float profile = across * across * (3.0 - 2.0 * across);
+uint pcgHash(uint v) {
+  uint state = (v * 747796405u) + 2891336453u;
+  uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+  return (word >> 22u) ^ word;
+}
 
-  vec3 radiance;
-  if (vKind == KIND_EDGE) {
-    radiance = EDGE_COLOR * edgeIntensity;
-  } else if (vKind == KIND_WORLD_TUBE) {
-    float lit = gaussian(vLibraryTime, litMoment, litWidth);
-    radiance = STRAND_COLOR * strandIntensity * (0.2 + 3.0 * lit);
-    if (vStrand == selectedStrand) {
-      radiance += vec3(0.35, 0.8, 1.2) * strandIntensity * 2.0;
-      radiance += vec3(2.0, 2.2, 2.5) * 8.0 *
-                  gaussian(vLibraryTime, markerTime, max(litWidth * 0.12, 0.025));
-    }
-    if (pulseEnabled != 0 && vStrand == pulseStrand) {
-      radiance += PULSE_COLOR * 6.0 * gaussian(vLibraryTime, pulseTime, pulseWidth);
-    }
-  } else {
-    radiance = SLICE_COLOR * sliceIntensity;
+// Integer PCG hash of a lattice-derived coordinate pair, quantized to 1/16.
+// sin()-based hashes differ between GPU drivers at large arguments, which
+// would give each driver a different strand layout.
+vec2 hash21(vec2 p) {
+  ivec2 i = ivec2(round(p * 16.0));
+  uint h = pcgHash(uint(i.x) + pcgHash(uint(i.y) + 0x9e3779b9u));
+  return vec2(float(h & 0xFFFFu), float(pcgHash(h) & 0xFFFFu)) / 65535.0;
+}
+
+// Orthonormal 4x3 slice frame: the columns of rotation4 blended toward the
+// identity (blend = 0.10 sceneScale, 0.13 at the default 1.3, capped at 0.6 so
+// the blend never cancels), then Gram-Schmidt orthonormalized.
+void buildSliceFrame() {
+  float blend = clamp(0.10 * sceneScale, 0.0, 0.6);
+  vec4 a0 = mix(vec4(1.0, 0.0, 0.0, 0.0), rotation4[0], blend);
+  vec4 a1 = mix(vec4(0.0, 1.0, 0.0, 0.0), rotation4[1], blend);
+  vec4 a2 = mix(vec4(0.0, 0.0, 1.0, 0.0), rotation4[2], blend);
+  gF0 = normalize(a0);
+  gF1 = normalize(a1 - (gF0 * dot(a1, gF0)));
+  gF2 = normalize(a2 - (gF0 * dot(a2, gF0)) - (gF1 * dot(a2, gF1)));
+}
+
+vec4 slicePoint(vec3 p) {
+  vec3 q = p + (LATTICE_OFFSET_CELLS * cellSize);
+  return (gF0 * q.x) + (gF1 * q.y) + (gF2 * q.z) + vec4(0.0, 0.0, 0.0, SLICE_W_CELLS * cellSize);
+}
+
+// One beam family: transverse 4D coordinates @p ct, axial coordinate @p s,
+// and the world-frame w coordinate @p w. Updates the nearest beam distance,
+// the nearest strand distance, and the nearest strand's tier.
+void beamFamily(vec2 ct, float s, float w, float family, inout float dBeam, inout float dStrand) {
+  vec2 n = round(ct / cellSize);
+  vec2 t = ct - (n * cellSize);
+  float rad = length(t);
+  dBeam = min(dBeam, rad - (BEAM_RADIUS_FRACTION * cellSize));
+  float outerRadius = SHELL_RADIUS_FRACTION[1] * cellSize;
+  if (rad > STRAND_CULL_FRACTION * cellSize) {
+    dStrand = min(dStrand, rad - outerRadius - (TIER_RADIUS_FRACTION[2] * cellSize));
+    return;
   }
+  // Only some beams carry strands: bare beams keep the frame void-dominated.
+  if (hash21((n * 2.3) + vec2(family * 5.7, 1.3)).y > STRAND_BEAM_FRACTION) {
+    return;
+  }
+  float ang = atan(t.y, t.x);
+  for (int shell = 0; shell < 2; ++shell) {
+    int count = SHELL_STRANDS[shell];
+    float pitch = SHELL_PITCH_FRACTION[shell] * cellSize;
+    float phi = (SHELL_DIRECTION[shell] * TAU * s / pitch) +
+                (STRAND_W_TWIST * w / cellSize) + (float(shell) * 1.9);
+    float sector = round((ang - phi) * float(count) / TAU);
+    float centerAngle = phi + (TAU * sector / float(count));
+    vec2 c = SHELL_RADIUS_FRACTION[shell] * cellSize * vec2(cos(centerAngle), sin(centerAngle));
+    float index = mod(sector, float(count));
+    vec2 h = hash21((n * 1.7) + vec2((family * 3.1) + (float(shell) * 11.0), index * 5.3));
+    int tier = h.x < 0.5 ? 0 : (h.x < 0.8 ? 1 : 2);
+    float d = length(t - c) - (TIER_RADIUS_FRACTION[tier] * cellSize);
+    if (d < dStrand) {
+      dStrand = d;
+      gTierBrightness = TIER_BRIGHTNESS[tier];
+      gTierRadius = TIER_RADIUS_FRACTION[tier] * cellSize;
+    }
+  }
+}
 
-  fragColor = vec4(radiance * profile * vFade, 1.0);
+// Beam and strand distances at world point @p p; @p p4 returns the 4D point.
+void fieldDistances(vec3 p, out float dBeam, out float dStrand, out vec4 p4) {
+  p4 = slicePoint(p);
+  dBeam = 1e9;
+  dStrand = 1e9;
+  gTierBrightness = TIER_BRIGHTNESS[1];
+  gTierRadius = TIER_RADIUS_FRACTION[1] * cellSize;
+  beamFamily(p4.yz, p4.x, p4.w, 0.0, dBeam, dStrand);
+  beamFamily(p4.zx, p4.y, p4.w, 1.0, dBeam, dStrand);
+  beamFamily(p4.xy, p4.z, p4.w, 2.0, dBeam, dStrand);
+}
+
+float mapDistance(vec3 p) {
+  float dBeam;
+  float dStrand;
+  vec4 p4;
+  fieldDistances(p, dBeam, dStrand, p4);
+  return min(dBeam, dStrand);
+}
+
+vec3 estimateNormal(vec3 p, float e) {
+  const vec2 k = vec2(1.0, -1.0);
+  return normalize((k.xyy * mapDistance(p + (k.xyy * e))) + (k.yyx * mapDistance(p + (k.yyx * e))) +
+                   (k.yxy * mapDistance(p + (k.yxy * e))) + (k.xxx * mapDistance(p + (k.xxx * e))));
+}
+
+// World-frame 4D depth cue.
+float wDim(float w) {
+  return exp(-W_DIM_KAPPA * abs(w));
+}
+
+float fogTransmittance(float t, float fogDistance) {
+  return exp(-pow(t / fogDistance, FOG_EXPONENT));
+}
+
+// Sphere-traces from @p rayOrigin along @p rayDir. Returns the travelled
+// distance, whether a surface was hit, and the halo radiance gathered along
+// the march.
+float raymarch(vec3 rayOrigin, vec3 rayDir, float fogDistance, out bool hit, out vec3 halo) {
+  int maxSteps = qualityTier == 0 ? 256 : 160;
+  float maxDistance = MAX_MARCH_CELLS * cellSize;
+  float surfaceEps = cellSize * SURFACE_EPS_FRACTION;
+  float minStep = cellSize * MIN_STEP_FRACTION;
+  float haloRadius = HALO_RADIUS_FRACTION * cellSize;
+  // Half a pixel's footprint per unit of travel: a fiber thinner than a pixel
+  // still registers a hit inside its footprint instead of being skipped, and
+  // a grazing ray stops as soon as it is within a pixel of the fiber.
+  float pixelAngle = fovScale / max(resolution.y, 1.0);
+  float travelled = 0.0;
+  hit = false;
+  halo = vec3(0.0);
+  float d = 0.0;
+  float eps = surfaceEps;
+  for (int step = 0; step < maxSteps; ++step) {
+    vec3 p = rayOrigin + (rayDir * travelled);
+    float dBeam;
+    float dStrand;
+    vec4 p4;
+    fieldDistances(p, dBeam, dStrand, p4);
+    d = min(dBeam, dStrand);
+    eps = max(surfaceEps, travelled * pixelAngle);
+    if (abs(d) < eps) {
+      hit = true;
+      break;
+    }
+    // Step by |d|: the eye can start inside a beam (no collision guard), where
+    // a negative d would stall the march.
+    float stepLength = max(abs(d) * STEP_SCALE, minStep);
+    float strandLight = exp(-max(dStrand, 0.0) / haloRadius) * gTierBrightness;
+    halo += STRAND_HALO_COLOR * (HALO_GAIN * strandLight * (stepLength / cellSize) *
+                                 fogTransmittance(travelled, fogDistance) * wDim(p4.w));
+    travelled += stepLength;
+    if (travelled > maxDistance) {
+      break;
+    }
+  }
+  // A ray that spent its whole step budget within a few footprints of a
+  // surface (a fiber seen at a grazing angle) is a hit, not a miss.
+  if (!hit && travelled <= maxDistance && abs(d) < GRAZE_ACCEPT_FOOTPRINTS * eps) {
+    hit = true;
+  }
+  return travelled;
+}
+
+vec3 shadeHit(vec3 p, vec3 rayDir, float footprint) {
+  float dBeam;
+  float dStrand;
+  vec4 p4;
+  fieldDistances(p, dBeam, dStrand, p4);
+  bool strand = dStrand < dBeam;
+  float tierBrightness = gTierBrightness;
+  float tierRadius = gTierRadius;
+  vec3 normal = estimateNormal(p, max(0.002 * cellSize, 0.5 * footprint));
+  float facing = clamp(dot(normal, -rayDir), 0.0, 1.0);
+  float cue = wDim(p4.w);
+  vec3 radiance;
+  float radius;
+  if (strand) {
+    float depth = p.z + (LATTICE_OFFSET_CELLS.z * cellSize);
+    float period = max(corridorPeriod, 1e-3);
+    float depthPattern = mod(depth, period);
+    float lit = gaussian(depthPattern, mod(nowDepth, period), nowWidth);
+    float pulse = pulseEnabled != 0 ? gaussian(depthPattern, mod(pulseDepth, period), pulseWidth) : 0.0;
+    // Round fiber: brightest on the axis, falling off across the width.
+    float core = pow(facing, 1.5);
+    radiance = mix(STRAND_HALO_COLOR, STRAND_CORE_COLOR, core) * (0.25 + (0.75 * core)) *
+               tierBrightness * (1.0 + lit + (1.8 * pulse));
+    radius = tierRadius;
+  } else {
+    float rim = pow(1.0 - facing, 4.0);
+    float spec = pow(facing, 40.0);
+    radiance = (BEAM_COLOR * (0.02 + (0.06 * facing))) + (BEAM_RIM_COLOR * BEAM_RIM_GAIN * rim) +
+               (vec3(1.0, 0.82, 0.6) * BEAM_SPEC_GAIN * spec);
+    radius = 2.0 * BEAM_RADIUS_FRACTION * cellSize;
+  }
+  // A fiber thinner than one pixel's footprint covers part of the pixel.
+  float coverage = clamp(radius / max(footprint, 1e-6), 0.0, 1.0);
+  return radiance * strandGlow * cue * coverage;
+}
+
+void main() {
+  buildSliceFrame();
+  vec3 rayDir = bhRayDir(gl_FragCoord.xy, resolution, fovScale, cameraBasis);
+  float fogDistance = FOG_CELLS * cellSize * FOG_REFERENCE_DENSITY / max(fogDensity, 1e-3);
+
+  bool hit;
+  vec3 halo;
+  float travelled = raymarch(eye, rayDir, fogDistance, hit, halo);
+
+  float footprint = travelled * fovScale / max(resolution.y, 1.0);
+  vec3 shaded = hit ? shadeHit(eye + (rayDir * travelled), rayDir, footprint) : vec3(0.0);
+  float extinction = fogTransmittance(travelled, fogDistance);
+  vec3 color = (shaded * extinction) + (halo * strandGlow) + (VOID_COLOR * (1.0 - extinction));
+
+  fragColor = vec4(color, 1.0);
 }

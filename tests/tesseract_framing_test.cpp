@@ -19,7 +19,6 @@
 #include <cmath>
 #include <optional>
 #include <utility>
-#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -226,26 +225,27 @@ constexpr float EXTREME_SCENE_SCALE = 3.0f;
 constexpr float EXTREME_EYE_W = 2.1f;
 
 float deepestClipDepth(const glm::mat4 &viewProjection, bool stereographic) {
-  const std::vector<blackhole::tesseract::SegmentInstance> segments =
-      blackhole::tesseract::buildSceneSegments({});
+  // The 16 tesseract corners (norm 2 in R^4) are the extreme points of the
+  // scene: every lattice or strand point the raymarch pass ever evaluates
+  // lies inside this bounding shape's rotated image, so bounding these 16
+  // points bounds the whole scene.
+  const blackhole::tesseract::TesseractMesh mesh = blackhole::tesseract::buildTesseract();
   float deepest = -1.0f;
   for (int i = 0; i < 64; ++i) {
     const auto rotation = blackhole::tesseract::so4FromPair(sampleQuat(i, 0.1), sampleQuat(i, 0.7));
-    for (const auto &seg : segments) {
-      for (const glm::vec4 &p : {seg.a, seg.b}) {
-        const blackhole::tesseract::Vec4<double> r = blackhole::tesseract::applyMatrix(
-            rotation,
-            blackhole::tesseract::Vec4<double>{static_cast<double>(p.x), static_cast<double>(p.y),
-                                               static_cast<double>(p.z), static_cast<double>(p.w)});
-        const glm::vec4 rotated(static_cast<float>(r[0]), static_cast<float>(r[1]),
-                                static_cast<float>(r[2]), static_cast<float>(r[3]));
-        const glm::vec3 projected =
-            stereographic ? blackhole::tesseract::projectStereographic(rotated).position
-                          : blackhole::tesseract::projectPerspective(rotated, EXTREME_EYE_W);
-        const glm::vec4 clip = viewProjection * glm::vec4(projected * EXTREME_SCENE_SCALE, 1.0f);
-        if (clip.w > TESSERACT_NEAR_PLANE) {
-          deepest = std::max(deepest, clip.z / clip.w);
-        }
+    for (const glm::vec4 &p : mesh.vertices) {
+      const blackhole::tesseract::Vec4<double> r = blackhole::tesseract::applyMatrix(
+          rotation,
+          blackhole::tesseract::Vec4<double>{static_cast<double>(p.x), static_cast<double>(p.y),
+                                             static_cast<double>(p.z), static_cast<double>(p.w)});
+      const glm::vec4 rotated(static_cast<float>(r[0]), static_cast<float>(r[1]),
+                              static_cast<float>(r[2]), static_cast<float>(r[3]));
+      const glm::vec3 projected =
+          stereographic ? blackhole::tesseract::projectStereographic(rotated).position
+                        : blackhole::tesseract::projectPerspective(rotated, EXTREME_EYE_W);
+      const glm::vec4 clip = viewProjection * glm::vec4(projected * EXTREME_SCENE_SCALE, 1.0f);
+      if (clip.w > TESSERACT_NEAR_PLANE) {
+        deepest = std::max(deepest, clip.z / clip.w);
       }
     }
   }
@@ -273,33 +273,31 @@ TEST(TesseractFraming, FarPlaneKeepsEveryProjectedPoint) {
 // fading toward the pole are skipped: the bound covers the lit image.
 glm::vec2 largestSceneNdc(const glm::mat4 &viewProjection, bool stereographic, float sceneScale,
                           float eyeW) {
-  const std::vector<blackhole::tesseract::SegmentInstance> segments =
-      blackhole::tesseract::buildSceneSegments({});
+  // See deepestClipDepth: the 16 tesseract corners bound the whole scene.
+  const blackhole::tesseract::TesseractMesh mesh = blackhole::tesseract::buildTesseract();
   glm::vec2 largest{0.0f};
   for (int i = 0; i < 64; ++i) {
     const auto rotation = blackhole::tesseract::so4FromPair(sampleQuat(i, 0.3), sampleQuat(i, 1.1));
-    for (const auto &seg : segments) {
-      for (const glm::vec4 &p : {seg.a, seg.b}) {
-        const blackhole::tesseract::Vec4<double> r = blackhole::tesseract::applyMatrix(
-            rotation,
-            blackhole::tesseract::Vec4<double>{static_cast<double>(p.x), static_cast<double>(p.y),
-                                               static_cast<double>(p.z), static_cast<double>(p.w)});
-        const glm::vec4 rotated(static_cast<float>(r[0]), static_cast<float>(r[1]),
-                                static_cast<float>(r[2]), static_cast<float>(r[3]));
-        glm::vec3 projected{0.0f};
-        if (stereographic) {
-          const blackhole::tesseract::StereographicPoint point =
-              blackhole::tesseract::projectStereographic(rotated);
-          if (point.fade < 1.0f) {
-            continue;
-          }
-          projected = point.position;
-        } else {
-          projected = blackhole::tesseract::projectPerspective(rotated, eyeW);
+    for (const glm::vec4 &p : mesh.vertices) {
+      const blackhole::tesseract::Vec4<double> r = blackhole::tesseract::applyMatrix(
+          rotation,
+          blackhole::tesseract::Vec4<double>{static_cast<double>(p.x), static_cast<double>(p.y),
+                                             static_cast<double>(p.z), static_cast<double>(p.w)});
+      const glm::vec4 rotated(static_cast<float>(r[0]), static_cast<float>(r[1]),
+                              static_cast<float>(r[2]), static_cast<float>(r[3]));
+      glm::vec3 projected{0.0f};
+      if (stereographic) {
+        const blackhole::tesseract::StereographicPoint point =
+            blackhole::tesseract::projectStereographic(rotated);
+        if (point.fade < 1.0f) {
+          continue;
         }
-        const glm::vec4 clip = viewProjection * glm::vec4(projected * sceneScale, 1.0f);
-        largest = glm::max(largest, glm::abs(glm::vec2(clip) / clip.w));
+        projected = point.position;
+      } else {
+        projected = blackhole::tesseract::projectPerspective(rotated, eyeW);
       }
+      const glm::vec4 clip = viewProjection * glm::vec4(projected * sceneScale, 1.0f);
+      largest = glm::max(largest, glm::abs(glm::vec2(clip) / clip.w));
     }
   }
   return largest;

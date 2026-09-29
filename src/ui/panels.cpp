@@ -34,7 +34,6 @@
 #include "platform/resource_paths.h"
 #include "render/gpu_timing.h"
 #include "render/render_state.h"
-#include "render/tesseract/tesseract_geometry.h"
 #include "render/tesseract/tesseract_renderer.h"
 #include "settings.h"
 
@@ -1001,47 +1000,30 @@ void renderTesseractProjectionControls(RenderState::TesseractGroup &tg) {
   ImGui::SliderFloat("FOV (deg)", &tg.fovDeg, 20.0f, 100.0f);
 }
 
-void renderTesseractLibraryControls(RenderState::TesseractGroup &tg) {
-  ImGui::SeparatorText("Time and room features");
-  const auto features = blackhole::tesseract::bedroomFeatures();
-  tg.selection.featureIndex = std::min(tg.selection.featureIndex, features.size() - 1);
-  // ImGui labels need null-terminated strings; the names are string_views.
-  const std::string selectedName(features.at(tg.selection.featureIndex).name);
-  ImGui::TextUnformatted("Selected feature");
+void renderTesseractCorridorControls(RenderState::TesseractGroup &tg) {
+  ImGui::SeparatorText("Corridor and light");
+  ImGui::SliderFloat("Corridor density", &tg.cellSize, 3.0f, 30.0f);
+  ImGui::SliderFloat("Corridor period", &tg.timeSpan, 1.0f, 30.0f);
+  ImGui::SliderFloat("Drift speed", &tg.driftSpeed, 0.0f, 4.0f);
+  ImGui::SliderFloat("Strand glow", &tg.strandGlow, 0.0f, 4.0f);
+  ImGui::SliderFloat("Fog", &tg.fogDensity, 0.0f, 2.0f);
+  constexpr std::array<const char *, 2> qualityItems = {"Dense (GPU)", "Sparse (software GL)"};
+  int qualityIndex = static_cast<int>(tg.quality);
+  ImGui::TextUnformatted("Quality");
   ImGui::SetNextItemWidth(-FLT_MIN);
-  if (ImGui::BeginCombo("##selected-feature", selectedName.c_str())) {
-    for (std::size_t featureIndex = 0; featureIndex < features.size(); ++featureIndex) {
-      const bool selected = featureIndex == tg.selection.featureIndex;
-      const std::string featureName(features.at(featureIndex).name);
-      if (ImGui::Selectable(featureName.c_str(), selected)) {
-        tg.selection.featureIndex = featureIndex;
-      }
-      if (selected) {
-        ImGui::SetItemDefaultFocus();
-      }
-    }
-    ImGui::EndCombo();
+  if (ImGui::Combo("##quality", &qualityIndex, qualityItems.data(),
+                   static_cast<int>(qualityItems.size()))) {
+    tg.quality = static_cast<RenderState::TesseractGroup::Quality>(qualityIndex);
+    tg.qualityUserSet = true;
   }
-  ImGui::TextUnformatted("Cyan tube: selected feature; white mark: lit moment");
-  ImGui::SliderFloat("Time span T", &tg.timeSpan, 1.0f, 30.0f);
-  ImGui::SliderFloat("Lit moment", &tg.litMoment, 0.0f, tg.timeSpan);
-  ImGui::SliderFloat("Lit width", &tg.litWidth, 0.05f, 3.0f);
+  ImGui::SliderFloat("Now depth", &tg.litMoment, 0.0f, tg.timeSpan);
+  ImGui::SliderFloat("Now width", &tg.litWidth, 0.05f, 3.0f);
   ImGui::Checkbox("Gravity message pulse", &tg.pulseEnabled);
-  const int lastStrand = static_cast<int>(blackhole::tesseract::bedroomFeatures().size()) - 1;
-  ImGui::SliderInt("Pulse strand", &tg.pulseStrand, 0, lastStrand);
   ImGui::SliderFloat("Pulse t_now", &tg.pulseNow, 0.0f, tg.timeSpan);
   ImGui::SliderFloat("Pulse t_past", &tg.pulsePast, 0.0f, tg.pulseNow);
   ImGui::TextUnformatted("Pulse direction: t_now -> t_past (backward in time)");
   ImGui::SliderFloat("Pulse speed", &tg.pulseSpeed, 0.1f, 10.0f);
   ImGui::SliderFloat("Pulse width", &tg.pulseWidth, 0.05f, 2.0f);
-}
-
-void renderTesseractAppearanceControls(RenderState::TesseractGroup &tg) {
-  ImGui::SeparatorText("Appearance");
-  ImGui::SliderFloat("Line width (px)", &tg.lineWidthPx, 1.0f, 8.0f);
-  ImGui::SliderFloat("Edge intensity", &tg.edgeIntensity, 0.0f, 4.0f);
-  ImGui::SliderFloat("Strand intensity", &tg.strandIntensity, 0.0f, 4.0f);
-  ImGui::SliderFloat("Room outline intensity", &tg.sliceIntensity, 0.0f, 4.0f);
 }
 
 } // namespace
@@ -1066,8 +1048,7 @@ void renderTesseractPanel(RenderState &rs) {
     ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
     renderTesseractRotationControls(rs.tesseract);
     renderTesseractProjectionControls(rs.tesseract);
-    renderTesseractLibraryControls(rs.tesseract);
-    renderTesseractAppearanceControls(rs.tesseract);
+    renderTesseractCorridorControls(rs.tesseract);
     ImGui::PopItemWidth();
   }
   ImGui::End();

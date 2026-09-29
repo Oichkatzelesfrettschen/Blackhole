@@ -75,10 +75,13 @@ conan_home=${BLACKHOLE_CONAN_HOME:-$(dirname "$common")/.conan}
 if [ "$#" -eq 0 ]; then
   fork=$(git merge-base "$base" HEAD)
   # Changed tracked files plus untracked, non-ignored ones: a new source that
-  # is not yet added is still part of the change under review.
+  # is not yet added is still part of the change under review. A deleted
+  # file is skipped with if rather than &&: the loop's status is its last
+  # body command's, and a false [ -f ] on the last path would fail the
+  # assignment and end the script under set -e with no message.
   files=$({ git diff --name-only "$fork" -- '*.cpp'
     git ls-files --others --exclude-standard -- '*.cpp'; } | sort -u |
-    while read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done)
+    while read -r f; do if [ -f "$f" ]; then printf '%s\n' "$f"; fi; done)
   [ -n "$files" ] || { echo "cppcheck_ci: no .cpp differs from $base"; exit 0; }
   # Word splitting is intended: repository paths carry no whitespace.
   # shellcheck disable=SC2086
