@@ -15,7 +15,7 @@
  * kinds of geometry: sdBoxFrame, thin dim bronze beams along the 12 edges
  * only (most of the cell's volume is open, dark void -- cells recede in x,
  * y, and z, not a single corridor), and a nested domain-repeated grid of
- * thin amber strand capsules along the depth axis (world z), each strand
+ * thin amber strand fibers along the depth axis (lattice z), each strand
  * lit and emissive enough to feed bloom on its own; the beams never are. A
  * cell's cross-section is sheared by shear4(), which rotates a pure-w point
  * (0, 0, 0, wSeed) with rotation4 and projects it back to R^3 with the same
