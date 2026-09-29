@@ -324,13 +324,23 @@ struct RenderState {
     // (shader/include/disk_turbulence.glsl); 0 draws the smooth Page-Thorne
     // disk. The GLSL paths apply it; the CUDA path draws the smooth disk.
     float diskTurbulence = 0.6f;
+    // Disk clock in GM/c^3 of coordinate time per wall second. At 10 the
+    // Schwarzschild ISCO orbit (2 pi 6^1.5 M = 92 M) takes 9 s and the
+    // texture's 240 M winding cycle 24 s; 1 is the physical rate for a
+    // 2e5 solar-mass hole.
+    float diskTimeScale = 10.0f;
+    // Scale height over cylindrical radius of the volumetric (RTE and
+    // Stokes) disk; the thin-surface disk has no thickness.
+    float diskScaleHeight = 0.03f;
     gl::GLuint texNoiseVolume = 0;
     bool noiseTextureReady = false;
     blackhole::NoiseTextureCache noiseCache;
   } disk;
 
   struct RteGroup {
-      // D2: volumetric RTE
+    // Volumetric RTE absorption per unit disk density: alpha = scale * <rho>,
+    // so optically thick gas shows the source function g^4 (F / F_peak) color
+    // / scale.
     float rteOpacityScale      = 0.5f;
   } rte;
 

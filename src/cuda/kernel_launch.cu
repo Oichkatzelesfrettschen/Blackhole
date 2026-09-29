@@ -88,7 +88,7 @@ __constant__ float d_wiregrid_color[4];     /**< @brief Base RGBA for the coordi
 __constant__ float d_grmhd_r_min;          /**< @brief Inner radial bound of GRMHD grid. */
 __constant__ float d_grmhd_r_max;          /**< @brief Outer radial bound of GRMHD grid. */
 __constant__ int   d_rte_enabled;          /**< @brief 1 = volumetric RTE path (D3). */
-__constant__ float d_rte_opacity_scale;    /**< @brief alpha_nu = rte_opacity_scale * j_nu. */
+__constant__ float d_rte_opacity_scale;    /**< @brief alpha_nu = rte_opacity_scale * <rho>, absorption per unit density. */
 __constant__ int   d_stokes_enabled;       /**< @brief 1 = polarized Stokes IQUV transport (D4). */
 __constant__ float d_stokes_b_angle;       /**< @brief EVPA of projected B field on sky [rad] (D4). */
 __constant__ float d_stokes_ne_scale;      /**< @brief Faraday rotation strength multiplier (D4). */

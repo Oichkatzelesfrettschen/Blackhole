@@ -193,7 +193,7 @@ double luminance(const float *rgb) {
 class DiskTransferTraceTest : public DiskTransferShaderTest {
 protected:
   static std::vector<float> trace(GLuint program, const bhtest::MirrorPair &pair, TraceCase c,
-                                  int transferMode) {
+                                  int transferMode, float opacity = 0.0F) {
     glUseProgram(program);
     const auto set1f = [&](const char *name, float v) {
       glUniform1f(glGetUniformLocation(program, name), v);
@@ -207,7 +207,7 @@ protected:
     set1f("diskFluxPeak", static_cast<float>(physics::pageThorneFluxPeak(static_cast<double>(c.spin))));
     set1f("diskTransferMode", static_cast<float>(transferMode));
     set1f("backgroundEnabled", 0.0F);
-    set1f("rteOpacityScale", 0.0F);
+    set1f("rteOpacityScale", opacity);
     set1f("stokesBFieldAngle", 0.0F);
     set1f("stokesNeScale", 0.0F);
     set1f("bhDebugFlags", 0.0F);
@@ -328,6 +328,29 @@ TEST_F(DiskTransferTraceTest, VolumetricTracesBrightenTheApproachingSide) {
     EXPECT_NEAR(luminance(filmApp) / luminance(filmRec), 1.0, 1e-5) << path;
     EXPECT_GT(luminance(app), 1.5 * luminance(rec)) << path;
     EXPECT_GT(static_cast<double>(app[2] / app[0]), static_cast<double>(rec[2] / rec[0])) << path;
+  }
+}
+
+// Where the volumetric disk is optically thick the traced color converges to
+// its source function S = j / alpha. Absorption proportional to the gas
+// density keeps S = g^4 (F / F_peak) color / opacity, so a thick disk still
+// shows the Doppler contrast of the thin one; absorption proportional to the
+// emission would make S one unit-luminance color on both sides and the
+// ratio 1. rteOpacityScale 200 makes each ray's column opaque (tau >> 1).
+TEST_F(DiskTransferTraceTest, OpticallyThickVolumeKeepsTheDopplerContrast) {
+  const GLuint program = bhtest::createComputeProgram(traceShader());
+  const TraceCase c{.spin = 0.0F, .rs = 2.0F};
+  const bhtest::MirrorPair pair =
+      bhtest::makeMirrorPair(2.0, K_CAMERA_DISTANCE_M, K_CAMERA_HEIGHT_M, K_FOV_SCALE);
+  const std::vector<float> thick = trace(program, pair, c, 0, 200.0F);
+  glDeleteProgram(program);
+
+  for (const std::size_t offset : {std::size_t{6}, std::size_t{9}}) {
+    const char *const path = offset == 6 ? "RTE" : "Stokes";
+    const float *app = &thick.at(offset);
+    const float *rec = &thick.at(K_TRACE_STRIDE + offset);
+    ASSERT_GT(luminance(rec), 0.0) << path;
+    EXPECT_GT(luminance(app), 1.5 * luminance(rec)) << path;
   }
 }
 

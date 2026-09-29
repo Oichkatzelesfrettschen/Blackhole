@@ -135,7 +135,7 @@ extern __constant__ float d_wiregrid_color[4];     /**< @brief Base RGBA for the
 extern __constant__ float d_grmhd_r_min;         /**< @brief Inner radial bound of GRMHD grid. */
 extern __constant__ float d_grmhd_r_max;         /**< @brief Outer radial bound of GRMHD grid. */
 extern __constant__ int   d_rte_enabled;          /**< @brief 1 = volumetric RTE path (D3). */
-extern __constant__ float d_rte_opacity_scale;    /**< @brief alpha_nu = rte_opacity_scale * j_nu. */
+extern __constant__ float d_rte_opacity_scale;    /**< @brief alpha_nu = rte_opacity_scale * <rho>, absorption per unit density. */
 extern __constant__ int   d_stokes_enabled;       /**< @brief 1 = polarized Stokes IQUV transport (D4). */
 extern __constant__ float d_stokes_b_angle;       /**< @brief EVPA of projected B field on sky [rad] (D4). */
 extern __constant__ float d_stokes_ne_scale;      /**< @brief Faraday rotation strength multiplier (D4). */
@@ -2299,7 +2299,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_rte(float3 cam_pos, float3 ra
         if (d_adisk_enabled &&
             d_disk_segment(cur_pos, new_pos, r_disk_in, r_disk_out, h_disk, rs, -c.Lz,
                            emit_color, j_eff, rho_norm)) {
-            float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
+            float const alpha_nu = opacity_scl * rho_norm;
             float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu, path_step, transmit);
             accum_i = d_add(accum_i, contrib);
 
@@ -2643,7 +2643,7 @@ __device__ __forceinline__ float4 d_trace_geodesic_stokes(float3 cam_pos,
         if (d_adisk_enabled &&
             d_disk_segment(cur_pos, new_pos, r_disk_in, r_disk_out, h_disk, rs, -c.Lz,
                            emit_color, j_eff, rho_norm)) {
-            float const alpha_nu = opacity_scl * fmaxf(j_eff, 0.0f);
+            float const alpha_nu = opacity_scl * rho_norm;
 
             /* Intensity path: same as d_rte_step() */
             float3 const contrib = d_rte_step(emit_color, j_eff, alpha_nu,

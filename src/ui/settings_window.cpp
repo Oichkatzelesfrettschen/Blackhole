@@ -213,6 +213,11 @@ void renderVisualSettings(RenderState &rs, Settings &settings) {
   ImGui::TextDisabled("Select the radiative model in Compute Raytracer.");
   if (rs.dispatch.contract.radiative == blackhole::RadiativeModel::VolumetricRte) {
     ImGui::SliderFloat("RTE Opacity Scale", &rs.rte.rteOpacityScale, 0.0f, 5.0f);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      ImGui::SetTooltip("Absorption per unit disk density. 0 is optically thin: the disk glows\n"
+                        "and everything behind it shows through. Larger values hide the far\n"
+                        "side and the lensed underside behind the near gas.");
+    }
   }
 
   ImGui::Separator();
@@ -454,6 +459,18 @@ void renderPhysicsSettings(RenderState &rs) {
   ImGui::SliderFloat("Disk brightness", &rs.disk.diskBrightness, 0.01f, 100.0f, "%.2f",
                      ImGuiSliderFlags_Logarithmic);
   kerrTracerControlTooltip();
+  ImGui::SliderFloat("Disk clock (M per second)", &rs.disk.diskTimeScale, 0.0f, 100.0f, "%.1f",
+                     ImGuiSliderFlags_Logarithmic);
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    ImGui::SetTooltip("Coordinate time in GM/c^3 per wall second for the disk texture's orbit.\n"
+                      "At 10 the innermost stable orbit takes about 9 s; 0 freezes the disk.");
+  }
+  ImGui::SliderFloat("Disk thickness (H/r)", &rs.disk.diskScaleHeight, 0.01f, 0.4f, "%.2f");
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    ImGui::SetTooltip("Gaussian scale height over radius of the volumetric disk (RTE and\n"
+                      "Stokes radiative models). Thin disks sit near 0.01-0.1; hot, radiatively\n"
+                      "inefficient flows such as M87* and Sgr A* near 0.2-0.3.");
+  }
   ImGui::SliderFloat("Disk turbulence", &rs.disk.diskTurbulence, 0.0f, 1.2f, "%.2f");
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
     ImGui::SetTooltip("Log-normal texture on the disk emissivity with mean 1, orbiting at the\n"
