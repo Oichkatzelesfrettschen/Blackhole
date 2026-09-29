@@ -420,7 +420,14 @@ explanatory view, not as the primary look.
 Falsifier: the existing test of `tesseract_geometry` projection continues to
 pass unchanged; no shader edit is needed.
 
-### R6. Cayley-Dickson beyond quaternions: not recommended for the primary scene [design]
+### R6. Cayley-Dickson beyond quaternions [superseded by R7]
+
+R6 judged octonion and sedenion arithmetic as decoration because it looked
+only at Julia-set fractals and continuous rotations. It did not read the
+emanation-table code in open_gororoba, which R7 covers; the paragraphs below
+stand for the Julia and domain-warp uses only.
+
+### R6 (original text). Cayley-Dickson beyond quaternions: not recommended for the primary scene [design]
 
 - Keep `Quat` in `so4.h` as the only algebra in the render path.
 - Add the sign-loop product (section 3) to `src/render/tesseract/` only if a
@@ -435,6 +442,63 @@ pass unchanged; no shader edit is needed.
 
 Falsifier: if a blind A/B of the R1-R4 look with and without an octonion warp
 shows no viewer-detectable difference, the arithmetic is decoration.
+
+### R7. Emanation tables of the 512- and 1024-dimensional algebras [design, measured counts]
+
+A strutted emanation table (de Marrais, "Presto! Digitization",
+arXiv:math/0603281) is a K x K grid over pairs of basis indices of the
+2^N-dimensional Cayley-Dickson algebra, K = 2^(N-1) - 2, whose filled cells
+mark mutual zero divisors (the DMZ mask) for a strut constant S. At N = 10
+(dim 1024) K is 510; at N = 9 (dim 512) it is 254. Sources in open_gororoba:
+`crates/algebra_experimental/src/emanation/strutted_et.rs` (`create_strutted_et`,
+`compute_et_row`), `strut_spectroscopy.rs` (`et_regimes`, `trip_count`),
+`theorem11.rs` (sub-block embedding), `balloon_ride.rs` (fixed S, rising N),
+and the sign function `crates/cd_kernel/src/cayley_dickson/signs.rs`
+(`cd_basis_mul_sign_iter`).
+
+What the tables look like, from a port of the Rust builder rendered at N = 10
+in tone-row order [measured on renders of the port; the Rust was not run]:
+
+- Struts S = 1..7 and powers of two fill every cell: a blank square.
+- Sky struts (S > 8, not a power of two) draw rectilinear lattices: S = 17 a
+  field of about 30 x 30 tiles cut by diagonals and chevrons, S = 129 one
+  nested diamond-and-X mandala on a 4 x 4 block grid. Fill falls from 0.621
+  (S = 9) to 0.0118 (S = 257).
+- Going up in dimension adds nesting depth: Theorem 11 makes the N - 1 table
+  an exact sub-block of the N table, and the regime count doubles per level
+  (2^(N-4)). Dimension 1024 shows structure dimension 32 cannot.
+- The raw sign table is noise (negative fraction 0.4995 at dim 1024).
+
+The mask has a closed form, measured equal to the builder's DMZ counts on six
+(N, S) cases up to N = 10. With X = 2^(N-1) + S and s the basis sign, cells
+(a, b) with a != b, b != a xor S, a != S, b != S are filled when
+`(s(a^X, b) == s(a, b^X)) == (s(a^X, b^X) == s(a, b))`; the cell's value is
++-(a xor b). Each s is a 10-step integer bit loop at dim 1024, so the mask is
+integer-exact on every driver.
+
+Mappings onto the tesseract, ranked:
+
+1. **Emanation lattice on the walls.** Two of the four periodic slice
+   coordinates index the 510 x 510 mask of the current S; filled cells glow,
+   hue from a xor b, warm or cool from the sign. S steps through the sky
+   struts as a balloon ride. Data: an R16I texture baked per S (520 KB), or
+   the closed form evaluated once per pixel at the lattice hit. [ESTIMATE]
+   0.05 ms baked, 0.3 ms closed form at 2560 x 1440; about 10 ms if evaluated
+   at every march step, which the design avoids.
+2. **Infinite zoom along Theorem 11.** Tables for N = 6..10 at one S (about
+   350 KB) selected by camera depth and cross-faded, so zooming into a block
+   lands on the lower-dimensional table.
+3. **Pulses along xor triples.** Strand pulses step (a, b) -> (a, a xor b)
+   across filled cells; whether that walk traces box-kite cycles needs the
+   component membership from `motif_components_for_cross_assessors`, not yet
+   verified at dim 1024.
+
+Falsifiers for mapping 1: the baked mask's filled-cell count equals the
+measured DMZ counts (S = 1 or 3 at N = 10: 259,080 = 24 x 10,795; S = 9:
+160,776; S = 17: 87,048; S = 33: 44,040; S = 65: 21,000; S = 129: 9,096;
+S = 257: 3,048), every count is divisible by 24, and the closed-form GLSL
+matches the CPU bake cell for cell. A random texture of the same density
+fails the divisibility test.
 
 ## 7. Uncertainty
 

@@ -32,19 +32,6 @@
 #endif
 
 namespace blackhole {
-#if BLACKHOLE_HAS_CUDA
-// The CUDA-only desktop variant is selected per target via
-// target_compile_definitions; other targets fall back to 0, matching main.
-#ifndef BLACKHOLE_APP_VARIANT_CUDA_ONLY
-#define BLACKHOLE_APP_VARIANT_CUDA_ONLY 0
-#endif
-namespace {
-
-constexpr bool kAppVariantCudaOnly = BLACKHOLE_APP_VARIANT_CUDA_ONLY != 0;
-
-} // namespace
-#endif
-
 // std::from_chars writes the parsed value through a reference, so an "inf" or
 // "nan" input reaches memory from the IEEE-compiled library and the bit-level
 // physics::safeIsfinite classifies it. A by-value std::strtod result carries
@@ -157,9 +144,7 @@ void applyCompareEnvironment(RenderState &rs) {
       rs.compare.compareComputeFragment = true;
       rs.dispatch.contract.backend = RenderBackend::Fragment;
 #if BLACKHOLE_HAS_CUDA
-      if (!kAppVariantCudaOnly) {
-        rs.dispatch.cudaManager.setEnabled(false);
-      }
+      rs.dispatch.cudaManager.setEnabled(false);
 #endif
     }
     rs.compare.forceInteropFragmentEnvApplied = true;

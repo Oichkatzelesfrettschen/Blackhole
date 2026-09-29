@@ -7,18 +7,18 @@ surfaces. The intended product split is:
 |---------|--------|----------------|-------|
 | Shared desktop app | `release` | `Blackhole` | Baseline desktop build. |
 | Pure GLSL desktop | `glsl-only` | `BlackholeGLSL` | Dedicated desktop executable with the shared UI and no CUDA backend. |
-| CUDA desktop | `cuda-only` | `BlackholeCUDA` | Dedicated desktop executable with the shared UI and CUDA forced on. |
+| Desktop with CUDA | `cuda` | `Blackhole` | The same desktop application with the CUDA trace accelerator selectable as a backend; OpenGL stays the default. |
 | Blender bridge | `blender-bridge` | `libblackhole_bridge.so` | Bridge-focused build without desktop app, tools, or benchmarks. |
 | Docs + verification | `docs` | `doxygen`, `repo-truth`, `verify-physics-claims`, `package-blender-addon`, `verify-blender-addon-package`, `verify-blender-bridge-abi`, `stage-blender-addon` | Documentation and evidence lane. |
 | Full dev stack | `full-dev` | Desktop app + bridge + tools + tests | Main development preset for the unified stack. |
 
 ## Shared UI policy
 
-The desktop application remains the canonical control surface. The current
-foundation work keeps a single desktop UI and treats backend selection as a
-product boundary rather than a separate frontend. The `BlackholeGLSL` and
-`BlackholeCUDA` binaries are compiled from the same shared UI/runtime entrypoint
-but expose different backend policy at compile time.
+The desktop application is the canonical control surface, and OpenGL is its
+primary renderer on every vendor. CUDA is an optional trace accelerator inside
+NVIDIA builds of the same application, selected as a backend at run time, not
+a separate product (docs/plans/gl-cuda-render-architecture.md, section 0).
+`BlackholeGLSL` is the same entrypoint compiled without CUDA.
 
 ## Conan install directories
 
@@ -26,7 +26,7 @@ Each preset expects Conan output in the matching build tree:
 
 ```bash
 ./scripts/conan_install.sh Release build/GLSL-Only/Release
-./scripts/conan_install.sh Release build/CUDA-Only/Release
+./scripts/conan_install.sh Release build/CUDA/Release
 ./scripts/conan_install.sh Release build/BlenderBridge/Release
 ./scripts/conan_install.sh Release build/Docs/Release
 ./scripts/conan_install.sh RelWithDebInfo build/FullDev/RelWithDebInfo
@@ -43,13 +43,13 @@ cmake --build --preset glsl-only
 ctest --preset glsl-only
 ```
 
-CUDA desktop:
+Desktop with the CUDA accelerator:
 
 ```bash
-./scripts/conan_install.sh Release build/CUDA-Only/Release
-cmake --preset cuda-only
-cmake --build --preset cuda-only
-ctest --preset cuda-only
+./scripts/conan_install.sh Release build/CUDA/Release
+cmake --preset cuda
+cmake --build --preset cuda
+ctest --preset cuda
 ```
 
 Docs and verification:

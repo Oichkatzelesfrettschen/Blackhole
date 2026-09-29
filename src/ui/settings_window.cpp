@@ -42,14 +42,6 @@ using namespace gl;
 #include <glbinding/gl/enum.h>
 #endif
 
-namespace {
-#if defined(BLACKHOLE_APP_VARIANT_CUDA_ONLY) && BLACKHOLE_APP_VARIANT_CUDA_ONLY
-constexpr bool K_APP_VARIANT_CUDA_ONLY = true;
-#else
-constexpr bool K_APP_VARIANT_CUDA_ONLY = false;
-#endif
-} // anonymous namespace
-
 namespace ui {
 
 using blackhole::K_COMPARE_PRESETS;
@@ -584,10 +576,8 @@ void renderPhysicsSettings(RenderState &rs) {
 }
 
 void renderComputeComparisonSettings(RenderState &rs) {
-  if (!K_APP_VARIANT_CUDA_ONLY) {
-    ImGui::Checkbox("Compare Compute vs Fragment", &rs.compare.compareComputeFragment);
-  }
-  if (rs.compare.compareComputeFragment && !K_APP_VARIANT_CUDA_ONLY) {
+  ImGui::Checkbox("Compare Compute vs Fragment", &rs.compare.compareComputeFragment);
+  if (rs.compare.compareComputeFragment) {
     ImGui::SliderInt("Compare Sample Size", &rs.compare.compareSampleSize, 4, 64);
     ImGui::SliderInt("Compare Frame Stride", &rs.compare.compareFrameStride, 1, 60);
     if (rs.compare.compareStats.valid) {
@@ -698,9 +688,6 @@ void renderComputeSettings(RenderState &rs) {
   if (!computeAvailable && rs.dispatch.contract.backend == blackhole::RenderBackend::Compute) {
     rs.dispatch.contract.backend = blackhole::RenderBackend::Fragment;
   }
-  if (K_APP_VARIANT_CUDA_ONLY) {
-    rs.dispatch.contract.backend = blackhole::RenderBackend::Cuda;
-  }
   const char *const geodesicNames[] = {"Legacy beauty (fragment only)", "Schwarzschild reference",
                                        "Kerr reference"};
   int geodesic = static_cast<int>(rs.dispatch.contract.geodesic);
@@ -710,11 +697,6 @@ void renderComputeSettings(RenderState &rs) {
       rs.dispatch.contract.backend = blackhole::RenderBackend::Fragment;
       rs.dispatch.contract.radiative = blackhole::RadiativeModel::ThinSurface;
     }
-  }
-  if (K_APP_VARIANT_CUDA_ONLY &&
-      rs.dispatch.contract.geodesic == blackhole::GeodesicModel::LegacyBeauty) {
-    rs.dispatch.contract.geodesic = blackhole::GeodesicModel::KerrReference;
-    rs.dispatch.contract.backend = blackhole::RenderBackend::Cuda;
   }
   const char *const radiativeNames[] = {"Background only", "Thin surface", "Volumetric RTE", "Stokes"};
   int radiative = static_cast<int>(rs.dispatch.contract.radiative);
@@ -772,13 +754,7 @@ void renderComputeSettings(RenderState &rs) {
     }
     rs.compare.compareComputeFragment = false;
   }
-  if (K_APP_VARIANT_CUDA_ONLY) {
-    rs.dispatch.contract.backend = blackhole::RenderBackend::Cuda;
-    rs.compare.compareComputeFragment = false;
-    ImGui::TextDisabled("Compute/fragment comparison is disabled in BlackholeCUDA.");
-  } else {
-    ImGui::TextDisabled("Backend selection controls compute dispatch.");
-  }
+  ImGui::TextDisabled("Backend selection controls compute dispatch.");
   if (rs.dispatch.contract.geodesic != blackhole::GeodesicModel::LegacyBeauty) {
     ImGui::BeginDisabled(rs.dispatch.contract.quality == blackhole::QualityTier::Reference);
     ImGui::SliderInt("Geodesic Steps", &rs.dispatch.computeMaxSteps, 50,
