@@ -55,6 +55,13 @@ public:
   [[nodiscard]] OrderPreview preview(const ConstellationCommand &command) const;
   [[nodiscard]] OrderRejection issue(const ConstellationCommand &command);
   void advanceTurn();
+  /** @brief Advances turn by turn until a turn delivers a notice the player
+   *         acts on (a fleet or arrival report, a band control change, or the
+   *         outcome), the campaign is decided, or `maxTurns` turns pass.
+   *         Ledger reports (energy, stabilization, control score) arrive most
+   *         turns and do not stop it. Returns the turns advanced; each turn is
+   *         one advanceTurn(), so digests and saves match single stepping. */
+  std::int64_t advanceToNextNotice(std::int64_t maxTurns);
   [[nodiscard]] std::vector<std::uint8_t> save() const;
   [[nodiscard]] static std::unique_ptr<DesktopGame> load(const std::vector<std::uint8_t> &bytes,
                                                          SaveError &error);

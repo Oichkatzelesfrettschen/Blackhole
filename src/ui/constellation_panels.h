@@ -23,6 +23,7 @@ struct ConstellationUiState {
   game::StationKeeping station = game::StationKeeping::Orbit;
   game::OrderRejection lastRejection = game::OrderRejection::None;
   std::string saveMessage;
+  std::int64_t advancedTurns = 0; ///< Turns the last "Advance to next report" ran.
 };
 
 [[nodiscard]] inline bool selectConstellationSystem(ConstellationUiState &uiState,
