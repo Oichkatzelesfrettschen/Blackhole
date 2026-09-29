@@ -1102,6 +1102,7 @@ BlackholeFrameResult renderBlackholeFrame(RenderState &rs, const Settings &setti
     interop.diskPeakTemperature = rs.disk.diskPeakTemperature;
     interop.diskBrightness = rs.disk.diskBrightness;
     interop.diskTransferMode = static_cast<float>(rs.disk.diskTransferMode);
+    interop.diskTurbulence = rs.disk.diskTurbulence;
     // Page-Thorne flux peak at the rendered spin, the normalization of the
     // shaders' flux (the GLSL disk_profile isco_radius clamps to the same range).
     interop.diskFluxPeak = static_cast<float>(physics::pageThorneFluxPeak(
@@ -1881,6 +1882,9 @@ int main(int argc, char **argv) {
     }
     if (const auto geodesic = blackhole::geodesicModelFromName(cli.rendererGeodesic)) {
       rs.dispatch.contract.geodesic = *geodesic;
+    }
+    if (const auto radiative = blackhole::radiativeModelFromName(cli.rendererRadiative)) {
+      rs.dispatch.contract.radiative = *radiative;
     }
     blackhole::normalizeRendererContract(rs.dispatch.contract);
     std::printf("Renderer startup: %.*s / %.*s / %.*s / %.*s; %d steps, %.3f step size\n",

@@ -122,6 +122,17 @@ constexpr std::optional<GeodesicModel> geodesicModelFromName(std::string_view na
   return std::nullopt;
 }
 
+constexpr std::optional<RadiativeModel> radiativeModelFromName(std::string_view name) {
+  for (const RadiativeModel value :
+       std::array{RadiativeModel::BackgroundOnly, RadiativeModel::ThinSurface,
+                  RadiativeModel::VolumetricRte, RadiativeModel::Stokes}) {
+    if (rendererName(value) == name) {
+      return value;
+    }
+  }
+  return std::nullopt;
+}
+
 constexpr void normalizeRendererContract(RendererContract &contract) {
   if (contract.backend != RenderBackend::Fragment &&
       contract.geodesic == GeodesicModel::LegacyBeauty) {

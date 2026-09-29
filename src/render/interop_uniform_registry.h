@@ -33,41 +33,42 @@
 // WHY: the table must expand into a struct definition, map writes, and
 // GL calls; only the preprocessor can stamp all three from one row.
 
-#define BH_INTEROP_UNIFORM_FLOATS(X)                                         \
-  X(fovScale, "fovScale", 1.0f)                                              \
-  X(timeSec, "time", 0.0f)                                                   \
-  X(schwarzschildRadius, "schwarzschildRadius", 0.0f)                        \
-  X(kerrSpin, "kerrSpin", 0.0f)                                              \
-  X(depthFar, "depthFar", 0.0f)                                              \
-  X(stepSize, "interopStepSize", 0.0f)                                       \
-  X(adiskEnabled, "adiskEnabled", 0.0f)                                      \
-  X(enableRedshift, "enableRedshift", 0.0f)                                  \
-  X(useLUTs, "useLUTs", 0.0f)                                                \
-  X(useSpectralLUT, "useSpectralLUT", 0.0f)                                  \
-  X(useGrbModulation, "useGrbModulation", 0.0f)                              \
-  X(lutRadiusMin, "lutRadiusMin", 0.0f)                                      \
-  X(lutRadiusMax, "lutRadiusMax", 1.0f)                                      \
-  X(redshiftRadiusMin, "redshiftRadiusMin", 0.0f)                            \
-  X(redshiftRadiusMax, "redshiftRadiusMax", 1.0f)                            \
-  X(spectralRadiusMin, "spectralRadiusMin", 0.0f)                            \
-  X(spectralRadiusMax, "spectralRadiusMax", 1.0f)                            \
-  X(grbTime, "grbTime", 0.0f)                                                \
-  X(grbTimeMin, "grbTimeMin", 0.0f)                                          \
-  X(grbTimeMax, "grbTimeMax", 1.0f)                                          \
-  X(rteEnabled, "rteEnabled", 0.0f)                                          \
-  X(rteOpacityScale, "rteOpacityScale", 0.5f)                                \
-  X(debugPreRedshiftBackground, "debugPreRedshiftBackground", 0.0f)          \
-  X(debugPreShapingBackground, "debugPreShapingBackground", 0.0f)            \
-  X(debugPostShapingBackground, "debugPostShapingBackground", 0.0f)          \
-  X(debugShaperInputs, "debugShaperInputs", 0.0f)                            \
-  X(debugClosestApproachState, "debugClosestApproachState", 0.0f)            \
-  X(debugClosestApproachTimeline, "debugClosestApproachTimeline", 0.0f)      \
-  X(debugClosestApproachDirection, "debugClosestApproachDirection", 0.0f)    \
-  X(debugEscapedDirection, "debugEscapedDirection", 0.0f)                    \
-  X(diskPeakTemperature, "diskPeakTemperature", 6500.0f)                     \
-  X(diskBrightness, "diskBrightness", 1.0f)                                  \
-  X(diskFluxPeak, "diskFluxPeak", 1.1458947e-4f)                            \
-  X(diskTransferMode, "diskTransferMode", 0.0f)
+#define BH_INTEROP_UNIFORM_FLOATS(X)                                                               \
+  X(fovScale, "fovScale", 1.0f)                                                                    \
+  X(timeSec, "time", 0.0f)                                                                         \
+  X(schwarzschildRadius, "schwarzschildRadius", 0.0f)                                              \
+  X(kerrSpin, "kerrSpin", 0.0f)                                                                    \
+  X(depthFar, "depthFar", 0.0f)                                                                    \
+  X(stepSize, "interopStepSize", 0.0f)                                                             \
+  X(adiskEnabled, "adiskEnabled", 0.0f)                                                            \
+  X(enableRedshift, "enableRedshift", 0.0f)                                                        \
+  X(useLUTs, "useLUTs", 0.0f)                                                                      \
+  X(useSpectralLUT, "useSpectralLUT", 0.0f)                                                        \
+  X(useGrbModulation, "useGrbModulation", 0.0f)                                                    \
+  X(lutRadiusMin, "lutRadiusMin", 0.0f)                                                            \
+  X(lutRadiusMax, "lutRadiusMax", 1.0f)                                                            \
+  X(redshiftRadiusMin, "redshiftRadiusMin", 0.0f)                                                  \
+  X(redshiftRadiusMax, "redshiftRadiusMax", 1.0f)                                                  \
+  X(spectralRadiusMin, "spectralRadiusMin", 0.0f)                                                  \
+  X(spectralRadiusMax, "spectralRadiusMax", 1.0f)                                                  \
+  X(grbTime, "grbTime", 0.0f)                                                                      \
+  X(grbTimeMin, "grbTimeMin", 0.0f)                                                                \
+  X(grbTimeMax, "grbTimeMax", 1.0f)                                                                \
+  X(rteEnabled, "rteEnabled", 0.0f)                                                                \
+  X(rteOpacityScale, "rteOpacityScale", 0.5f)                                                      \
+  X(debugPreRedshiftBackground, "debugPreRedshiftBackground", 0.0f)                                \
+  X(debugPreShapingBackground, "debugPreShapingBackground", 0.0f)                                  \
+  X(debugPostShapingBackground, "debugPostShapingBackground", 0.0f)                                \
+  X(debugShaperInputs, "debugShaperInputs", 0.0f)                                                  \
+  X(debugClosestApproachState, "debugClosestApproachState", 0.0f)                                  \
+  X(debugClosestApproachTimeline, "debugClosestApproachTimeline", 0.0f)                            \
+  X(debugClosestApproachDirection, "debugClosestApproachDirection", 0.0f)                          \
+  X(debugEscapedDirection, "debugEscapedDirection", 0.0f)                                          \
+  X(diskPeakTemperature, "diskPeakTemperature", 6500.0f)                                           \
+  X(diskBrightness, "diskBrightness", 1.0f)                                                        \
+  X(diskFluxPeak, "diskFluxPeak", 1.1458947e-4f)                                                   \
+  X(diskTransferMode, "diskTransferMode", 0.0f)                                                    \
+  X(diskTurbulence, "diskTurbulence", 0.0f)
 
 // NOLINTEND(cppcoreguidelines-macro-usage)
 

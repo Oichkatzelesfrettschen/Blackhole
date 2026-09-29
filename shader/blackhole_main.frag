@@ -118,6 +118,7 @@ uniform float diskPeakTemperature = 6500.0;
 uniform float diskBrightness = 1.0;
 uniform float diskFluxPeak = 1.1458947e-4;
 uniform float diskTransferMode = 0.0; // 0 = Physical g-factor, 1 = Interstellar (g = 1)
+uniform float diskTurbulence = 0.0;   // log-normal width of the disk emissivity texture
 
 // Physics parameters
 uniform float schwarzschildRadius = 2.0; // r_s = 2GM/c^2 (default = 2 in geometric units)

@@ -33,6 +33,7 @@ struct CliOptions {
   std::string referenceQuality = "balanced";
   std::string rendererGeodesic;
   std::string rendererBackend;
+  std::string rendererRadiative;
   std::string recordFramesDir;
   std::string recordProfile = "cinematic";
   std::string recordComposition = "above-disk";

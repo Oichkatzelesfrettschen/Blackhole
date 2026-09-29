@@ -320,6 +320,10 @@ struct RenderState {
     // g = 1 for color and intensity with lensing kept, the film's disk
     // (James et al. 2015, sec. 4.2; see physics/disk_transfer.h).
     int diskTransferMode = 0;
+    // Log-normal width sigma of the disk emissivity texture
+    // (shader/include/disk_turbulence.glsl); 0 draws the smooth Page-Thorne
+    // disk. The GLSL paths apply it; the CUDA path draws the smooth disk.
+    float diskTurbulence = 0.6f;
     gl::GLuint texNoiseVolume = 0;
     bool noiseTextureReady = false;
     blackhole::NoiseTextureCache noiseCache;
