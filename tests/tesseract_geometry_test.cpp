@@ -332,7 +332,8 @@ TEST(TesseractLattice, LocalPositionIsPeriodicInEveryAxis) {
 
 TEST(TesseractLattice, LocalPositionStaysWithinHalfTheCell) {
   const float cellSize = 1.7f;
-  for (float coordinate = -9.3f; coordinate < 9.3f; coordinate += 0.37f) {
+  for (int step = 0; step < 51; ++step) {
+    const float coordinate = -9.3f + (0.37f * static_cast<float>(step));
     const glm::vec3 local =
         tess::latticeLocalPosition(glm::vec3(coordinate, -coordinate, 2.0f * coordinate), cellSize);
     EXPECT_LE(std::abs(local.x), (0.5f * cellSize) + UNIT_TOL);
@@ -356,7 +357,7 @@ TEST(TesseractPalette, StrandColorHueIsAmber) {
   // Acceptance check 2 of docs/plans/tesseract-interstellar-visuals.md: the
   // strand palette's circular hue must fall in the amber/gold band, not the
   // retired ribbon pass's blue.
-  const float hue = tess::hueDegrees(tess::STRAND_COLOR);
+  const float hue = tess::hueDegrees(tess::strandColor());
   EXPECT_GE(hue, 25.0f);
   EXPECT_LE(hue, 50.0f);
 }

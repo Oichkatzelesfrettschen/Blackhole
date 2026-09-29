@@ -171,7 +171,7 @@ TEST_F(TesseractRaymarchGlTest, VoidDominatedFrameWithStrandsAsTheBrightestEleme
   std::size_t litCount = 0;
   for (std::size_t i = 0; i < pixelCount; ++i) {
     maxChannels.at(i) = maxChannelAt(rgba, i);
-    litCount += maxChannels.at(i) > COVERAGE_FLOOR ? 1 : 0;
+    litCount += maxChannels.at(i) > COVERAGE_FLOOR ? std::size_t{1} : std::size_t{0};
   }
   const float coverage = static_cast<float>(litCount) / static_cast<float>(pixelCount);
   std::printf("lit coverage %.3f of %zu pixels\n", static_cast<double>(coverage), pixelCount);
@@ -232,7 +232,7 @@ TEST_F(TesseractRaymarchGlTest, VoidDominatedFrameWithStrandsAsTheBrightestEleme
       const float value = maxChannels.at((static_cast<std::size_t>(y) * WIDTH) +
                                          static_cast<std::size_t>(x));
       ++interior;
-      outliers += std::abs(value - median) > OUTLIER_DELTA ? 1 : 0;
+      outliers += std::abs(value - median) > OUTLIER_DELTA ? std::size_t{1} : std::size_t{0};
     }
   }
   const float outlierFraction = static_cast<float>(outliers) / static_cast<float>(interior);

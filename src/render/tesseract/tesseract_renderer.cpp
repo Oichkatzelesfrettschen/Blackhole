@@ -16,7 +16,6 @@
 #include <string_view>
 #include <vector>
 
-#include <glbinding/gl/bitfield.h>
 #include <glbinding/gl/boolean.h>
 #include <glbinding/gl/enum.h>
 #include <glbinding/gl/functions.h>
@@ -160,8 +159,8 @@ bool TesseractRenderer::isLlvmpipe() {
   if (!llvmpipeChecked_) {
     llvmpipeChecked_ = true;
     const auto *rendererString = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
-    llvmpipeDetected_ = rendererString != nullptr &&
-                        std::string_view(rendererString).find("llvmpipe") != std::string_view::npos;
+    llvmpipeDetected_ =
+        rendererString != nullptr && std::string_view(rendererString).contains("llvmpipe");
   }
   return llvmpipeDetected_;
 }

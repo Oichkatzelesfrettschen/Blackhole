@@ -137,7 +137,9 @@ glm::ivec3 latticeCellIndex(const glm::vec3 &p, float cellSize);
  * shader/tesseract.frag's STRAND_COLOR mirrors this value; hueDegrees checks
  * it lands in the amber/gold band without a GPU.
  */
-inline const glm::vec3 STRAND_COLOR = {1.0f, 0.68f, 0.32f};
+[[nodiscard]] inline glm::vec3 strandColor() noexcept {
+  return {1.0f, 0.68f, 0.32f};
+}
 
 /**
  * @brief Hue in degrees [0, 360) of a linear RGB color on the standard HSV wheel.
