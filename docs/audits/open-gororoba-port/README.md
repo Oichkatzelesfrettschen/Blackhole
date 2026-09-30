@@ -15,12 +15,17 @@ Blackhole main at 29fe8ec.
 
 Cross-report agreement. Reports 01 and 04 enumerated the 32-dimensional
 zero-divisor graph independently and both find 22 connected components (7 of
-size 12 and 15 of size 14) under mutual zero-divisor adjacency of 2-blade
-zero divisors, against the 15 that open_gororoba's PathionZDGraph.v states as
-an Axiom. The 15 matches only the components new at dimension 32; the count
-depends on the adjacency convention, so the discrepancy stays open until the
-convention of de Marrais's papers is fixed, and Blackhole ports neither
-number as an invariant yet.
+size 12 and 15 of size 14, 294 planes) when every 2-blade plane
+span{e_p, e_q} is a vertex and two planes are adjacent when some signed
+diagonals multiply to zero (one product order or both gives the same graph).
+The 15 of open_gororoba's PathionZDGraph.v is the same relation restricted
+to the cross pairs p < 16 <= q (motif_components_for_cross_assessors): it
+keeps the 15 strut emanation tables of 14 assessors each and drops the 7
+components formed by a sedenion box-kite and its copy shifted by 16.
+open_gororoba now states both conventions (motif_components_for_all_planes
+for the complete graph) and reads its dim/2 - 1 as the strut-table count.
+At dimension 64 the complete graph has 53 components and the cross-pair
+graph 31.
 
 The design these surveys feed is
 [docs/plans/tesseract-quasicrystal-algebra.md](../../plans/tesseract-quasicrystal-algebra.md).

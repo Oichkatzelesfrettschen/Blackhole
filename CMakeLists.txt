@@ -4076,6 +4076,23 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/algebra_lattice_test.cpp")
+    # GL-free Gray-Morton index, DMZ mask against the strutted tables, box-kite
+    # octahedra, and the Ammann-Beenker window of the tesseract lattice.
+    add_executable(algebra_lattice_test "${PROJECT_SOURCE_DIR}/tests/algebra_lattice_test.cpp")
+    target_include_directories(algebra_lattice_test PRIVATE "${PROJECT_SOURCE_DIR}/src")
+    target_link_libraries(algebra_lattice_test PRIVATE GTest::gtest GTest::gtest_main)
+    target_compile_options(algebra_lattice_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(algebra_lattice_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME algebra_lattice COMMAND algebra_lattice_test)
+    set_tests_properties(algebra_lattice PROPERTIES LABELS "render;unit;tesseract" TIMEOUT 120)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(algebra_lattice PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_label_test.cpp")
     add_executable(tesseract_label_test "${PROJECT_SOURCE_DIR}/tests/tesseract_label_test.cpp")
     target_link_libraries(tesseract_label_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)

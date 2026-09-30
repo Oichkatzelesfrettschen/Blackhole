@@ -1,6 +1,9 @@
 # Tesseract: one Z^4 lattice carrying the 4096-D algebra, its quasicrystal walls, and its zero divisors
 
-Status: design, ahead of implementation. The scene stays labeled SPECULATIVE
+Status: implemented in src/render/tesseract/algebra_lattice.h (CPU twin and
+definitions), shader/include/tesseract_algebra.glsl (mask and walls) and
+shader/tesseract.frag (strands and glyphs); navigation (section 6) is open.
+The scene stays labeled SPECULATIVE
 (Thorne, The Science of Interstellar ch. 29-31): nothing here claims that
 physical space is a quasicrystal or a Cayley-Dickson algebra.
 
@@ -76,8 +79,9 @@ only the phason offset moves. A wall plane built from the rotating F instead
 would, for the near-identity F the scene spends most time in, project two of
 the four e_j to almost zero and draw a square grid with slivers.
 
-Walls occupy the planes the pages used (p4.z = m cell, a sparse hashed subset
-of tiles), inset from the beams. On a wall, a point x in E_par shows:
+Walls hang on the planes p4.z = m cell in a hashed WALL_FRACTION (0.09) of
+the tiles, inset from the beams by WALL_INSET, each showing its own patch of
+the tiling. On a wall, a point x in E_par shows:
 
 - tiling edges pi_par(n) -> pi_par(n + e_j) for accepted n and n + e_j;
 - each edge lit when its single-bit link is a DMZ edge of strut S, warm for
@@ -86,18 +90,19 @@ of tiles), inset from the beams. On a wall, a point x in E_par shows:
 - steps along e_3 that flip bit 11 are the assessor-chord direction and get
   their own color.
 
-Tile lookup: de Bruijn's dual method for the tetragrid: K_j = floor(x .
-e_j^par + gamma_j) names a candidate lattice point; the fragment tests the
-candidate and its grid neighbors for acceptance (octagon test, 8 dot
-products) and draws the edges among the accepted ones. The prototype
-measures cost against a 1.5 ms budget for the wall pass.
+Tile lookup: the fragment lifts x to R^4 at the window center, rounds, and
+tests the 3^4 lattice points about the lift for acceptance (four slab tests
+of the octagon), then draws the unit steps among the accepted points within
+reach of x as edges and the points as dots hued by algebra level.
 
-Phason offset gamma: computed on the CPU in double from the unwrapped eye
-position (drift plus camera placement) relative to an integer origin, and
-uploaded as the small residual; the wrapped eyeSlice would jump by
-pi_perp(v) at every wrap by a lattice vector v, since that projection has no
-period. Flying moves gamma, so tiles flip (phason flips) as the eye travels:
-the walls change while their local rules stay exact.
+Phason offset gamma: pi_perp of a periodic lift of the eye, (P / 2 pi)
+sin(2 pi eye / P) cells in x, y and z for the lattice period P, and the eye's
+w in cells. The wrapped eyeSlice would jump by pi_perp(v) at every wrap by a
+lattice vector v, since that projection has no period; the sine lift is
+continuous across the wrap and near-linear for travel well inside a period.
+Flying moves gamma, so tiles flip (phason flips) as the eye travels: the
+walls change while their local rules stay exact. The lift is chosen, not
+exact: it trades the exact offset for continuity.
 
 Exact: the tiling, the octagon window, self-similarity under 1 + sqrt(2).
 Chosen: wall placement and colors. The 1 + sqrt(2) inflation of the tiling
@@ -108,10 +113,12 @@ stay separate.
 
 Today a beam carries a strand when a hash says so. In this design the beam
 segment between n and n + e_a (a in x, y, z; the w layer from the slice)
-carries a strand exactly when its single-bit link is a DMZ edge of strut S;
-the edge sign sets the helix handedness, and the level of the endpoints sets
-the hue. Endpoints 0 and S, and pairs (lo, lo ^ S) (the blank strut
-opposites), carry none.
+carries a strand exactly when its single-bit link is a DMZ edge of strut S.
+The edge sign picks the strand shell: a +1 link is one wide helix, a -1 link
+a tight triple braid of opposite hand in a cool tint. Endpoints 0 and S, and
+pairs (lo, lo ^ S) (the blank strut opposites), carry none. Each strand is
+clipped to its own segment, and the distance bound evaluates the current and
+the nearer neighbor segment, so no bound reaches zero off a real strand.
 
 DMZ mask: one 16-bit word per index (bit b set when the edge i -> i ^ 2^b is
 DMZ, plus a sign bit per b in a second word), 4096 entries, built on the CPU
@@ -133,7 +140,9 @@ a; its six true vertices a, a ^ S, 2^k, 2^k ^ S, a ^ 2^k, a ^ 2^k ^ S are
 non-local in the lattice when S is large. The scene draws a small emissive
 octahedron glyph at lattice point a (inset from the beam crossing) when a has
 at least one present local octahedron (a, k), its brightness scaled by that
-count (N - 2 = 10 possible) and its four sail faces lit. This is decoration
+count (N - 2 = 10 possible), hued by algebra level, and its four sail faces
+lit. The glyph extends GLYPH_W_HALF = 0.4 cells in w, wider than the 0.25-cell
+w offset of the default slice, so the vertex layer nearest the slice shows. This is decoration
 anchored at a vertex; the text of the scene's help says so.
 
 ## 6. Dynamics
@@ -142,43 +151,52 @@ anchored at a vertex; the text of the scene's help says so.
   index bits and the assessor partners, into the section.
 - Flight (navigation PR): moves the section through the lattice and the
   phason offset of the walls.
-- Strut ride (optional, dwell in seconds): changes S, which rewires which
-  beams carry strands and which wall edges light; sky struts give sparse fans,
-  mandala struts dense webs.
+- Strut ride (default on, dwell in seconds): steps S through the sky-regime
+  struts starting at the first one at or above the Strut S setting (default
+  129), which rewires which beams carry strands and which wall edges light.
+  BLACKHOLE_TESSERACT_STRUT pins S and stops the ride.
 
 ## 7. Acceptance
 
-Reused from the emanation-lattice work, measured with hidden-window captures
-on NVIDIA GL:
+Measured with hidden-window record runs on NVIDIA GL (RTX 4070 Ti), one
+binary run against main's shaders and this design's shaders (the renderer
+loads shaders from the working directory), record frames from 600 (10 s):
 
 - Dark fraction (pixels under 20/255) at record frames 0, 360 and 600 at
   least 85% of main's; guards against the wash the owner rejected.
-- Motion: mean consecutive-frame MAE at 10 s within 20% of main's (0.0223 on
-  the earlier measurement).
+- Motion: mean consecutive-frame MAE over frames 600..605 within 20% of
+  main's under the same command.
 - Long session: LongSessionKeepsTheLatticeLit coverage floor.
-- Frame time: gpu_tesseract_ms at 2560x1440 within 2 ms of the 13.95 ms
-  baseline.
+- Frame time: gpu_tesseract_ms (BLACKHOLE_GPU_TIMING_LOG) over the first
+  frames of the run, before the record loop's readback stalls lift the
+  timings. At 1766x1398 main costs 9.2 ms, main with a strand on every beam
+  12.1 ms, and this design about 19 ms with walls and glyphs on, of which
+  about 4.5 ms is the neighbor-segment pass that keeps strand ends free
+  of false hits. The cost comes from strands switching per segment, which
+  diverges within a warp where main's per-beam hash stays coherent; a
+  per-beam strand interval representation is the candidate to recover it.
 
-Tests:
+Tests (tests/algebra_lattice_test.cpp, tests/tesseract_gl_state_test.cpp):
 
 - Gray-Morton: every unit step has a popcount-1 XOR at the documented bit;
   sub-boxes hold exactly the indices below 2^L.
-- DMZ mask equals dmzValueByClosedForm exhaustively at N = 5..10 and against
-  the closed-form predicate at N = 11 and 12 (the full table build takes 17
-  minutes at N = 12 and stays out of CI).
-- Ammann-Beenker: acceptance window equals the octagon; accepted points near
-  the origin form the known vertex configurations (8-fold star at the
-  origin for gamma = 0); inflation by 1 + sqrt(2) maps accepted points to
-  accepted points under the Z^4 automorphism.
-- Box-kites: for every strut tested, each present line has all 12 edges and
-  6 positive, 6 negative (the crates report's N = 5..8 observations become
-  assertions).
-- Phason offset: continuous across the lattice wrap (no jump when the eye
-  crosses a period boundary).
+- DMZ mask equals the strutted emanation table (createStruttedEt, the full
+  magnitude test) in presence and sign at N = 5..9 for four struts per level.
+- Box-kites: each present line has all 12 edges, 6 positive and 6 negative,
+  at N = 5..8.
+- Ammann-Beenker: the window is the regular octagon (16 hypercube corners
+  inside, 8 on the circumradius, points 1% past a corner rejected); the bases
+  are orthonormal and project e_j to j pi/4 and 3 j pi/4.
+- GL: the uploaded mask texture equals buildAlgebraMask for struts 129 and
+  1025, and render() restores the texture unit 3 binding.
+
+Open: vertex configurations and the 1 + sqrt(2) inflation of the accepted
+set, the mask at N = 10..12, and a CPU twin of the phason lift with a
+continuity test across the wrap.
 
 ## 8. Order of work
 
 1. Shader-only wall prototype, stills to the owner before any C++.
 2. Strip of the page pass lands with the slice-frame and long-session fixes.
-3. Navigation: free-fly and 4D slice-rotation keys.
-4. This structure: Gray-Morton, DMZ mask, strands, walls, box-kite glyphs.
+3. This structure: Gray-Morton, DMZ mask, strands, walls, box-kite glyphs.
+4. Navigation: free-fly and 4D slice-rotation keys.

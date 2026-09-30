@@ -110,7 +110,15 @@ struct TesseractFrameInputs {
   float strandGlow = 1.0f;          ///< Fiber and frame emissive scale.
   float fogDensity = 0.35f;         ///< Aerial-perspective fog into the void.
   int qualityTier = 0; ///< 0 dense, 1 sparse (Mesa llvmpipe and other slow rasterizers).
+  int algebraStrut = 129; ///< Strut S of the 4096-D algebra whose DMZ edges the strands and walls show.
+  bool wallsEnabled = true; ///< Ammann-Beenker walls.
+  bool kitesEnabled = true; ///< Box-kite glyphs at the lattice vertices.
 };
+
+/// Texture unit of the DMZ mask (binding in shader/include/tesseract_algebra.glsl).
+inline constexpr int TESSERACT_ALGEBRA_MASK_UNIT = 3;
+/// Edge of the DMZ mask texture: 64 x 64 texels hold the 4096 indices.
+inline constexpr int TESSERACT_ALGEBRA_MASK_EDGE = 64;
 
 /// Cells after which the strand hashes repeat along x, y, and z of
 /// the 4D lattice; tesseractSliceFrame wraps the eye onto this period.
@@ -189,15 +197,34 @@ public:
    */
   bool isLlvmpipe();
 
+  /// RG16UI DMZ mask of the last rendered strut (algebra_lattice.h), 0 before the first render.
+  [[nodiscard]] gl::GLuint algebraMaskTexture() const { return algebraMask_; }
+  /// Strut the mask holds, 0 before the first render.
+  [[nodiscard]] int algebraMaskStrut() const { return algebraMaskStrut_; }
+
 private:
   void ensureResources();
+  /// Builds and uploads the DMZ mask of @p strut when it differs from the uploaded one.
+  void updateAlgebraMask(int strut);
 
   gl::GLuint program_ = 0;
   gl::GLuint vao_ = 0;
   gl::GLuint fbo_ = 0;
+  gl::GLuint algebraMask_ = 0;
+  int algebraMaskStrut_ = 0;
   bool llvmpipeChecked_ = false;
   bool llvmpipeDetected_ = false;
 };
+
+/**
+ * @brief Strut of the algebra for this frame.
+ *
+ * @p manualStrut clamped to [1, 2047]; with the ride on, the sky-regime
+ * struts of the level-12 algebra (one per regime, ascending;
+ * emanation_table.h skyRegimeStruts) stepped every @p dwellSeconds from the
+ * first one at or above it, wrapped.
+ */
+int tesseractAlgebraStrut(bool ride, double clockSeconds, float dwellSeconds, int manualStrut);
 
 /// Near clip plane of the tesseract view, in world units from the eye.
 inline constexpr float TESSERACT_NEAR_PLANE = 0.05f;

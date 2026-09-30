@@ -59,6 +59,10 @@ uniform int pulseEnabled;
 uniform float strandGlow;
 uniform float fogDensity;
 uniform int qualityTier; // 0 dense (real GPUs), 1 sparse (Mesa llvmpipe and other slow rasterizers).
+uniform int wallsEnabled; // Ammann-Beenker walls (tesseract_algebra.glsl).
+uniform int kitesEnabled; // Box-kite glyphs at the lattice vertices.
+
+#include "include/tesseract_algebra.glsl"
 
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
@@ -94,8 +98,17 @@ const float TIER_BRIGHTNESS[3] = float[3](0.08, 0.22, 1.30);
 // Beyond this transverse distance from a beam axis the strand shells are
 // replaced by their conservative lower bound.
 const float STRAND_CULL_FRACTION = 0.26;
-// Fraction of beams that carry strand shells.
-const float STRAND_BEAM_FRACTION = 0.45;
+// Box-kite glyph: octahedron at a lattice vertex, radius from GLYPH_RADIUS_MIN
+// to GLYPH_RADIUS_MAX cells by the count of local box-kites, over w within
+// GLYPH_W_HALF cells of the vertex's w layer.
+const float GLYPH_RADIUS_MIN = 0.024;
+const float GLYPH_RADIUS_MAX = 0.045;
+// The slice sits TESSERACT_SLICE_W_CELLS (0.25) off the w = 0 layer, so the
+// w extent must exceed it for the glyphs of that layer to show.
+const float GLYPH_W_HALF = 0.4;
+const float GLYPH_SAIL_GAIN = 0.9;
+const float GLYPH_FACE_GAIN = 0.14;
+const vec3 STRAND_COOL_TINT = vec3(0.62, 0.78, 1.0);
 // The w-phase rate of the helices (radians per cellSize of p4.w).
 const float STRAND_W_TWIST = 0.6;
 
@@ -113,6 +126,10 @@ const float GRAZE_ACCEPT_FOOTPRINTS = 4.0;
 // field evaluation.
 float gTierBrightness = 1.0;
 float gTierRadius = 0.006;
+// Edge sign (+1 or -1) of the nearest strand's DMZ link, and the basis index
+// of the nearest box-kite glyph's vertex.
+float gStrandSign = 1.0;
+int gKiteIndex = 0;
 
 // Mirrors litMomentEmission in src/render/tesseract/tesseract_geometry.cpp.
 float gaussian(float x, float center, float width) {
@@ -135,62 +152,137 @@ vec2 hash21(vec2 p) {
   return vec2(float(h & 0xFFFFu), float(pcgHash(h) & 0xFFFFu)) / 65535.0;
 }
 
-// One beam family: transverse 4D coordinates @p ct, axial coordinate @p s,
-// and the world-frame w coordinate @p w. Updates the nearest beam distance,
-// the nearest strand distance, and the nearest strand's tier.
-void beamFamily(vec2 ct, float s, float w, float family, inout float dBeam, inout float dStrand) {
+// Edge sign (+1 or -1) of the link from lattice segment @p segment along axis
+// @p axis at transverse cell @p nt and w layer @p kw, or 0 when the link is no
+// DMZ edge of the strut.
+float linkSign(int axis, int segment, ivec2 nt, int kw) {
+  ivec4 lattice = axis == 0 ? ivec4(segment, nt.x, nt.y, kw)
+                            : (axis == 1 ? ivec4(nt.y, segment, nt.x, kw) : ivec4(nt.x, nt.y, segment, kw));
+  uint bit = uint(algebraStepBit(segment, axis));
+  uvec2 m = algebraMaskAt(algebraIndex(lattice));
+  if (((m.r >> bit) & 1u) == 0u) {
+    return 0.0;
+  }
+  return ((m.g >> bit) & 1u) != 0u ? 1.0 : -1.0;
+}
+
+// Distance to the strand of one DMZ segment: the edge sign picks the shell (a
+// +1 link is one wide helix, a -1 link a tight triple braid of the opposite
+// hand), and @p outside is the axial distance outside the segment, since each
+// strand is clipped to its own segment.
+void segmentStrand(vec2 t, float ang, float s, float w, int axis, vec2 n, int segment, float edgeSign, float outside,
+                   inout float dStrand) {
+  int shell = edgeSign > 0.0 ? 1 : 0;
+  vec2 segmentId = latticeCellId(n) + vec2(0.0, float(segment) * 0.37);
+  int count = SHELL_STRANDS[shell];
+  float pitch = SHELL_PITCH_FRACTION[shell] * cellSize;
+  float phi = (SHELL_DIRECTION[shell] * TAU * s / pitch) + (STRAND_W_TWIST * w / cellSize) + (float(shell) * 1.9);
+  float sector = round((ang - phi) * float(count) / TAU);
+  float centerAngle = phi + (TAU * sector / float(count));
+  vec2 c = SHELL_RADIUS_FRACTION[shell] * cellSize * vec2(cos(centerAngle), sin(centerAngle));
+  float index = mod(sector, float(count));
+  vec2 h = hash21((segmentId * 1.7) + vec2((float(axis) * 3.1) + (float(shell) * 11.0), index * 5.3));
+  int tier = h.x < 0.5 ? 0 : (h.x < 0.8 ? 1 : 2);
+  float d = max(length(t - c) - (TIER_RADIUS_FRACTION[tier] * cellSize), outside);
+  if (d < dStrand) {
+    dStrand = d;
+    gTierBrightness = TIER_BRIGHTNESS[tier];
+    gTierRadius = TIER_RADIUS_FRACTION[tier] * cellSize;
+    gStrandSign = edgeSign;
+  }
+}
+
+// One beam family along lattice axis @p axis (0 x, 1 y, 2 z): transverse 4D
+// coordinates @p ct, axial coordinate @p s, and the world-frame w coordinate
+// @p w. The beam segment between lattice points k and k + 1 along the axis is
+// one single-bit link of the algebra; it carries a strand exactly when that
+// link is a DMZ (zero-divisor) edge of the strut. The segment holding s and
+// its nearer neighbor are evaluated; segments farther along the axis are at
+// least max(f, 1 - f) cells away. Updates the nearest beam distance, the
+// nearest strand distance, and the nearest strand's tier and sign.
+void beamFamily(vec2 ct, float s, float w, int axis, inout float dBeam, inout float dStrand) {
   vec2 n = round(ct / cellSize);
   vec2 t = ct - (n * cellSize);
   float rad = length(t);
   dBeam = min(dBeam, rad - (BEAM_RADIUS_FRACTION * cellSize));
   float outerRadius = SHELL_RADIUS_FRACTION[1] * cellSize;
+  float shellBound = rad - outerRadius - (TIER_RADIUS_FRACTION[2] * cellSize);
   if (rad > STRAND_CULL_FRACTION * cellSize) {
-    dStrand = min(dStrand, rad - outerRadius - (TIER_RADIUS_FRACTION[2] * cellSize));
+    dStrand = min(dStrand, shellBound);
     return;
   }
-  // Only some beams carry strands: bare beams keep the frame void-dominated.
-  if (hash21((latticeCellId(n) * 2.3) + vec2(family * 5.7, 1.3)).y > STRAND_BEAM_FRACTION) {
+  float axial = s / cellSize;
+  int k = int(floor(axial));
+  float f = axial - float(k);
+  dStrand = min(dStrand, max(shellBound, max(f, 1.0 - f) * cellSize));
+  ivec2 nt = ivec2(n);
+  int kw = int(round(w / cellSize));
+  int neighbor = f < 0.5 ? k - 1 : k + 1;
+  float neighborOutside = min(f, 1.0 - f) * cellSize;
+  // Mask bits first, so a beam whose nearby links are no DMZ edges costs two
+  // texel fetches and no trigonometry.
+  float signHere = linkSign(axis, k, nt, kw);
+  float signNeighbor = max(shellBound, neighborOutside) < dStrand ? linkSign(axis, neighbor, nt, kw) : 0.0;
+  if (signHere == 0.0 && signNeighbor == 0.0) {
     return;
   }
   float ang = atan(t.y, t.x);
-  for (int shell = 0; shell < 2; ++shell) {
-    int count = SHELL_STRANDS[shell];
-    float pitch = SHELL_PITCH_FRACTION[shell] * cellSize;
-    float phi = (SHELL_DIRECTION[shell] * TAU * s / pitch) +
-                (STRAND_W_TWIST * w / cellSize) + (float(shell) * 1.9);
-    float sector = round((ang - phi) * float(count) / TAU);
-    float centerAngle = phi + (TAU * sector / float(count));
-    vec2 c = SHELL_RADIUS_FRACTION[shell] * cellSize * vec2(cos(centerAngle), sin(centerAngle));
-    float index = mod(sector, float(count));
-    vec2 h = hash21((latticeCellId(n) * 1.7) + vec2((family * 3.1) + (float(shell) * 11.0), index * 5.3));
-    int tier = h.x < 0.5 ? 0 : (h.x < 0.8 ? 1 : 2);
-    float d = length(t - c) - (TIER_RADIUS_FRACTION[tier] * cellSize);
-    if (d < dStrand) {
-      dStrand = d;
-      gTierBrightness = TIER_BRIGHTNESS[tier];
-      gTierRadius = TIER_RADIUS_FRACTION[tier] * cellSize;
-    }
+  if (signHere != 0.0 && shellBound < dStrand) {
+    segmentStrand(t, ang, s, w, axis, n, k, signHere, 0.0, dStrand);
+  }
+  if (signNeighbor != 0.0 && max(shellBound, neighborOutside) < dStrand) {
+    segmentStrand(t, ang, s, w, axis, n, neighbor, signNeighbor, neighborOutside, dStrand);
   }
 }
 
-// Beam and strand distances at eye-relative point @p p; @p p4 returns the 4D point.
-void fieldDistances(vec3 p, out float dBeam, out float dStrand, out vec4 p4) {
+// Box-kite glyph distance at 4D point @p p4: an octahedron at the nearest
+// lattice vertex, sized by the number of box-kites the vertex anchors (the set
+// bits of its DMZ mask), limited to GLYPH_W_HALF cells in w. The six true
+// vertices of each box-kite are non-local in the lattice; the glyph marks the
+// anchor. Any other vertex's glyph is at least cell - max|q| - radius away.
+float kiteDistance(vec4 p4) {
+  vec4 v = round(p4 / cellSize);
+  vec4 q = p4 - (v * cellSize);
+  vec4 aq = abs(q);
+  float rMax = GLYPH_RADIUS_MAX * cellSize;
+  float others = cellSize - max(max(aq.x, aq.y), max(aq.z, aq.w)) - rMax;
+  if (kitesEnabled == 0) {
+    return 1e9;
+  }
+  int i = algebraIndex(ivec4(v));
+  int kites = bitCount(algebraMaskAt(i).r);
+  if (kites == 0) {
+    return others;
+  }
+  gKiteIndex = i;
+  float fraction = float(kites) / float(ALGEBRA_BOX_KITES_PER_VERTEX);
+  float radius = mix(GLYPH_RADIUS_MIN, GLYPH_RADIUS_MAX, clamp(fraction, 0.0, 1.0)) * cellSize;
+  float octa = (aq.x + aq.y + aq.z - radius) * 0.57735027;
+  return min(max(octa, aq.w - (GLYPH_W_HALF * cellSize)), others);
+}
+
+// Beam, strand, and box-kite distances at eye-relative point @p p; @p p4
+// returns the 4D point.
+void fieldDistances(vec3 p, out float dBeam, out float dStrand, out float dKite, out vec4 p4) {
   p4 = slicePoint(p);
   dBeam = 1e9;
   dStrand = 1e9;
   gTierBrightness = TIER_BRIGHTNESS[1];
   gTierRadius = TIER_RADIUS_FRACTION[1] * cellSize;
-  beamFamily(p4.yz, p4.x, p4.w, 0.0, dBeam, dStrand);
-  beamFamily(p4.zx, p4.y, p4.w, 1.0, dBeam, dStrand);
-  beamFamily(p4.xy, p4.z, p4.w, 2.0, dBeam, dStrand);
+  gStrandSign = 1.0;
+  beamFamily(p4.yz, p4.x, p4.w, 0, dBeam, dStrand);
+  beamFamily(p4.zx, p4.y, p4.w, 1, dBeam, dStrand);
+  beamFamily(p4.xy, p4.z, p4.w, 2, dBeam, dStrand);
+  dKite = kiteDistance(p4);
 }
 
 float mapDistance(vec3 p) {
   float dBeam;
   float dStrand;
+  float dKite;
   vec4 p4;
-  fieldDistances(p, dBeam, dStrand, p4);
-  return min(dBeam, dStrand);
+  fieldDistances(p, dBeam, dStrand, dKite, p4);
+  return min(min(dBeam, dStrand), dKite);
 }
 
 vec3 estimateNormal(vec3 p, float e) {
@@ -221,9 +313,10 @@ float raymarch(vec3 rayOrigin, vec3 rayDir, float fogDistance, out bool hit, out
     vec3 p = rayOrigin + (rayDir * travelled);
     float dBeam;
     float dStrand;
+    float dKite;
     vec4 p4;
-    fieldDistances(p, dBeam, dStrand, p4);
-    d = min(dBeam, dStrand);
+    fieldDistances(p, dBeam, dStrand, dKite, p4);
+    d = min(min(dBeam, dStrand), dKite);
     eps = max(surfaceEps, travelled * pixelAngle);
     if (abs(d) < eps) {
       hit = true;
@@ -251,17 +344,28 @@ float raymarch(vec3 rayOrigin, vec3 rayDir, float fogDistance, out bool hit, out
 vec3 shadeHit(vec3 p, vec3 rayDir, float footprint) {
   float dBeam;
   float dStrand;
+  float dKite;
   vec4 p4;
-  fieldDistances(p, dBeam, dStrand, p4);
-  bool strand = dStrand < dBeam;
+  fieldDistances(p, dBeam, dStrand, dKite, p4);
+  bool kite = dKite < min(dBeam, dStrand);
+  bool strand = !kite && dStrand < dBeam;
   float tierBrightness = gTierBrightness;
   float tierRadius = gTierRadius;
+  float strandSign = gStrandSign;
+  int kiteIndex = gKiteIndex;
   vec3 normal = estimateNormal(p, max(0.002 * cellSize, 0.5 * footprint));
   float facing = clamp(dot(normal, -rayDir), 0.0, 1.0);
   float cue = wDim(p4.w);
   vec3 radiance;
   float radius;
-  if (strand) {
+  if (kite) {
+    // Emissive octahedron: the four faces with an even number of negative
+    // coordinates (the sails) glow, the other four stay dim.
+    vec4 q = p4 - (round(p4 / cellSize) * cellSize);
+    bool sail = (q.x * q.y * q.z) > 0.0;
+    radiance = algebraLevelColor(kiteIndex) * (sail ? GLYPH_SAIL_GAIN : GLYPH_FACE_GAIN);
+    radius = GLYPH_RADIUS_MAX * cellSize;
+  } else if (strand) {
     float depth = eyeDepth + p.z;
     float period = max(corridorPeriod, 1e-3);
     float depthPattern = mod(depth, period);
@@ -269,7 +373,9 @@ vec3 shadeHit(vec3 p, vec3 rayDir, float footprint) {
     float pulse = pulseEnabled != 0 ? gaussian(depthPattern, mod(pulseDepth, period), pulseWidth) : 0.0;
     // Round fiber: brightest on the axis, falling off across the width.
     float core = pow(facing, 1.5);
-    radiance = mix(STRAND_HALO_COLOR, STRAND_CORE_COLOR, core) * (0.25 + (0.75 * core)) *
+    // Negative-sign links run the opposite helix and take a cooler tint.
+    vec3 tint = strandSign > 0.0 ? vec3(1.0) : STRAND_COOL_TINT;
+    radiance = mix(STRAND_HALO_COLOR, STRAND_CORE_COLOR, core) * tint * (0.25 + (0.75 * core)) *
                tierBrightness * (1.0 + lit + (1.8 * pulse));
     radius = tierRadius;
   } else {
@@ -284,6 +390,7 @@ vec3 shadeHit(vec3 p, vec3 rayDir, float footprint) {
   return radiance * strandGlow * cue * coverage;
 }
 
+
 void main() {
   vec3 rayDir = bhRayDir(gl_FragCoord.xy, resolution, fovScale, cameraBasis);
   float fogDistance = fogDistanceFor(fogDensity);
@@ -296,6 +403,9 @@ void main() {
   vec3 shaded = hit ? shadeHit(rayDir * travelled, rayDir, footprint) : vec3(0.0);
   float extinction = fogTransmittance(travelled, fogDistance);
   vec3 color = (shaded * extinction) + (halo * strandGlow) + (VOID_COLOR * (1.0 - extinction));
+  if (wallsEnabled != 0) {
+    color += quasicrystalWalls(rayDir, hit ? travelled : MAX_MARCH_CELLS * cellSize, fogDistance) * strandGlow;
+  }
 
   fragColor = vec4(color, 1.0);
 }

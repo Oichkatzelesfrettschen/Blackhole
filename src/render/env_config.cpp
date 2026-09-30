@@ -24,6 +24,7 @@
 #include "render/gl_capabilities.h"
 #include "render/observer_sky_view.h"
 #include "render/render_state.h"
+#include "render/tesseract/algebra_lattice.h"
 #include "tools/compare_harness.h" // K_COMPARE_PRESETS
 
 #if BLACKHOLE_HAS_CUDA
@@ -288,6 +289,26 @@ void applySceneEnvironment(RenderState &rs, std::string_view sceneName) {
   }
   rs.scene.mode = startupSceneMode(sceneName);
   rs.scene.envApplied = true;
+  // BLACKHOLE_TESSERACT_STRUT=S pins the algebra strut and stops the ride;
+  // BLACKHOLE_TESSERACT_WALLS=0 and BLACKHOLE_TESSERACT_KITES=0 hide the walls
+  // and the box-kite glyphs.
+  if (const char *strutEnv = std::getenv("BLACKHOLE_TESSERACT_STRUT")) {
+    char *end = nullptr;
+    const long strut = std::strtol(strutEnv, &end, 10);
+    if (end != strutEnv && *end == '\0' && strut >= 1 && strut <= tesseract::ALGEBRA_MAX_STRUT) {
+      rs.tesseract.algebraStrut = static_cast<int>(strut);
+      rs.tesseract.algebraRide = false;
+    } else {
+      std::cerr << "BLACKHOLE_TESSERACT_STRUT='" << strutEnv << "' is not an integer in [1, "
+                << tesseract::ALGEBRA_MAX_STRUT << "]; ignored\n";
+    }
+  }
+  if (const char *wallsEnv = std::getenv("BLACKHOLE_TESSERACT_WALLS")) {
+    rs.tesseract.wallsEnabled = std::string_view(wallsEnv) != "0";
+  }
+  if (const char *kitesEnv = std::getenv("BLACKHOLE_TESSERACT_KITES")) {
+    rs.tesseract.kitesEnabled = std::string_view(kitesEnv) != "0";
+  }
 }
 
 /** @brief A finite double from an environment variable, or nothing. */

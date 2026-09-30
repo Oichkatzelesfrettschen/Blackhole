@@ -14,6 +14,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -31,6 +32,7 @@
 
 #include "hud_overlay.h"
 #include "render.h"
+#include "render/tesseract/algebra_lattice.h"
 #include "render/tesseract/tesseract_renderer.h"
 #include "shader.h"
 
@@ -188,6 +190,9 @@ TEST_F(TesseractGlStateTest, TesseractPassRestoresEveryBindingItTouches) {
   glBindVertexArray(vao);
   glViewport(1, 2, 3, 4);
   glEnable(GL_DEPTH_TEST);
+  // The pass binds the DMZ mask on its own unit.
+  constexpr auto maskUnit = static_cast<GLuint>(blackhole::TESSERACT_ALGEBRA_MASK_UNIT);
+  glBindTextureUnit(maskUnit, sentinelTexture);
 
   blackhole::TesseractRenderer renderer;
   blackhole::TesseractFrameInputs inputs;
@@ -197,6 +202,9 @@ TEST_F(TesseractGlStateTest, TesseractPassRestoresEveryBindingItTouches) {
   inputs.rotation = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
   renderer.render(inputs);
 
+  glActiveTexture(static_cast<GLenum>(static_cast<GLuint>(GL_TEXTURE0) + maskUnit));
+  EXPECT_EQ(integerState(GL_TEXTURE_BINDING_2D), static_cast<GLint>(sentinelTexture));
+  glActiveTexture(GL_TEXTURE0);
   EXPECT_EQ(glIsEnabled(GL_BLEND), GL_FALSE);
   EXPECT_EQ(glIsEnabled(GL_DEPTH_TEST), GL_TRUE);
   EXPECT_EQ(integerState(GL_DRAW_FRAMEBUFFER_BINDING), static_cast<GLint>(drawFbo));
@@ -216,6 +224,39 @@ TEST_F(TesseractGlStateTest, TesseractPassRestoresEveryBindingItTouches) {
   glDeleteVertexArrays(1, &vao);
   glDeleteFramebuffers(1, &drawFbo);
   glDeleteTextures(1, &sentinelTexture);
+  glDeleteTextures(1, &target);
+}
+
+// The uploaded DMZ mask equals the CPU mask texel for texel (present bits in
+// red, positive bits in green), and a strut change re-uploads it.
+TEST_F(TesseractGlStateTest, AlgebraMaskTextureMatchesTheCpuMask) {
+  const GLuint target = createColorTexture32f(TARGET_SIZE, TARGET_SIZE);
+  blackhole::TesseractRenderer renderer;
+  blackhole::TesseractFrameInputs inputs;
+  inputs.targetTexture = target;
+  inputs.width = TARGET_SIZE;
+  inputs.height = TARGET_SIZE;
+  inputs.rotation = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+  for (const int strut : {129, 1025}) {
+    inputs.algebraStrut = strut;
+    renderer.render(inputs);
+    ASSERT_EQ(renderer.algebraMaskStrut(), strut);
+    const blackhole::tesseract::AlgebraMask mask =
+        blackhole::tesseract::buildAlgebraMask(blackhole::tesseract::TESSERACT_ALGEBRA_LEVEL, strut);
+    std::vector<std::uint16_t> texels(2 * mask.present.size());
+    glPixelStorei(GL_PACK_ALIGNMENT, 2);
+    glGetTextureImage(renderer.algebraMaskTexture(), 0, GL_RG_INTEGER, GL_UNSIGNED_SHORT,
+                      static_cast<GLsizei>(texels.size() * sizeof(std::uint16_t)), texels.data());
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    std::size_t mismatches = 0;
+    for (std::size_t i = 0; i < mask.present.size(); ++i) {
+      mismatches += texels.at(2 * i) != mask.present.at(i) ? 1U : 0U;
+      mismatches += texels.at((2 * i) + 1) != mask.positive.at(i) ? 1U : 0U;
+    }
+    EXPECT_EQ(mismatches, 0U) << "strut " << strut;
+  }
+  EXPECT_EQ(glGetError(), GL_NO_ERROR);
+  renderer.shutdown();
   glDeleteTextures(1, &target);
 }
 
