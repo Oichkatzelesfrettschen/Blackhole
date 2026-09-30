@@ -41,6 +41,12 @@ enum class KeyAction {
   DecreaseFontSize,
   IncreaseTimeScale,
   DecreaseTimeScale,
+  Rotate4DXWPos,
+  Rotate4DXWNeg,
+  Rotate4DYWPos,
+  Rotate4DYWNeg,
+  Rotate4DZWPos,
+  Rotate4DZWNeg,
   COUNT
 };
 
@@ -185,6 +191,27 @@ public:
   [[nodiscard]] float getMouseY() const { return mouseY_; }
   [[nodiscard]] float getMouseDeltaX() const { return mouseDeltaX_; }
   [[nodiscard]] float getMouseDeltaY() const { return mouseDeltaY_; }
+  /// Mouse delta this frame after sensitivity and inversion (getMouseDeltaX).
+  [[nodiscard]] float mouseDeltaX() const { return mouseDeltaX_; }
+  [[nodiscard]] float mouseDeltaY() const { return mouseDeltaY_; }
+
+  /**
+   * @brief Whether the key bound to @p action is active: held, or toggled on
+   *        under hold-to-toggle (the test updateCamera applies).
+   *
+   * The 4D rotation actions stay hold-to-rotate in toggle mode.
+   */
+  [[nodiscard]] bool isActionActive(KeyAction action) const;
+
+  /**
+   * @brief Enable or disable the orbit camera.
+   *
+   * While disabled, update leaves camera() untouched: keyboard, mouse, scroll,
+   * and gamepad orbit input all pass. Scenes that fly their own camera
+   * disable it and read the input through isActionActive and mouseDelta*.
+   */
+  void setOrbitCameraEnabled(bool enabled) { orbitCameraEnabled_ = enabled; }
+  [[nodiscard]] bool orbitCameraEnabled() const { return orbitCameraEnabled_; }
   [[nodiscard]] float getScrollDelta() const { return scrollDelta_; }
 
   /**
@@ -452,6 +479,7 @@ private:
   float mouseY_ = 0.0f;
   float prevMouseX_ = 0.0f;
   float prevMouseY_ = 0.0f;
+  bool orbitCameraEnabled_ = true;
   float mouseDeltaX_ = 0.0f;
   float mouseDeltaY_ = 0.0f;
   float scrollDelta_ = 0.0f;

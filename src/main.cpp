@@ -548,6 +548,38 @@ std::array<ui::CampaignBackdrop, 5> loadCampaignBackdrops(GLFWwindow *window) {
   return campaignBackdrops;
 }
 
+/// Interactive tesseract frames fly a free camera; recordings and one-shot
+/// exports keep the orbit camera path.
+bool tesseractFlightActive(const RenderState &rs, const platform::CliOptions &cli) {
+  return rs.scene.mode == RenderState::SceneMode::Tesseract && cli.recordFramesDir.empty() &&
+         cli.exportFramePath.empty() && cli.exportRawFramePath.empty();
+}
+
+/// Navigation input of one interactive tesseract frame: WASD/QE flight, the
+/// six 4D rotation keys, and right-drag look, each yielding to ImGui capture.
+blackhole::tesseract::NavigationInput gatherTesseractNavigation(const InputManager &input) {
+  blackhole::tesseract::NavigationInput nav;
+  const ImGuiIO &io = ImGui::GetIO();
+  if (!io.WantCaptureKeyboard) {
+    const auto axis = [&input](KeyAction positive, KeyAction negative) {
+      return (input.isActionActive(positive) ? 1.0 : 0.0) -
+             (input.isActionActive(negative) ? 1.0 : 0.0);
+    };
+    nav.forward = axis(KeyAction::CameraMoveForward, KeyAction::CameraMoveBackward);
+    nav.right = axis(KeyAction::CameraMoveRight, KeyAction::CameraMoveLeft);
+    nav.up = axis(KeyAction::CameraMoveUp, KeyAction::CameraMoveDown);
+    nav.wRate = {axis(KeyAction::Rotate4DXWPos, KeyAction::Rotate4DXWNeg),
+                 axis(KeyAction::Rotate4DYWPos, KeyAction::Rotate4DYWNeg),
+                 axis(KeyAction::Rotate4DZWPos, KeyAction::Rotate4DZWNeg)};
+  }
+  if (!io.WantCaptureMouse && input.isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
+    constexpr double DEGREES_PER_PIXEL = 0.3;
+    nav.lookYawDeg = -static_cast<double>(input.mouseDeltaX()) * DEGREES_PER_PIXEL;
+    nav.lookPitchDeg = -static_cast<double>(input.mouseDeltaY()) * DEGREES_PER_PIXEL;
+  }
+  return nav;
+}
+
 /**
  * @brief Run InputManager::update for the active scene.
  *
@@ -561,9 +593,13 @@ void updateInput(RenderState &rs, const platform::CliOptions &cli, InputManager 
                  float deltaTime) {
   const bool tesseractActive = rs.scene.mode == RenderState::SceneMode::Tesseract;
   input.setZoomRedirect(tesseractActive);
+  input.setOrbitCameraEnabled(!tesseractFlightActive(rs, cli));
   input.update(deltaTime);
   const float zoomDelta = input.takeZoomDelta();
   const bool cameraReset = input.takeCameraReset();
+  if (cameraReset && tesseractActive) {
+    blackhole::resetTesseractView(rs);
+  }
   if (cameraReset || (tesseractActive && cli.recordFramesDir.empty())) {
     rs.tesseract.viewDistance =
         tesseractViewDistanceAfterInput(rs.tesseract.viewDistance, zoomDelta, cameraReset);
@@ -1330,8 +1366,15 @@ BlackholeFrameResult renderSceneFrame(RenderState &rs, const platform::CliOption
     }
     // Interactive frames step by the effective delta, which pause and the
     // time scale govern as they do the black-hole orbit clock.
+    // An interactive frame flies the free camera by the raw frame delta, so
+    // flight works while paused.
+    std::optional<blackhole::TesseractFlight> flight;
+    if (tesseractFlightActive(rs, cli)) {
+      flight = blackhole::TesseractFlight{.input = gatherTesseractNavigation(input),
+                                          .deltaSeconds = deltaTime};
+    }
     renderTesseractScene(rs, frameCamera.basis, frameCamera.focusDirection,
-                         input.getEffectiveDeltaTime(deltaTime), record);
+                         input.getEffectiveDeltaTime(deltaTime), record, flight);
     if (rs.timing.gpuTimers.initialized) {
       rs.timing.gpuTimers.tesseract.end();
     }

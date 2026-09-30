@@ -4093,6 +4093,22 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_navigation_test.cpp")
+    # Free-fly basis, 4D plane rotation, navigation stepping, and the user
+    # rotation of the slice frame.
+    add_executable(tesseract_navigation_test "${PROJECT_SOURCE_DIR}/tests/tesseract_navigation_test.cpp")
+    target_link_libraries(tesseract_navigation_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
+    target_compile_options(tesseract_navigation_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(tesseract_navigation_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME tesseract_navigation COMMAND tesseract_navigation_test)
+    set_tests_properties(tesseract_navigation PROPERTIES LABELS "render;unit;tesseract" TIMEOUT 120)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(tesseract_navigation PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_label_test.cpp")
     add_executable(tesseract_label_test "${PROJECT_SOURCE_DIR}/tests/tesseract_label_test.cpp")
     target_link_libraries(tesseract_label_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
