@@ -376,16 +376,33 @@ void configureParallelShaderCompile() {
   std::cout << "Parallel shader compile enabled (" << threads << " threads).\n";
 }
 
+/**
+ * @brief Whether the window opens hidden and unfocused.
+ *
+ * A capture run (@p captureRun) writes files rather than hosting a session, so
+ * its window stays off the user's desktop while rendering on the same GL
+ * device. BLACKHOLE_WINDOW_HIDDEN=1 hides any run; =0 shows a capture run.
+ */
+bool windowStartsHidden(bool captureRun) {
+  const char *hiddenWindowEnv = std::getenv("BLACKHOLE_WINDOW_HIDDEN");
+  if (hiddenWindowEnv != nullptr && std::string_view(hiddenWindowEnv) == "1") {
+    return true;
+  }
+  if (hiddenWindowEnv != nullptr && std::string_view(hiddenWindowEnv) == "0") {
+    return false;
+  }
+  return captureRun;
+}
+
 // Initialize GLFW and create window
-GLFWwindow *initializeWindow(int width, int height) {
+GLFWwindow *initializeWindow(int width, int height, bool hidden) {
   glfwSetErrorCallback(glfwErrorCallback);
   if (glfwInit() == 0) {
     return nullptr;
   }
 
   glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
-  const char *hiddenWindowEnv = std::getenv("BLACKHOLE_WINDOW_HIDDEN");
-  if (hiddenWindowEnv != nullptr && std::string(hiddenWindowEnv) == "1") {
+  if (hidden) {
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     glfwWindowHint(GLFW_FOCUSED, GLFW_FALSE);
 #if GLFW_VERSION_MAJOR > 3 || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 3)
@@ -1722,6 +1739,10 @@ int main(int argc, char **argv) {
       return 2;
     }
     const bool workspaceCapture = !cli.workspaceScreenshotPath.empty();
+    // A capture run renders into files: ImGui neither loads nor saves the
+    // user's imgui.ini, so it lays out the default workspace.
+    const bool captureRun = workspaceCapture || !cli.recordFramesDir.empty() ||
+                            !cli.exportFramePath.empty() || !cli.exportRawFramePath.empty();
     if (!workspaceCaptureOptionsValid(cli)) {
       (void)std::fprintf(stderr, "Workspace screenshot requires --workspace and --window-size "
                                  "and cannot combine with scene exports\n");
@@ -1761,7 +1782,8 @@ int main(int argc, char **argv) {
     // Initialize window and OpenGL context
     GLFWwindow *window = initializeWindow(
         cli.exportWidth > 0 ? cli.exportWidth : settings.windowWidth,
-        cli.exportHeight > 0 ? cli.exportHeight : settings.windowHeight);
+        cli.exportHeight > 0 ? cli.exportHeight : settings.windowHeight,
+        windowStartsHidden(captureRun));
     if (window == nullptr) {
       return 1;
     }
@@ -1789,8 +1811,10 @@ int main(int argc, char **argv) {
 
     // Initialize ImGui
     initializeImGui(window);
-    if (workspaceCapture) {
+    if (captureRun) {
       ImGui::GetIO().IniFilename = nullptr;
+    }
+    if (workspaceCapture) {
       ImGui::GetIO().FontGlobalScale = cli.uiScale;
       ImGui::GetStyle().ScaleAllSizes(cli.uiScale);
     }
@@ -1806,7 +1830,7 @@ int main(int argc, char **argv) {
     if (workspaceCapture) {
       campaignUi.windowsOpen = false;
     }
-    initializeWorkspaceLayout(settings, campaignUi, rs, workspaceCapture);
+    initializeWorkspaceLayout(settings, campaignUi, rs, captureRun);
     // Selectable NASA nebula backdrops for the strategic map. Each entry's
     // texture is 0 when its asset is absent, in which case the map draws its
     // procedural starfield for that choice. Loaded once; the Campaign panel
