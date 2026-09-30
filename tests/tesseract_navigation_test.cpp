@@ -239,6 +239,28 @@ TEST(TesseractNavigation, WAnglesWrapIntoHalfOpenInterval) {
   EXPECT_NEAR(exact.wAngles[0], PI, TIGHT);
 }
 
+// Yaw wraps into (-180, 180] however far the look turns, and the wrapped
+// pose keeps the basis of the unwrapped one.
+TEST(TesseractNavigation, YawWrapsIntoHalfOpenInterval) {
+  NavigationState state;
+  NavigationInput look;
+  look.lookYawDeg = 50.0;
+  for (int i = 0; i < 40; ++i) {
+    advanceNavigation(state, look, 0.0, 0.0, 0.0);
+    EXPECT_GT(state.yawDeg, -180.0);
+    EXPECT_LE(state.yawDeg, 180.0);
+  }
+  // 40 * 50 = 2000 degrees = 5 turns + 200 degrees, which wraps to -160.
+  EXPECT_NEAR(state.yawDeg, -160.0, 1e-9);
+  const glm::dmat3 wrapped = navigationBasis(state.yawDeg, 0.0);
+  const glm::dmat3 unwrapped = navigationBasis(2000.0, 0.0);
+  for (int c = 0; c < 3; ++c) {
+    for (int r = 0; r < 3; ++r) {
+      EXPECT_NEAR(wrapped[c][r], unwrapped[c][r], 1e-9);
+    }
+  }
+}
+
 TEST(TesseractNavigation, PitchClampsAtEightyNine) {
   NavigationState state;
   NavigationInput input;

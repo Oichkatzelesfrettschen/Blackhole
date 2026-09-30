@@ -67,14 +67,18 @@ inline glm::dmat3 navigationBasis(double yawDeg, double pitchDeg) {
 /**
  * @brief Advance @p state by @p input over @p dtSeconds.
  *
- * Yaw and pitch add the look deltas (pitch clamped to +-NAVIGATION_MAX_PITCH_DEG);
+ * Yaw adds its look delta and wraps into (-180, 180]; pitch adds its delta,
+ * clamped to +-NAVIGATION_MAX_PITCH_DEG;
  * the offset moves along the basis of the updated look at @p moveSpeed world
  * units per second; each w angle advances by wRate * wTurnRate * dt radians
  * and wraps into (-pi, pi].
  */
 inline void advanceNavigation(NavigationState &state, const NavigationInput &input,
                               double dtSeconds, double moveSpeed, double wTurnRate) {
-  state.yawDeg += input.lookYawDeg;
+  state.yawDeg = std::remainder(state.yawDeg + input.lookYawDeg, 360.0);
+  if (state.yawDeg <= -180.0) {
+    state.yawDeg += 360.0;
+  }
   state.pitchDeg = std::clamp(state.pitchDeg + input.lookPitchDeg, -NAVIGATION_MAX_PITCH_DEG,
                               NAVIGATION_MAX_PITCH_DEG);
   const glm::dmat3 basis = navigationBasis(state.yawDeg, state.pitchDeg);

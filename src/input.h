@@ -191,9 +191,6 @@ public:
   [[nodiscard]] float getMouseY() const { return mouseY_; }
   [[nodiscard]] float getMouseDeltaX() const { return mouseDeltaX_; }
   [[nodiscard]] float getMouseDeltaY() const { return mouseDeltaY_; }
-  /// Mouse delta this frame after sensitivity and inversion (getMouseDeltaX).
-  [[nodiscard]] float mouseDeltaX() const { return mouseDeltaX_; }
-  [[nodiscard]] float mouseDeltaY() const { return mouseDeltaY_; }
 
   /**
    * @brief Whether the key bound to @p action is active: held, or toggled on
@@ -208,7 +205,7 @@ public:
    *
    * While disabled, update leaves camera() untouched: keyboard, mouse, scroll,
    * and gamepad orbit input all pass. Scenes that fly their own camera
-   * disable it and read the input through isActionActive and mouseDelta*.
+   * disable it and read the input through isActionActive and getMouseDelta*.
    */
   void setOrbitCameraEnabled(bool enabled) { orbitCameraEnabled_ = enabled; }
   [[nodiscard]] bool orbitCameraEnabled() const { return orbitCameraEnabled_; }

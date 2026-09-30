@@ -574,8 +574,8 @@ blackhole::tesseract::NavigationInput gatherTesseractNavigation(const InputManag
   }
   if (!io.WantCaptureMouse && input.isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
     constexpr double DEGREES_PER_PIXEL = 0.3;
-    nav.lookYawDeg = -static_cast<double>(input.mouseDeltaX()) * DEGREES_PER_PIXEL;
-    nav.lookPitchDeg = -static_cast<double>(input.mouseDeltaY()) * DEGREES_PER_PIXEL;
+    nav.lookYawDeg = -static_cast<double>(input.getMouseDeltaX()) * DEGREES_PER_PIXEL;
+    nav.lookPitchDeg = -static_cast<double>(input.getMouseDeltaY()) * DEGREES_PER_PIXEL;
   }
   return nav;
 }
