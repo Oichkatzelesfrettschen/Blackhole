@@ -284,6 +284,230 @@ vec3 shadeHit(vec3 p, vec3 rayDir, float footprint) {
   return radiance * strandGlow * cue * coverage;
 }
 
+
+// ---- Quasicrystal walls (prototype): Ammann-Beenker cut-and-project of the
+// Z^4 lattice whose points name the basis units of the 4096-dimensional
+// Cayley-Dickson algebra (Gray-Morton index). A tiling edge n -> n + e_j is a
+// single-bit XOR of the two indices, lit warm or cool when it is a DMZ
+// (zero-divisor) edge of strut QC_STRUT. docs/plans/tesseract-quasicrystal-algebra.md.
+const int QC_DIM = 4096;
+const int QC_HALF = 2048;
+const int QC_STRUT = 17;
+const int QC_PLANES = 6;
+const float QC_WALL_FRACTION = 0.12;
+const float QC_INSET = 0.08;
+const float QC_TILES = 9.0; // Tiling units across a wall.
+const float QC_S = 0.70710678;
+const vec4 QC_U1 = vec4(1.0, QC_S, 0.0, -QC_S) * QC_S;
+const vec4 QC_U2 = vec4(0.0, QC_S, 1.0, QC_S) * QC_S;
+const vec4 QC_V1 = vec4(1.0, -QC_S, 0.0, QC_S) * QC_S;
+const vec4 QC_V2 = vec4(0.0, QC_S, -1.0, QC_S) * QC_S;
+const vec3 QC_WARM = vec3(1.0, 0.62, 0.22);
+const vec3 QC_COOL = vec3(0.30, 0.62, 1.0);
+const vec3 QC_CHORD = vec3(0.75, 0.35, 1.0);
+const vec3 QC_FAINT = vec3(0.35, 0.24, 0.14);
+
+int qcSign(int p, int q) {
+  int sign = 1;
+  for (int halfDim = QC_DIM >> 1; halfDim > 0; halfDim >>= 1) {
+    bool pHigh = p >= halfDim;
+    bool qHigh = q >= halfDim;
+    if (!pHigh && qHigh) {
+      int qLow = q - halfDim;
+      q = p;
+      p = qLow;
+    } else if (pHigh && !qHigh) {
+      p -= halfDim;
+      if (q != 0) {
+        sign = -sign;
+      }
+    } else if (pHigh && qHigh) {
+      int qLow = q - halfDim;
+      int pLow = p - halfDim;
+      if (qLow == 0) {
+        return -sign;
+      }
+      p = qLow;
+      q = pLow;
+    }
+  }
+  return sign;
+}
+
+// Signed DMZ value of assessors (a, a ^ x) and (b, b ^ x), 0 when not a DMZ.
+int qcDmz(int x, int a, int b) {
+  int ul = qcSign(a ^ x, b);
+  int ur = qcSign(a ^ x, b ^ x);
+  int ll = qcSign(a, b);
+  int lr = qcSign(a, b ^ x);
+  bool one = ul == lr;
+  bool two = ur == ll;
+  if (one != two) {
+    return 0;
+  }
+  return one ? 1 : -1;
+}
+
+int qcIndex(ivec4 n) {
+  ivec4 k = n & 7;
+  ivec4 g = k ^ (k >> 1);
+  int i = 0;
+  for (int d = 0; d < 3; ++d) {
+    for (int a = 0; a < 4; ++a) {
+      i |= ((g[a] >> d) & 1) << ((4 * d) + a);
+    }
+  }
+  return i;
+}
+
+// Octagon window pi_perp([0,1]^4) as four slabs around its center.
+bool qcAccepted(vec2 perp) {
+  vec2 d = perp - vec2(dot(vec4(0.5), QC_V1), dot(vec4(0.5), QC_V2));
+  for (int k = 0; k < 4; ++k) {
+    vec2 wk = vec2(QC_V1[k], QC_V2[k]);
+    vec2 nk = normalize(vec2(-wk.y, wk.x));
+    float halfWidth = 0.0;
+    for (int j = 0; j < 4; ++j) {
+      halfWidth += 0.5 * abs(dot(nk, vec2(QC_V1[j], QC_V2[j])));
+    }
+    if (abs(dot(nk, d)) > halfWidth + 1e-5) {
+      return false;
+    }
+  }
+  return true;
+}
+
+vec3 qcEdgeColor(int ia, int ib, out float weight) {
+  int x = QC_HALF + QC_STRUT;
+  if (((ia ^ ib) & QC_HALF) != 0) {
+    weight = 0.5;
+    return QC_CHORD;
+  }
+  int a = ia >= QC_HALF ? ia ^ x : ia;
+  int b = ib >= QC_HALF ? ib ^ x : ib;
+  if (a == 0 || b == 0 || a == QC_STRUT || b == QC_STRUT || (a ^ b) == QC_STRUT) {
+    weight = 0.3;
+    return QC_FAINT;
+  }
+  int v = qcDmz(x, a, b);
+  weight = v == 0 ? 0.3 : 1.0;
+  return v == 0 ? QC_FAINT : (v > 0 ? QC_WARM : QC_COOL);
+}
+
+float qcSegment(vec2 p, vec2 a, vec2 b) {
+  vec2 ab = b - a;
+  float h = clamp(dot(p - a, ab) / dot(ab, ab), 0.0, 1.0);
+  return length(p - a - (ab * h));
+}
+
+// Light of the tiling at tiling coordinate y with phason offset gamma.
+vec3 qcTiling(vec2 y, vec2 gamma, float unitsPerPixel) {
+  vec2 c = gamma + vec2(dot(vec4(0.5), QC_V1), dot(vec4(0.5), QC_V2));
+  vec4 lift = (QC_U1 * y.x) + (QC_U2 * y.y) + (QC_V1 * c.x) + (QC_V2 * c.y);
+  ivec4 base = ivec4(floor(lift + 0.5));
+  ivec4 kept[12];
+  vec2 keptPar[12];
+  int count = 0;
+  for (int t = 0; t < 81 && count < 12; ++t) {
+    ivec4 n = base + ivec4(t % 3, (t / 3) % 3, (t / 9) % 3, t / 27) - 1;
+    vec4 nf = vec4(n);
+    vec2 par = vec2(dot(nf, QC_U1), dot(nf, QC_U2));
+    if (length(par - y) > 1.1) {
+      continue;
+    }
+    if (!qcAccepted(vec2(dot(nf, QC_V1), dot(nf, QC_V2)) - gamma)) {
+      continue;
+    }
+    kept[count] = n;
+    keptPar[count] = par;
+    ++count;
+  }
+  float lineWidth = max(0.025, 1.2 * unitsPerPixel);
+  vec3 light = vec3(0.0);
+  for (int i = 0; i < count; ++i) {
+    int ii = qcIndex(kept[i]);
+    for (int j = i + 1; j < count; ++j) {
+      ivec4 dn = kept[j] - kept[i];
+      int l1 = abs(dn.x) + abs(dn.y) + abs(dn.z) + abs(dn.w);
+      if (l1 != 1) {
+        continue;
+      }
+      float d = qcSegment(y, keptPar[i], keptPar[j]);
+      float cover = 1.0 - smoothstep(0.5 * lineWidth, 1.5 * lineWidth, d);
+      if (cover <= 0.0) {
+        continue;
+      }
+      float weight;
+      vec3 col = qcEdgeColor(ii, qcIndex(kept[j]), weight);
+      light = max(light, col * (weight * cover));
+    }
+    // Vertex: hue by the level of the smallest algebra holding e_i.
+    float level = ii == 0 ? 0.0 : floor(log2(float(ii))) + 1.0;
+    vec3 levelColor = mix(vec3(1.0, 0.45, 0.15), vec3(0.55, 0.85, 1.0), clamp((level - 5.0) / 7.0, 0.0, 1.0));
+    float dv = length(y - keptPar[i]);
+    light = max(light, levelColor * (1.0 - smoothstep(1.5 * lineWidth, 3.0 * lineWidth, dv)) * 0.8);
+  }
+  return light;
+}
+
+uint qcPcg(uint v) {
+  uint state = (v * 747796405u) + 2891336453u;
+  uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+  return (word >> 22u) ^ word;
+}
+
+vec2 qcWallHash(vec2 tile, float plane) {
+  ivec2 t = ivec2(latticeCellId(tile));
+  int m = int(latticeCellId(vec2(plane)).x);
+  uint h = qcPcg(uint(t.x) + qcPcg(uint(t.y) + qcPcg(uint(m) + 0x9e3779b9u)));
+  return vec2(float(h & 0xFFFFu), float(qcPcg(h) & 0xFFFFu)) / 65535.0;
+}
+
+vec3 quasicrystalWalls(vec3 rayDir, float tEnd, float fogDistance) {
+  vec4 a = eyeSlice;
+  vec4 b = sliceOffset(rayDir);
+  float incidence = abs(b.z);
+  if (incidence < 1e-4) {
+    return vec3(0.0);
+  }
+  float pixelAngle = fovScale / max(resolution.y, 1.0);
+  float dir = b.z > 0.0 ? 1.0 : -1.0;
+  float u0 = a.z / cellSize;
+  float first = dir > 0.0 ? floor(u0) + 1.0 : ceil(u0) - 1.0;
+  float wallEdge = 1.0 - (2.0 * QC_INSET);
+  vec3 sum = vec3(0.0);
+  for (int j = 0; j < QC_PLANES; ++j) {
+    float plane = first + (dir * float(j));
+    float t = ((plane * cellSize) - a.z) / b.z;
+    if (t <= 0.0 || t >= tEnd) {
+      break;
+    }
+    vec4 q = a + (b * t);
+    vec2 tileCoord = q.xy / cellSize;
+    vec2 tile = floor(tileCoord);
+    vec2 h = qcWallHash(tile, plane);
+    if (h.x > QC_WALL_FRACTION) {
+      continue;
+    }
+    vec2 wallUv = ((tileCoord - tile) - QC_INSET) / wallEdge;
+    if (any(lessThan(wallUv, vec2(0.0))) || any(greaterThanEqual(wallUv, vec2(1.0)))) {
+      continue;
+    }
+    float wallPixels = (cellSize * wallEdge * max(incidence, 0.05)) / (t * pixelAngle);
+    float unitsPerPixel = QC_TILES / max(wallPixels, 1.0);
+    vec2 y = (wallUv * QC_TILES) + (h * 131.0);
+    // Phason offset: per wall, drifting with the eye's 4D position (prototype).
+    vec2 gamma = (fract(h * 7.31) - 0.5) * 0.6 + vec2(dot(eyeSlice, QC_V1), dot(eyeSlice, QC_V2)) / cellSize;
+    vec3 light = qcTiling(y, gamma, unitsPerPixel);
+    float edgePixels = min(min(wallUv.x, wallUv.y), min(1.0 - wallUv.x, 1.0 - wallUv.y)) * wallPixels;
+    light += vec3(0.5, 0.33, 0.16) * exp(-edgePixels / 1.5) * 0.3;
+    float nearFade = smoothstep(0.25, 0.7, t / cellSize);
+    float grazing = smoothstep(0.03, 0.3, incidence);
+    sum += light * (grazing * nearFade * fogTransmittance(t, fogDistance) * wDim(q.w));
+  }
+  return sum * 0.35 * strandGlow;
+}
+
 void main() {
   vec3 rayDir = bhRayDir(gl_FragCoord.xy, resolution, fovScale, cameraBasis);
   float fogDistance = fogDistanceFor(fogDensity);
@@ -296,6 +520,7 @@ void main() {
   vec3 shaded = hit ? shadeHit(rayDir * travelled, rayDir, footprint) : vec3(0.0);
   float extinction = fogTransmittance(travelled, fogDistance);
   vec3 color = (shaded * extinction) + (halo * strandGlow) + (VOID_COLOR * (1.0 - extinction));
+  color += quasicrystalWalls(rayDir, hit ? travelled : MAX_MARCH_CELLS * cellSize, fogDistance);
 
   fragColor = vec4(color, 1.0);
 }
