@@ -102,31 +102,56 @@ TEST(AlgebraLattice, IndexIsABijectionAndSubalgebrasAreSubBoxes) {
   EXPECT_TRUE(std::ranges::all_of(seen, [](int c) { return c == 1; }));
 }
 
+// Compares the mask of one strut with the strutted table cell by cell.
+void expectMaskMatchesTable(int level, int strut) {
+  const int g = 1 << (level - 1);
+  const EmanationTable table = createStruttedEt(level, strut);
+  const std::vector<int> position = tonePositions(table);
+  const AlgebraMask mask = buildAlgebraMask(level, strut);
+  const int x = g + strut;
+  for (int i = 0; i < (1 << level); ++i) {
+    const int a = i < g ? i : i ^ x;
+    for (int b = 0; b < level - 1; ++b) {
+      const int value = tableValue(table, position, a, a ^ (1 << b));
+      ASSERT_EQ(maskBit(mask.present, i, b), value != 0)
+          << "N " << level << " S " << strut << " i " << i << " b " << b;
+      if (value != 0) {
+        EXPECT_EQ(maskBit(mask.positive, i, b), value > 0);
+      }
+    }
+    EXPECT_FALSE(maskBit(mask.present, i, level - 1)) << "assessor chord marked";
+  }
+}
+
 // The mask bit for the link i -> i ^ 2^b is set exactly when the strutted
 // emanation table (full magnitude test, independent of the closed form) has a
 // filled cell for the two assessors, with the table's sign.
 TEST(AlgebraLattice, MaskMatchesTheStruttedTable) {
   for (int level = 5; level <= 9; ++level) {
     const int g = 1 << (level - 1);
-    for (const int strut : {1, 3, g / 2 + 1, g - 1}) {
-      const EmanationTable table = createStruttedEt(level, strut);
-      const std::vector<int> position = tonePositions(table);
-      const AlgebraMask mask = buildAlgebraMask(level, strut);
-      const int x = g + strut;
-      for (int i = 0; i < (1 << level); ++i) {
-        const int a = i < g ? i : i ^ x;
-        for (int b = 0; b < level - 1; ++b) {
-          const int value = tableValue(table, position, a, a ^ (1 << b));
-          ASSERT_EQ(maskBit(mask.present, i, b), value != 0)
-              << "N " << level << " S " << strut << " i " << i << " b " << b;
-          if (value != 0) {
-            EXPECT_EQ(maskBit(mask.positive, i, b), value > 0);
-          }
+    for (const int strut : {1, 3, (g / 2) + 1, g - 1}) {
+      expectMaskMatchesTable(level, strut);
+    }
+  }
+}
+
+// Positive and negative filled table edges among the six assessors of the
+// line {a, 2^k, a ^ 2^k} and their strut partners.
+std::array<int, 2> boxKiteSigns(const EmanationTable &table, const std::vector<int> &position,
+                                const std::array<int, 3> &line, int strut) {
+  std::array<int, 2> signs{};
+  for (std::size_t p = 0; p < 3; ++p) {
+    for (std::size_t q = p + 1; q < 3; ++q) {
+      for (const int u : {line.at(p), line.at(p) ^ strut}) {
+        for (const int v : {line.at(q), line.at(q) ^ strut}) {
+          const int value = tableValue(table, position, u, v);
+          signs[0] += value > 0 ? 1 : 0;
+          signs[1] += value < 0 ? 1 : 0;
         }
-        EXPECT_FALSE(maskBit(mask.present, i, level - 1)) << "assessor chord marked";
       }
     }
   }
+  return signs;
 }
 
 // A DMZ single-bit edge a -> a ^ 2^k anchors the box-kite octahedron of the
@@ -144,23 +169,11 @@ TEST(AlgebraLattice, EachMaskEdgeAnchorsAWholeBoxKite) {
           if (!maskBit(mask.present, a, k)) {
             continue;
           }
-          const std::array<int, 3> line{a, 1 << k, a ^ (1 << k)};
-          int positive = 0;
-          int negative = 0;
-          for (std::size_t p = 0; p < 3; ++p) {
-            for (std::size_t q = p + 1; q < 3; ++q) {
-              for (const int u : {line.at(p), line.at(p) ^ strut}) {
-                for (const int v : {line.at(q), line.at(q) ^ strut}) {
-                  const int value = tableValue(table, position, u, v);
-                  positive += value > 0 ? 1 : 0;
-                  negative += value < 0 ? 1 : 0;
-                }
-              }
-            }
-          }
-          ASSERT_EQ(positive + negative, BOX_KITE_EDGES)
+          const std::array<int, 2> signs =
+              boxKiteSigns(table, position, {a, 1 << k, a ^ (1 << k)}, strut);
+          ASSERT_EQ(signs[0] + signs[1], BOX_KITE_EDGES)
               << "N " << level << " S " << strut << " a " << a << " k " << k;
-          EXPECT_EQ(positive, BOX_KITE_EDGES / 2);
+          EXPECT_EQ(signs[0], BOX_KITE_EDGES / 2);
         }
       }
     }
@@ -174,9 +187,9 @@ TEST(AlgebraLattice, AmmannBeenkerWindowIsTheRegularOctagon) {
   const std::array<double, 2> center = projectPlane(AMMANN_BEENKER_PERP, {0.5, 0.5, 0.5, 0.5});
   std::vector<double> radii;
   for (int corner = 0; corner < 16; ++corner) {
-    const std::array<double, 4> v{static_cast<double>(corner & 1), static_cast<double>((corner >> 1) & 1),
-                                  static_cast<double>((corner >> 2) & 1),
-                                  static_cast<double>((corner >> 3) & 1)};
+    const std::array<double, 4> v{
+        static_cast<double>(corner & 1), static_cast<double>((corner >> 1) & 1),
+        static_cast<double>((corner >> 2) & 1), static_cast<double>((corner >> 3) & 1)};
     const std::array<double, 2> perp = projectPlane(AMMANN_BEENKER_PERP, v);
     EXPECT_TRUE(ammannBeenkerAccepts(perp)) << "corner " << corner;
     const double dx = perp[0] - center[0];
@@ -192,14 +205,15 @@ TEST(AlgebraLattice, AmmannBeenkerWindowIsTheRegularOctagon) {
   const double outer = *std::ranges::max_element(radii);
   // Circumradius of the octagon with edge 1/sqrt(2): (1/sqrt(2)) / (2 sin(pi/8)).
   EXPECT_NEAR(outer, (1.0 / std::numbers::sqrt2) / (2.0 * std::sin(std::numbers::pi / 8.0)), 1e-12);
-  EXPECT_EQ(std::ranges::count_if(radii, [outer](double r) { return std::abs(r - outer) < 1e-9; }), 8);
+  EXPECT_EQ(std::ranges::count_if(radii, [outer](double r) { return std::abs(r - outer) < 1e-9; }),
+            8);
 }
 
 // The physical and perpendicular bases are orthonormal and complementary, and
 // e_j projects to angle j pi/4 (physical) and 3 j pi/4 (perpendicular).
 TEST(AlgebraLattice, AmmannBeenkerBasesAreOrthonormalOctagonalProjections) {
   const std::array<std::array<double, 4>, 4> rows{AMMANN_BEENKER_PAR[0], AMMANN_BEENKER_PAR[1],
-                                                 AMMANN_BEENKER_PERP[0], AMMANN_BEENKER_PERP[1]};
+                                                  AMMANN_BEENKER_PERP[0], AMMANN_BEENKER_PERP[1]};
   for (std::size_t r = 0; r < 4; ++r) {
     for (std::size_t c = 0; c < 4; ++c) {
       double d = 0.0;
@@ -216,8 +230,8 @@ TEST(AlgebraLattice, AmmannBeenkerBasesAreOrthonormalOctagonalProjections) {
     const std::array<double, 2> perp = projectPlane(AMMANN_BEENKER_PERP, e);
     const double quarter = std::numbers::pi / 4.0;
     EXPECT_NEAR(std::atan2(par[1], par[0]), j * quarter, 1e-12);
-    const double perpAngle = std::remainder(std::atan2(perp[1], perp[0]) - (3.0 * j * quarter),
-                                            2.0 * std::numbers::pi);
+    const double perpAngle =
+        std::remainder(std::atan2(perp[1], perp[0]) - (3.0 * j * quarter), 2.0 * std::numbers::pi);
     EXPECT_NEAR(perpAngle, 0.0, 1e-12);
   }
 }
