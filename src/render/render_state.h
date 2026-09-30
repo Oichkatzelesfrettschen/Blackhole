@@ -21,6 +21,7 @@
 
 #include <glbinding/gl/types.h>
 #include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_double3.hpp>
 #include <glm/ext/vector_float2.hpp>
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
@@ -218,7 +219,12 @@ struct RenderState {
     float pulseWidth = 0.35f;
     float cellSize = 12.0f;      ///< Lattice cell period ("Corridor density").
     float driftSpeed = 0.6f;     ///< Forward camera drift, world units per second.
-    float driftDistance = 0.0f; ///< Accumulated forward drift.
+    double driftDistance = 0.0; ///< Forward drift distance, driftSpeed times the scene clock.
+    /// World-space drift: each frame's drift runs along that frame's camera
+    /// forward, so turning the camera turns the path instead of swinging the
+    /// eye about the origin.
+    glm::dvec3 driftOffset{0.0};
+    double driftApplied = 0.0; ///< driftDistance already folded into driftOffset.
     float strandGlow = 1.0f;    ///< Fiber and frame emissive scale.
     float fogDensity = 0.35f;   ///< Aerial-perspective fog into the void.
     Quality quality = Quality::Dense;

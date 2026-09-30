@@ -11,10 +11,11 @@
  * fullscreen triangle of shader/simple.vert, one ray per pixel from bhRayDir
  * (shader/include/interop_raygen.glsl).
  *
- * Field. A 4D point is p4 = F * (p + offset) + (0, 0, 0, W0), where F is an
- * orthonormal 4x3 slice frame built from the SO(4) matrix rotation4 blended
- * toward the identity (sceneScale sets the blend), so the slice tilts slowly
- * against the lattice as the left-isoclinic rotation animates. In the lattice
+ * Field. A 4D point is p4 = eyeSlice + F r for the eye-relative offset r, where
+ * F is an orthonormal 4x3 slice frame built from the SO(4) orientation blended
+ * toward the identity (shader/include/tesseract_slice.glsl), so the slice tilts
+ * slowly about the eye against the lattice as the left-isoclinic rotation
+ * animates. In the lattice
  * cell of period cellSize, three families of thickened 2-planes (a beam axis
  * plus w, omitting the two transverse axes) slice to tubes along x, y, and z:
  * a cubic lattice of thin beams receding down corridors in every direction.
@@ -39,19 +40,17 @@
  */
 
 #include "include/interop_raygen.glsl"
+#include "include/tesseract_slice.glsl"
 
 layout(location = 0) out vec4 fragColor;
 
 uniform vec2 resolution;
-uniform vec3 eye;
 uniform mat3 cameraBasis; // columns (right, up, forward), buildCameraBasis order.
 uniform float fovScale;   // tan(fovDeg / 2)
-uniform mat4 rotation4;   // SO(4) matrix of v -> qL v conj(qR), column-major.
 uniform int projectionMode;
 uniform float perspectiveDistance;
-uniform float sceneScale;     // Slice-frame tilt gain: blend toward rotation4.
 uniform float corridorPeriod; // World units of depth before the light bands repeat.
-uniform float cellSize;       // Lattice cell period ("Corridor density").
+uniform float eyeDepth;       // World depth of the eye plus the lattice offset, mod corridorPeriod.
 uniform float nowDepth;       // Depth (mod corridorPeriod) of the static "now" highlight band.
 uniform float nowWidth;
 uniform float pulseDepth; // Depth (mod corridorPeriod) of the traveling gravity-message pulse.
@@ -103,14 +102,6 @@ const float STRAND_W_TWIST = 0.6;
 // Halo: analytic bloom from the nearest-strand distance along the march.
 const float HALO_RADIUS_FRACTION = 0.05;
 const float HALO_GAIN = 0.03;
-// exp(-kappa |p4.w|): 4D depth cue.
-const float W_DIM_KAPPA = 0.06;
-// Slice hyperplane offset along w, in cells.
-const float SLICE_W_CELLS = 0.25;
-// Lattice offset in cells: places the default eye (world x = y = 0, depth
-// drift along z) in the open middle of a cell, slightly off the corridor axis.
-const vec3 LATTICE_OFFSET_CELLS = vec3(0.53, 0.47, 0.5);
-
 const float SURFACE_EPS_FRACTION = 0.0004;
 const float MIN_STEP_FRACTION = 0.0008;
 // The fold to the nearest angular sector under-estimates strand proximity
@@ -118,19 +109,6 @@ const float MIN_STEP_FRACTION = 0.0008;
 const float STEP_SCALE = 0.6;
 const float MAX_MARCH_CELLS = 24.0;
 const float GRAZE_ACCEPT_FOOTPRINTS = 4.0;
-// Fog: transmittance exp(-(t / fogDistance)^FOG_EXPONENT). The exponent above 1
-// keeps the first cells clear and closes the corridor steeply beyond
-// fogDistance, so the vanishing point reads as depth, not as uniform haze.
-// fogDistance is FOG_CELLS cells at the default fogDensity (0.35) and scales
-// inversely with the slider.
-const float FOG_EXPONENT = 1.8;
-const float FOG_CELLS = 3.5;
-const float FOG_REFERENCE_DENSITY = 0.35;
-
-// Slice frame, set once per fragment by buildSliceFrame().
-vec4 gF0;
-vec4 gF1;
-vec4 gF2;
 // Tier index and 4D-cue-free brightness of the nearest strand of the last
 // field evaluation.
 float gTierBrightness = 1.0;
@@ -157,24 +135,6 @@ vec2 hash21(vec2 p) {
   return vec2(float(h & 0xFFFFu), float(pcgHash(h) & 0xFFFFu)) / 65535.0;
 }
 
-// Orthonormal 4x3 slice frame: the columns of rotation4 blended toward the
-// identity (blend = 0.10 sceneScale, 0.13 at the default 1.3, capped at 0.6 so
-// the blend never cancels), then Gram-Schmidt orthonormalized.
-void buildSliceFrame() {
-  float blend = clamp(0.10 * sceneScale, 0.0, 0.6);
-  vec4 a0 = mix(vec4(1.0, 0.0, 0.0, 0.0), rotation4[0], blend);
-  vec4 a1 = mix(vec4(0.0, 1.0, 0.0, 0.0), rotation4[1], blend);
-  vec4 a2 = mix(vec4(0.0, 0.0, 1.0, 0.0), rotation4[2], blend);
-  gF0 = normalize(a0);
-  gF1 = normalize(a1 - (gF0 * dot(a1, gF0)));
-  gF2 = normalize(a2 - (gF0 * dot(a2, gF0)) - (gF1 * dot(a2, gF1)));
-}
-
-vec4 slicePoint(vec3 p) {
-  vec3 q = p + (LATTICE_OFFSET_CELLS * cellSize);
-  return (gF0 * q.x) + (gF1 * q.y) + (gF2 * q.z) + vec4(0.0, 0.0, 0.0, SLICE_W_CELLS * cellSize);
-}
-
 // One beam family: transverse 4D coordinates @p ct, axial coordinate @p s,
 // and the world-frame w coordinate @p w. Updates the nearest beam distance,
 // the nearest strand distance, and the nearest strand's tier.
@@ -189,7 +149,7 @@ void beamFamily(vec2 ct, float s, float w, float family, inout float dBeam, inou
     return;
   }
   // Only some beams carry strands: bare beams keep the frame void-dominated.
-  if (hash21((n * 2.3) + vec2(family * 5.7, 1.3)).y > STRAND_BEAM_FRACTION) {
+  if (hash21((latticeCellId(n) * 2.3) + vec2(family * 5.7, 1.3)).y > STRAND_BEAM_FRACTION) {
     return;
   }
   float ang = atan(t.y, t.x);
@@ -202,7 +162,7 @@ void beamFamily(vec2 ct, float s, float w, float family, inout float dBeam, inou
     float centerAngle = phi + (TAU * sector / float(count));
     vec2 c = SHELL_RADIUS_FRACTION[shell] * cellSize * vec2(cos(centerAngle), sin(centerAngle));
     float index = mod(sector, float(count));
-    vec2 h = hash21((n * 1.7) + vec2((family * 3.1) + (float(shell) * 11.0), index * 5.3));
+    vec2 h = hash21((latticeCellId(n) * 1.7) + vec2((family * 3.1) + (float(shell) * 11.0), index * 5.3));
     int tier = h.x < 0.5 ? 0 : (h.x < 0.8 ? 1 : 2);
     float d = length(t - c) - (TIER_RADIUS_FRACTION[tier] * cellSize);
     if (d < dStrand) {
@@ -213,7 +173,7 @@ void beamFamily(vec2 ct, float s, float w, float family, inout float dBeam, inou
   }
 }
 
-// Beam and strand distances at world point @p p; @p p4 returns the 4D point.
+// Beam and strand distances at eye-relative point @p p; @p p4 returns the 4D point.
 void fieldDistances(vec3 p, out float dBeam, out float dStrand, out vec4 p4) {
   p4 = slicePoint(p);
   dBeam = 1e9;
@@ -239,16 +199,7 @@ vec3 estimateNormal(vec3 p, float e) {
                    (k.yxy * mapDistance(p + (k.yxy * e))) + (k.xxx * mapDistance(p + (k.xxx * e))));
 }
 
-// World-frame 4D depth cue.
-float wDim(float w) {
-  return exp(-W_DIM_KAPPA * abs(w));
-}
-
-float fogTransmittance(float t, float fogDistance) {
-  return exp(-pow(t / fogDistance, FOG_EXPONENT));
-}
-
-// Sphere-traces from @p rayOrigin along @p rayDir. Returns the travelled
+// Sphere-traces from the eye-relative @p rayOrigin along @p rayDir. Returns the travelled
 // distance, whether a surface was hit, and the halo radiance gathered along
 // the march.
 float raymarch(vec3 rayOrigin, vec3 rayDir, float fogDistance, out bool hit, out vec3 halo) {
@@ -311,7 +262,7 @@ vec3 shadeHit(vec3 p, vec3 rayDir, float footprint) {
   vec3 radiance;
   float radius;
   if (strand) {
-    float depth = p.z + (LATTICE_OFFSET_CELLS.z * cellSize);
+    float depth = eyeDepth + p.z;
     float period = max(corridorPeriod, 1e-3);
     float depthPattern = mod(depth, period);
     float lit = gaussian(depthPattern, mod(nowDepth, period), nowWidth);
@@ -334,16 +285,15 @@ vec3 shadeHit(vec3 p, vec3 rayDir, float footprint) {
 }
 
 void main() {
-  buildSliceFrame();
   vec3 rayDir = bhRayDir(gl_FragCoord.xy, resolution, fovScale, cameraBasis);
-  float fogDistance = FOG_CELLS * cellSize * FOG_REFERENCE_DENSITY / max(fogDensity, 1e-3);
+  float fogDistance = fogDistanceFor(fogDensity);
 
   bool hit;
   vec3 halo;
-  float travelled = raymarch(eye, rayDir, fogDistance, hit, halo);
+  float travelled = raymarch(vec3(0.0), rayDir, fogDistance, hit, halo);
 
   float footprint = travelled * fovScale / max(resolution.y, 1.0);
-  vec3 shaded = hit ? shadeHit(eye + (rayDir * travelled), rayDir, footprint) : vec3(0.0);
+  vec3 shaded = hit ? shadeHit(rayDir * travelled, rayDir, footprint) : vec3(0.0);
   float extinction = fogTransmittance(travelled, fogDistance);
   vec3 color = (shaded * extinction) + (halo * strandGlow) + (VOID_COLOR * (1.0 - extinction));
 

@@ -241,6 +241,23 @@ TEST_F(TesseractRaymarchGlTest, VoidDominatedFrameWithStrandsAsTheBrightestEleme
   EXPECT_LE(outlierFraction, MAX_OUTLIER_FRACTION);
 }
 
+// Hours of drift keep the lattice lit: the eye's 4D point stays on the wrapped
+// hash period and near w = 0, so neither the slice rotation nor the w cue
+// darkens the corridor as the session runs.
+TEST_F(TesseractRaymarchGlTest, LongSessionKeepsTheLatticeLit) {
+  for (const double seconds : {3600.0, 16667.0}) {
+    const std::vector<float> rgba = renderDefaultScene(seconds);
+    const std::size_t pixelCount = rgba.size() / 4;
+    std::size_t litCount = 0;
+    for (std::size_t i = 0; i < pixelCount; ++i) {
+      litCount += maxChannelAt(rgba, i) > COVERAGE_FLOOR ? std::size_t{1} : std::size_t{0};
+    }
+    const float coverage = static_cast<float>(litCount) / static_cast<float>(pixelCount);
+    std::printf("t %.0f s lit coverage %.3f\n", seconds, static_cast<double>(coverage));
+    EXPECT_GE(coverage, MIN_LIT_COVERAGE) << "t " << seconds << " s";
+  }
+}
+
 TEST_F(TesseractRaymarchGlTest, CentralThirdIsDarkerThanTheOuterRing) {
   double ratioSum = 0.0;
   int samples = 0;
