@@ -9,6 +9,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <numeric>
 #include <optional>
@@ -37,6 +38,8 @@
 #include "input.h"
 #include "render.h"
 #include "render/render_state.h"
+#include "render/tesseract/algebra_lattice.h"
+#include "render/tesseract/emanation_table.h"
 #include "render/tesseract/so4.h"
 #include "render/tesseract/tesseract_geometry.h"
 #include "shader.h"
@@ -73,6 +76,7 @@ struct SavedGlState {
   GLint drawFramebuffer = 0;
   GLint readFramebuffer = 0;
   GLint program = 0;
+  GLint maskBinding = 0; ///< Texture on TESSERACT_ALGEBRA_MASK_UNIT.
 
   void capture() {
     blendEnabled = glIsEnabled(GL_BLEND);
@@ -88,6 +92,13 @@ struct SavedGlState {
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFramebuffer);
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFramebuffer);
     glGetIntegerv(GL_CURRENT_PROGRAM, &program);
+    // Reading a unit's binding goes through the active unit; glBindTextureUnit
+    // in restore() leaves it alone.
+    GLint activeTexture = 0;
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture);
+    glActiveTexture(static_cast<GLenum>(static_cast<int>(GL_TEXTURE0) + TESSERACT_ALGEBRA_MASK_UNIT));
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &maskBinding);
+    glActiveTexture(static_cast<GLenum>(activeTexture));
   }
 
   void restore() const {
@@ -110,6 +121,7 @@ struct SavedGlState {
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(drawFramebuffer));
     glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(readFramebuffer));
     glUseProgram(static_cast<GLuint>(program));
+    glBindTextureUnit(static_cast<GLuint>(TESSERACT_ALGEBRA_MASK_UNIT), static_cast<GLuint>(maskBinding));
   }
 };
 
@@ -149,6 +161,11 @@ void TesseractRenderer::shutdown() {
     glDeleteFramebuffers(1, &fbo_);
     fbo_ = 0;
   }
+  if (algebraMask_ != 0) {
+    glDeleteTextures(1, &algebraMask_);
+    algebraMask_ = 0;
+  }
+  algebraMaskStrut_ = 0;
 }
 
 bool TesseractRenderer::reloadShaders() {
@@ -195,6 +212,34 @@ void TesseractRenderer::ensureResources() {
   }
 }
 
+void TesseractRenderer::updateAlgebraMask(int strut) {
+  if (algebraMask_ != 0 && strut == algebraMaskStrut_) {
+    return;
+  }
+  if (algebraMask_ == 0) {
+    glCreateTextures(GL_TEXTURE_2D, 1, &algebraMask_);
+    glTextureStorage2D(algebraMask_, 1, GL_RG16UI, TESSERACT_ALGEBRA_MASK_EDGE,
+                       TESSERACT_ALGEBRA_MASK_EDGE);
+    // Integer textures do not filter; the shader reads them with texelFetch.
+    glTextureParameteri(algebraMask_, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(GL_NEAREST));
+    glTextureParameteri(algebraMask_, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(GL_NEAREST));
+  }
+  const tesseract::AlgebraMask mask =
+      tesseract::buildAlgebraMask(tesseract::TESSERACT_ALGEBRA_LEVEL, strut);
+  std::vector<std::uint16_t> texels(2 * mask.present.size());
+  for (std::size_t i = 0; i < mask.present.size(); ++i) {
+    texels.at(2 * i) = mask.present.at(i);
+    texels.at((2 * i) + 1) = mask.positive.at(i);
+  }
+  GLint unpackAlignment = 4;
+  glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpackAlignment);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 2);
+  glTextureSubImage2D(algebraMask_, 0, 0, 0, TESSERACT_ALGEBRA_MASK_EDGE, TESSERACT_ALGEBRA_MASK_EDGE,
+                      GL_RG_INTEGER, GL_UNSIGNED_SHORT, texels.data());
+  glPixelStorei(GL_UNPACK_ALIGNMENT, unpackAlignment);
+  algebraMaskStrut_ = strut;
+}
+
 void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   if (inputs.targetTexture == 0 || inputs.width <= 0 || inputs.height <= 0) {
     return;
@@ -207,6 +252,8 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   saved.capture();
 
   ensureResources();
+  updateAlgebraMask(std::clamp(inputs.algebraStrut, 1, tesseract::ALGEBRA_MAX_STRUT));
+  glBindTextureUnit(static_cast<GLuint>(TESSERACT_ALGEBRA_MASK_UNIT), algebraMask_);
 
   glNamedFramebufferTexture(fbo_, GL_COLOR_ATTACHMENT0, inputs.targetTexture, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
@@ -237,6 +284,8 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   glUniform1f(uniformLocation(program_, "strandGlow"), inputs.strandGlow);
   glUniform1f(uniformLocation(program_, "fogDensity"), inputs.fogDensity);
   glUniform1i(uniformLocation(program_, "qualityTier"), inputs.qualityTier);
+  glUniform1i(uniformLocation(program_, "wallsEnabled"), inputs.wallsEnabled ? 1 : 0);
+  glUniform1i(uniformLocation(program_, "kitesEnabled"), inputs.kitesEnabled ? 1 : 0);
 
   glBindVertexArray(vao_);
   glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -434,6 +483,20 @@ TesseractSliceFrame tesseractSliceFrame(const std::array<float, 16> &rotation, f
   return slice;
 }
 
+int tesseractAlgebraStrut(bool ride, double clockSeconds, float dwellSeconds, int manualStrut) {
+  const int strut = std::clamp(manualStrut, 1, tesseract::ALGEBRA_MAX_STRUT);
+  if (!ride) {
+    return strut;
+  }
+  static const std::vector<int> skyRide =
+      tesseract::skyRegimeStruts(tesseract::TESSERACT_ALGEBRA_LEVEL);
+  const auto start = static_cast<long long>(std::ranges::lower_bound(skyRide, strut) - skyRide.begin());
+  const double dwell = std::max(static_cast<double>(dwellSeconds), 0.1);
+  const auto step = static_cast<long long>(std::floor(std::max(clockSeconds, 0.0) / dwell));
+  const auto size = static_cast<long long>(skyRide.size());
+  return skyRide[static_cast<std::size_t>((start + step) % size)];
+}
+
 void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
                             const std::optional<TesseractRecordFrame> &record) {
   auto &tg = rs.tesseract;
@@ -453,6 +516,7 @@ void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
     tg.pulseTravel = motion.pulseTravel;
     tg.orientationInitialized = true;
     tg.driftDistance = static_cast<double>(tg.driftSpeed) * seconds;
+    tg.algebraClock = seconds;
   } else {
     if (!tg.orientationInitialized) {
       const tesseract::TesseractMotion reset = tesseract::tesseractMotionAt(
@@ -468,6 +532,7 @@ void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
                                                        static_cast<double>(tg.rotationSpeed));
     tg.pulseTravel = tesseract::advancePulseTravel(tg.pulseTravel, step * tg.pulseSpeed, pulseSpan);
     tg.driftDistance += static_cast<double>(step) * static_cast<double>(tg.driftSpeed);
+    tg.algebraClock += static_cast<double>(step);
   }
 }
 
@@ -525,6 +590,10 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
   inputs.strandGlow = std::max(tg.strandGlow, 0.0f);
   inputs.fogDensity = std::max(tg.fogDensity, 0.0f);
   inputs.qualityTier = static_cast<int>(tg.quality);
+  inputs.algebraStrut =
+      tesseractAlgebraStrut(tg.algebraRide, tg.algebraClock, tg.algebraDwell, tg.algebraStrut);
+  inputs.wallsEnabled = tg.wallsEnabled;
+  inputs.kitesEnabled = tg.kitesEnabled;
   tg.renderer.render(inputs);
 }
 

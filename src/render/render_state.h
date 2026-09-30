@@ -229,6 +229,15 @@ struct RenderState {
     float fogDensity = 0.35f;   ///< Aerial-perspective fog into the void.
     Quality quality = Quality::Dense;
     bool qualityUserSet = false; ///< True once the UI has set quality explicitly.
+    /// Strut S of the 4096-D algebra (1..2047) whose zero-divisor edges carry
+    /// the strands and light the walls; the ride starts from it.
+    int algebraStrut = 129;
+    /// Step S through the level-12 sky regimes over the scene clock.
+    bool algebraRide = true;
+    float algebraDwell = 20.0f; ///< Seconds the ride holds each strut.
+    double algebraClock = 0.0;  ///< Seconds the ride has run (wall time, or the record clock).
+    bool wallsEnabled = true;   ///< Ammann-Beenker quasicrystal walls.
+    bool kitesEnabled = true;   ///< Box-kite glyphs at the lattice vertices.
     TesseractRenderer renderer;
     HudOverlay speculativeLabel;
     int speculativeLabelWidth = 0;  ///< Render width the label layout was fitted to.

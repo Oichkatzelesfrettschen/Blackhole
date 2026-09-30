@@ -34,6 +34,7 @@
 #include "platform/resource_paths.h"
 #include "render/gpu_timing.h"
 #include "render/render_state.h"
+#include "render/tesseract/algebra_lattice.h"
 #include "render/tesseract/tesseract_renderer.h"
 #include "settings.h"
 
@@ -1016,6 +1017,18 @@ void renderTesseractCorridorControls(RenderState::TesseractGroup &tg) {
     tg.quality = static_cast<RenderState::TesseractGroup::Quality>(qualityIndex);
     tg.qualityUserSet = true;
   }
+  ImGui::SeparatorText("4096-D algebra");
+  ImGui::TextWrapped("Lattice points are basis units; strands and lit wall edges are the "
+                     "zero-divisor links of strut S.");
+  ImGui::Checkbox("Ride the sky struts", &tg.algebraRide);
+  ImGui::SliderFloat("Seconds per strut", &tg.algebraDwell, 2.0f, 120.0f);
+  ImGui::SliderInt(tg.algebraRide ? "Strut S (ride starts here)" : "Strut S", &tg.algebraStrut, 1,
+                   blackhole::tesseract::ALGEBRA_MAX_STRUT);
+  ImGui::Text("Showing S = %d", blackhole::tesseractAlgebraStrut(tg.algebraRide, tg.algebraClock,
+                                                                 tg.algebraDwell, tg.algebraStrut));
+  ImGui::Checkbox("Quasicrystal walls (Ammann-Beenker)", &tg.wallsEnabled);
+  ImGui::Checkbox("Box-kite glyphs", &tg.kitesEnabled);
+  ImGui::SeparatorText("Pulse and now band");
   ImGui::SliderFloat("Now depth", &tg.litMoment, 0.0f, tg.timeSpan);
   ImGui::SliderFloat("Now width", &tg.litWidth, 0.05f, 3.0f);
   ImGui::Checkbox("Gravity message pulse", &tg.pulseEnabled);
