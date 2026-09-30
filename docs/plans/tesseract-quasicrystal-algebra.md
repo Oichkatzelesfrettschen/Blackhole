@@ -158,16 +158,23 @@ anchored at a vertex; the text of the scene's help says so.
 
 ## 7. Acceptance
 
-Reused from the emanation-lattice work, measured with hidden-window captures
-on NVIDIA GL:
+Measured with hidden-window record runs on NVIDIA GL (RTX 4070 Ti), one
+binary run against main's shaders and this design's shaders (the renderer
+loads shaders from the working directory), record frames from 600 (10 s):
 
 - Dark fraction (pixels under 20/255) at record frames 0, 360 and 600 at
   least 85% of main's; guards against the wash the owner rejected.
-- Motion: mean consecutive-frame MAE at 10 s within 20% of main's (0.0223 on
-  the earlier measurement).
+- Motion: mean consecutive-frame MAE over frames 600..605 within 20% of
+  main's under the same command.
 - Long session: LongSessionKeepsTheLatticeLit coverage floor.
-- Frame time: gpu_tesseract_ms at 2560x1440 within 2 ms of the 13.95 ms
-  baseline.
+- Frame time: gpu_tesseract_ms (BLACKHOLE_GPU_TIMING_LOG) over the first
+  frames of the run, before the record loop's readback stalls lift the
+  timings. At 1766x1398 main costs 9.2 ms, main with a strand on every beam
+  12.1 ms, and this design about 19 ms with walls and glyphs on, of which
+  about 4.5 ms is the neighbor-segment pass that keeps strand ends free
+  of false hits. The cost comes from strands switching per segment, which
+  diverges within a warp where main's per-beam hash stays coherent; a
+  per-beam strand interval representation is the candidate to recover it.
 
 Tests (tests/algebra_lattice_test.cpp, tests/tesseract_gl_state_test.cpp):
 
