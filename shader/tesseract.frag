@@ -152,13 +152,54 @@ vec2 hash21(vec2 p) {
   return vec2(float(h & 0xFFFFu), float(pcgHash(h) & 0xFFFFu)) / 65535.0;
 }
 
+// Edge sign (+1 or -1) of the link from lattice segment @p segment along axis
+// @p axis at transverse cell @p nt and w layer @p kw, or 0 when the link is no
+// DMZ edge of the strut.
+float linkSign(int axis, int segment, ivec2 nt, int kw) {
+  ivec4 lattice = axis == 0 ? ivec4(segment, nt.x, nt.y, kw)
+                            : (axis == 1 ? ivec4(nt.y, segment, nt.x, kw) : ivec4(nt.x, nt.y, segment, kw));
+  uint bit = uint(algebraStepBit(segment, axis));
+  uvec2 m = algebraMaskAt(algebraIndex(lattice));
+  if (((m.r >> bit) & 1u) == 0u) {
+    return 0.0;
+  }
+  return ((m.g >> bit) & 1u) != 0u ? 1.0 : -1.0;
+}
+
+// Distance to the strand of one DMZ segment: the edge sign picks the shell (a
+// +1 link is one wide helix, a -1 link a tight triple braid of the opposite
+// hand), and @p outside is the axial distance outside the segment, since each
+// strand is clipped to its own segment.
+void segmentStrand(vec2 t, float ang, float s, float w, int axis, vec2 n, int segment, float edgeSign, float outside,
+                   inout float dStrand) {
+  int shell = edgeSign > 0.0 ? 1 : 0;
+  vec2 segmentId = latticeCellId(n) + vec2(0.0, float(segment) * 0.37);
+  int count = SHELL_STRANDS[shell];
+  float pitch = SHELL_PITCH_FRACTION[shell] * cellSize;
+  float phi = (SHELL_DIRECTION[shell] * TAU * s / pitch) + (STRAND_W_TWIST * w / cellSize) + (float(shell) * 1.9);
+  float sector = round((ang - phi) * float(count) / TAU);
+  float centerAngle = phi + (TAU * sector / float(count));
+  vec2 c = SHELL_RADIUS_FRACTION[shell] * cellSize * vec2(cos(centerAngle), sin(centerAngle));
+  float index = mod(sector, float(count));
+  vec2 h = hash21((segmentId * 1.7) + vec2((float(axis) * 3.1) + (float(shell) * 11.0), index * 5.3));
+  int tier = h.x < 0.5 ? 0 : (h.x < 0.8 ? 1 : 2);
+  float d = max(length(t - c) - (TIER_RADIUS_FRACTION[tier] * cellSize), outside);
+  if (d < dStrand) {
+    dStrand = d;
+    gTierBrightness = TIER_BRIGHTNESS[tier];
+    gTierRadius = TIER_RADIUS_FRACTION[tier] * cellSize;
+    gStrandSign = edgeSign;
+  }
+}
+
 // One beam family along lattice axis @p axis (0 x, 1 y, 2 z): transverse 4D
 // coordinates @p ct, axial coordinate @p s, and the world-frame w coordinate
 // @p w. The beam segment between lattice points k and k + 1 along the axis is
-// one single-bit link of the algebra; it carries strands exactly when that
-// link is a DMZ (zero-divisor) edge of the strut, with the helix handedness
-// and braid set by the edge sign. Updates the nearest beam distance, the nearest strand
-// distance, and the nearest strand's tier and sign.
+// one single-bit link of the algebra; it carries a strand exactly when that
+// link is a DMZ (zero-divisor) edge of the strut. The segment holding s and
+// its nearer neighbor are evaluated; segments farther along the axis are at
+// least max(f, 1 - f) cells away. Updates the nearest beam distance, the
+// nearest strand distance, and the nearest strand's tier and sign.
 void beamFamily(vec2 ct, float s, float w, int axis, inout float dBeam, inout float dStrand) {
   vec2 n = round(ct / cellSize);
   vec2 t = ct - (n * cellSize);
@@ -170,53 +211,27 @@ void beamFamily(vec2 ct, float s, float w, int axis, inout float dBeam, inout fl
     dStrand = min(dStrand, shellBound);
     return;
   }
-  ivec2 nt = ivec2(n);
   float axial = s / cellSize;
   int k = int(floor(axial));
   float f = axial - float(k);
-  int kw = int(round(w / cellSize));
-  ivec4 step = ivec4(axis == 0 ? 1 : 0, axis == 1 ? 1 : 0, axis == 2 ? 1 : 0, 0);
-  float ang = atan(t.y, t.x);
-  // The segment holding s and its nearer neighbor; each strand is clipped to
-  // its own segment, so its distance is at least the axial distance outside
-  // it. Segments farther along the axis are at least max(f, 1 - f) cells away.
   dStrand = min(dStrand, max(shellBound, max(f, 1.0 - f) * cellSize));
-  for (int pass = 0; pass < 2; ++pass) {
-    int segment = pass == 0 ? k : (f < 0.5 ? k - 1 : k + 1);
-    float outside = pass == 0 ? 0.0 : min(f, 1.0 - f) * cellSize;
-    if (max(shellBound, outside) >= dStrand) {
-      continue;
-    }
-    ivec4 lattice = axis == 0 ? ivec4(segment, nt.x, nt.y, kw)
-                              : (axis == 1 ? ivec4(nt.y, segment, nt.x, kw) : ivec4(nt.x, nt.y, segment, kw));
-    int i = algebraIndex(lattice);
-    int bit = findLSB(i ^ algebraIndex(lattice + step));
-    uvec2 m = algebraMaskAt(i);
-    if (((m.r >> uint(bit)) & 1u) == 0u) {
-      continue;
-    }
-    float edgeSign = ((m.g >> uint(bit)) & 1u) != 0u ? 1.0 : -1.0;
-    // The edge sign picks the shell: a +1 link is one wide helix, a -1 link a
-    // tight triple braid of the opposite hand.
-    int shell = edgeSign > 0.0 ? 1 : 0;
-    vec2 segmentId = latticeCellId(n) + vec2(0.0, float(segment) * 0.37);
-    int count = SHELL_STRANDS[shell];
-    float pitch = SHELL_PITCH_FRACTION[shell] * cellSize;
-    float phi = (SHELL_DIRECTION[shell] * TAU * s / pitch) + (STRAND_W_TWIST * w / cellSize) +
-                (float(shell) * 1.9);
-    float sector = round((ang - phi) * float(count) / TAU);
-    float centerAngle = phi + (TAU * sector / float(count));
-    vec2 c = SHELL_RADIUS_FRACTION[shell] * cellSize * vec2(cos(centerAngle), sin(centerAngle));
-    float index = mod(sector, float(count));
-    vec2 h = hash21((segmentId * 1.7) + vec2((float(axis) * 3.1) + (float(shell) * 11.0), index * 5.3));
-    int tier = h.x < 0.5 ? 0 : (h.x < 0.8 ? 1 : 2);
-    float d = max(length(t - c) - (TIER_RADIUS_FRACTION[tier] * cellSize), outside);
-    if (d < dStrand) {
-      dStrand = d;
-      gTierBrightness = TIER_BRIGHTNESS[tier];
-      gTierRadius = TIER_RADIUS_FRACTION[tier] * cellSize;
-      gStrandSign = edgeSign;
-    }
+  ivec2 nt = ivec2(n);
+  int kw = int(round(w / cellSize));
+  int neighbor = f < 0.5 ? k - 1 : k + 1;
+  float neighborOutside = min(f, 1.0 - f) * cellSize;
+  // Mask bits first, so a beam whose nearby links are no DMZ edges costs two
+  // texel fetches and no trigonometry.
+  float signHere = linkSign(axis, k, nt, kw);
+  float signNeighbor = max(shellBound, neighborOutside) < dStrand ? linkSign(axis, neighbor, nt, kw) : 0.0;
+  if (signHere == 0.0 && signNeighbor == 0.0) {
+    return;
+  }
+  float ang = atan(t.y, t.x);
+  if (signHere != 0.0 && shellBound < dStrand) {
+    segmentStrand(t, ang, s, w, axis, n, k, signHere, 0.0, dStrand);
+  }
+  if (signNeighbor != 0.0 && max(shellBound, neighborOutside) < dStrand) {
+    segmentStrand(t, ang, s, w, axis, n, neighbor, signNeighbor, neighborOutside, dStrand);
   }
 }
 

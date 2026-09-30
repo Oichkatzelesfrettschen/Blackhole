@@ -21,17 +21,22 @@ const int ALGEBRA_HALF = 2048;           // Generator G of level 12: bit 11 is t
 const int ALGEBRA_CHORD_BIT = 11;
 const int ALGEBRA_BOX_KITES_PER_VERTEX = 10; // N - 2 local octahedra through a vertex.
 
-// Basis index of lattice point @p n (algebra_lattice.h grayMortonIndex).
+// Basis index of lattice point @p n (algebra_lattice.h grayMortonIndex): the
+// three Gray digits of axis a spread to index bits a, a + 4 and a + 8.
 int algebraIndex(ivec4 n) {
   ivec4 k = n & 7;
   ivec4 g = k ^ (k >> 1);
-  int i = 0;
-  for (int d = 0; d < 3; ++d) {
-    for (int a = 0; a < 4; ++a) {
-      i |= ((g[a] >> d) & 1) << ((4 * d) + a);
-    }
-  }
-  return i;
+  ivec4 spread = (g & 1) | ((g & 2) << 3) | ((g & 4) << 6);
+  return spread.x | (spread.y << 1) | (spread.z << 2) | (spread.w << 3);
+}
+
+// Index bit flipped by the unit step k -> k + 1 along axis @p axis: the Gray
+// digit that changes is the lowest set bit of (k + 1) mod 8, and digit 2 on
+// the wrap 7 -> 0.
+int algebraStepBit(int k, int axis) {
+  int next = (k + 1) & 7;
+  int digit = next == 0 ? 2 : findLSB(next);
+  return (4 * digit) + axis;
 }
 
 uvec2 algebraMaskAt(int i) {
