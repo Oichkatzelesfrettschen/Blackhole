@@ -4059,6 +4059,23 @@ if(BUILD_TESTING)
     endif()
   endif()
 
+  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/emanation_table_test.cpp")
+    # GL-free counts, regimes, Theorem 11 sub-blocks, and symmetry of the
+    # header-only strutted emanation tables.
+    add_executable(emanation_table_test "${PROJECT_SOURCE_DIR}/tests/emanation_table_test.cpp")
+    target_include_directories(emanation_table_test PRIVATE "${PROJECT_SOURCE_DIR}/src")
+    target_link_libraries(emanation_table_test PRIVATE GTest::gtest GTest::gtest_main)
+    target_compile_options(emanation_table_test PRIVATE ${PROJECT_WARNINGS})
+    if(ENABLE_FAST_MATH)
+      target_compile_options(emanation_table_test PRIVATE -fno-fast-math)
+    endif()
+    add_test(NAME emanation_table COMMAND emanation_table_test)
+    set_tests_properties(emanation_table PROPERTIES LABELS "render;unit;tesseract" TIMEOUT 120)
+    if(SANITIZER_TEST_ENV)
+      set_tests_properties(emanation_table PROPERTIES ENVIRONMENT "${SANITIZER_TEST_ENV}")
+    endif()
+  endif()
+
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_label_test.cpp")
     add_executable(tesseract_label_test "${PROJECT_SOURCE_DIR}/tests/tesseract_label_test.cpp")
     target_link_libraries(tesseract_label_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)

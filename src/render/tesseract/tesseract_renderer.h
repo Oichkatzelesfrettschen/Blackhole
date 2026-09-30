@@ -23,6 +23,7 @@
 
 #include <glm/ext/matrix_float3x3.hpp>
 #include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_double3.hpp>
 #include <glm/ext/vector_float2.hpp>
 #include <glm/ext/vector_float3.hpp>
 
@@ -91,7 +92,8 @@ struct TesseractFrameInputs {
   gl::GLuint targetTexture = 0;
   int width = 0;
   int height = 0;
-  glm::vec3 eye{0.0f};              ///< World-space eye position, drift included.
+  glm::vec3 eye{0.0f};              ///< Eye position relative to the drift point (camera placement).
+  glm::dvec3 drift{0.0};            ///< World-space forward drift accumulated along the camera path.
   glm::mat3 cameraBasis{1.0f};      ///< Columns (right, up, forward), buildCameraBasis order.
   float fovScale = 1.0f;            ///< tan(fovDeg / 2), the bhRayDir convention.
   std::array<float, 16> rotation{}; ///< Column-major SO(4) matrix (toColumnMajor).
@@ -109,6 +111,42 @@ struct TesseractFrameInputs {
   float fogDensity = 0.35f;         ///< Aerial-perspective fog into the void.
   int qualityTier = 0; ///< 0 dense, 1 sparse (Mesa llvmpipe and other slow rasterizers).
 };
+
+/// Cells after which the strand hashes repeat along x, y, and z of
+/// the 4D lattice; tesseractSliceFrame wraps the eye onto this period.
+inline constexpr int TESSERACT_LATTICE_PERIOD_CELLS = 64;
+/// Offset of the lattice from the world origin, in cells: places the default
+/// eye (world x = y = 0) in the open middle of a cell, off the corridor axis.
+inline constexpr std::array<double, 3> TESSERACT_LATTICE_OFFSET_CELLS{0.53, 0.47, 0.5};
+/// Offset of the slice hyperplane along w, in cells.
+inline constexpr double TESSERACT_SLICE_W_CELLS = 0.25;
+
+/**
+ * @brief Slice frame and eye point the tesseract shaders march from.
+ *
+ * axes are the columns of the orthonormal 4x3 frame F: the columns of the
+ * SO(4) matrix blended toward the identity by 0.10 sceneScale (capped at 0.6,
+ * so the blend never cancels), then Gram-Schmidt orthonormalized. eye is
+ * F (eye + offset) + (drift, 0) + (0, 0, 0, W0) with offset
+ * TESSERACT_LATTICE_OFFSET_CELLS and W0 TESSERACT_SLICE_W_CELLS in cells, and
+ * with x, y, z reduced into [-P/2, P/2) of the period
+ * P = TESSERACT_LATTICE_PERIOD_CELLS cellSize, so a short drift keeps the
+ * eye's own cell indices. The
+ * slice rotates about the eye, not the world origin: the drift enters
+ * untilted, so neither a long drift nor the SO(4) rotation moves the eye
+ * across the lattice, and eye w stays within |eye| + W0 of the w = 0
+ * hyperplane. The field is periodic on the wrap, so the reduction changes no
+ * pixel.
+ */
+struct TesseractSliceFrame {
+  std::array<std::array<double, 4>, 3> axes{};
+  std::array<double, 4> eye{};
+};
+
+/** @brief Slice frame of @p rotation (column-major SO(4)) and 4D eye point (see TesseractSliceFrame). */
+TesseractSliceFrame tesseractSliceFrame(const std::array<float, 16> &rotation, float sceneScale,
+                                        float cellSize, const glm::vec3 &eye,
+                                        const glm::dvec3 &drift);
 
 /**
  * @brief Owner of the tesseract pass GL objects.
