@@ -13,7 +13,10 @@
 #include <numbers>
 #include <random>
 
-#include <glm/glm.hpp>
+#include <glm/ext/matrix_double3x3.hpp>
+#include <glm/ext/matrix_float3x3.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/matrix.hpp>
 #include <gtest/gtest.h>
 
 #include "render/camera_math.h"
@@ -77,8 +80,10 @@ std::array<double, 3> randomAngles(std::mt19937 &rng) {
 // left-handed frame, determinant -1, exactly as buildCameraBasis does; the
 // shader's bhRayDir convention fixes that handedness.
 TEST(TesseractNavigation, BasisIsOrthonormalAndMatchesTheCameraHandedness) {
-  for (double yaw = -360.0; yaw <= 360.0; yaw += 37.0) {
-    for (double pitch = -89.0; pitch <= 89.0; pitch += 22.25) {
+  for (int yawStep = 0; yawStep <= 19; ++yawStep) {
+    const double yaw = -360.0 + (37.0 * yawStep);
+    for (int pitchStep = 0; pitchStep <= 8; ++pitchStep) {
+      const double pitch = -89.0 + (22.25 * pitchStep);
       const glm::dmat3 b = navigationBasis(yaw, pitch);
       const glm::dmat3 gram = glm::transpose(b) * b;
       for (int i = 0; i < 3; ++i) {
@@ -120,17 +125,17 @@ TEST(TesseractNavigation, DocumentedAxes) {
 }
 
 TEST(TesseractNavigation, WPlaneRotationIsSpecialOrthogonal) {
-  std::mt19937 rng(20240611U);
+  std::mt19937 rng(20240611U); // NOLINT(cert-msc32-c,cert-msc51-cpp,bugprone-random-generator-seed) -- deterministic seed for reproducible test
   for (int i = 0; i < 50; ++i) {
     expectOrthogonal(wPlaneRotation(randomAngles(rng)));
   }
 }
 
 TEST(TesseractNavigation, EachPlaneRotationFixesTheOtherAxes) {
-  constexpr double ANGLE = 0.7;
+  constexpr double planeAngle = 0.7;
   for (std::size_t k = 0; k < 3; ++k) {
     std::array<double, 3> angles{};
-    angles.at(k) = ANGLE;
+    angles.at(k) = planeAngle;
     const Mat4<double> m = wPlaneRotation(angles);
     for (std::size_t axis = 0; axis < 3; ++axis) {
       if (axis == k) {
@@ -140,8 +145,8 @@ TEST(TesseractNavigation, EachPlaneRotationFixesTheOtherAxes) {
         EXPECT_NEAR(m.at(r).at(axis), r == axis ? 1.0 : 0.0, TIGHT) << k << "," << axis;
       }
     }
-    EXPECT_NEAR(m.at(k).at(k), std::cos(ANGLE), TIGHT);
-    EXPECT_NEAR(m.at(3).at(k), std::sin(ANGLE), TIGHT);
+    EXPECT_NEAR(m.at(k).at(k), std::cos(planeAngle), TIGHT);
+    EXPECT_NEAR(m.at(3).at(k), std::sin(planeAngle), TIGHT);
   }
 }
 
@@ -152,7 +157,7 @@ blackhole::tesseract::Quat<double> randomUnitQuat(std::mt19937 &rng) {
 }
 
 TEST(TesseractNavigation, SliceFrameWithUserRotationStaysOrthonormal) {
-  std::mt19937 rng(7U);
+  std::mt19937 rng(7U); // NOLINT(cert-msc32-c,cert-msc51-cpp,bugprone-random-generator-seed) -- deterministic seed for reproducible test
   for (int i = 0; i < 20; ++i) {
     const auto rotation = blackhole::tesseract::toColumnMajor(
         blackhole::tesseract::so4FromPair(randomUnitQuat(rng), randomUnitQuat(rng)));
@@ -173,7 +178,7 @@ TEST(TesseractNavigation, SliceFrameWithUserRotationStaysOrthonormal) {
 }
 
 TEST(TesseractNavigation, IdentityUserRotationReproducesTheSliceFrameExactly) {
-  std::mt19937 rng(11U);
+  std::mt19937 rng(11U); // NOLINT(cert-msc32-c,cert-msc51-cpp,bugprone-random-generator-seed) -- deterministic seed for reproducible test
   const auto rotation = blackhole::tesseract::toColumnMajor(
       blackhole::tesseract::so4FromPair(randomUnitQuat(rng), randomUnitQuat(rng)));
   const glm::vec3 eye(0.4f, -0.3f, 8.0f);

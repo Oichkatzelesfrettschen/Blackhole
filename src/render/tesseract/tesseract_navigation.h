@@ -26,7 +26,10 @@
 #include <cstddef>
 #include <numbers>
 
-#include <glm/glm.hpp>
+#include <glm/ext/matrix_double3x3.hpp>
+#include <glm/ext/vector_double3.hpp>
+#include <glm/geometric.hpp>
+#include <glm/trigonometric.hpp>
 
 #include "render/tesseract/so4.h"
 
@@ -83,12 +86,12 @@ inline void advanceNavigation(NavigationState &state, const NavigationInput &inp
                               NAVIGATION_MAX_PITCH_DEG);
   const glm::dmat3 basis = navigationBasis(state.yawDeg, state.pitchDeg);
   state.offset += basis * glm::dvec3(input.right, input.up, input.forward) * (moveSpeed * dtSeconds);
-  constexpr double PI = std::numbers::pi;
+  constexpr double pi = std::numbers::pi;
   for (std::size_t k = 0; k < state.wAngles.size(); ++k) {
     double angle = state.wAngles.at(k) + (input.wRate.at(k) * wTurnRate * dtSeconds);
-    angle = std::remainder(angle, 2.0 * PI);
-    if (angle <= -PI) {
-      angle += 2.0 * PI;
+    angle = std::remainder(angle, 2.0 * pi);
+    if (angle <= -pi) {
+      angle += 2.0 * pi;
     }
     state.wAngles.at(k) = angle;
   }
@@ -108,19 +111,6 @@ inline Mat4<double> wPlaneRotation(const std::array<double, 3> &wAngles) {
     m.at(3).at(axis) = s;
     m.at(3).at(3) = c;
     return m;
-  };
-  const auto multiply = [](const Mat4<double> &a, const Mat4<double> &b) {
-    Mat4<double> out{};
-    for (std::size_t i = 0; i < 4; ++i) {
-      for (std::size_t j = 0; j < 4; ++j) {
-        double sum = 0.0;
-        for (std::size_t k = 0; k < 4; ++k) {
-          sum += a.at(i).at(k) * b.at(k).at(j);
-        }
-        out.at(i).at(j) = sum;
-      }
-    }
-    return out;
   };
   return multiply(multiply(givens(0, wAngles.at(0)), givens(1, wAngles.at(1))),
                   givens(2, wAngles.at(2)));

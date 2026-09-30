@@ -123,6 +123,7 @@
 #include "render/scene_overlays.h"
 #include "render/settings_sync.h"
 #include "render/observer_sky_view.h"
+#include "render/tesseract/tesseract_navigation.h"
 #include "render/tesseract/tesseract_renderer.h"
 #include "render/uniform_binding.h"
 #include "rmlui_overlay.h"
@@ -573,9 +574,9 @@ blackhole::tesseract::NavigationInput gatherTesseractNavigation(const InputManag
                  axis(KeyAction::Rotate4DZWPos, KeyAction::Rotate4DZWNeg)};
   }
   if (!io.WantCaptureMouse && input.isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
-    constexpr double DEGREES_PER_PIXEL = 0.3;
-    nav.lookYawDeg = -static_cast<double>(input.getMouseDeltaX()) * DEGREES_PER_PIXEL;
-    nav.lookPitchDeg = -static_cast<double>(input.getMouseDeltaY()) * DEGREES_PER_PIXEL;
+    constexpr double degreesPerPixel = 0.3;
+    nav.lookYawDeg = -static_cast<double>(input.getMouseDeltaX()) * degreesPerPixel;
+    nav.lookPitchDeg = -static_cast<double>(input.getMouseDeltaY()) * degreesPerPixel;
   }
   return nav;
 }

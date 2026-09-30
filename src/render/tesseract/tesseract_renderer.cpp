@@ -23,6 +23,7 @@
 #include <glbinding/gl/types.h>
 
 #include <glm/common.hpp>
+#include <glm/ext/matrix_double3x3.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_float3x3.hpp>
 #include <glm/ext/matrix_float4x4.hpp>
@@ -42,6 +43,7 @@
 #include "render/tesseract/emanation_table.h"
 #include "render/tesseract/so4.h"
 #include "render/tesseract/tesseract_geometry.h"
+#include "render/tesseract/tesseract_navigation.h"
 #include "shader.h"
 
 using namespace gl;

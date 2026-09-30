@@ -226,7 +226,6 @@ struct RenderState {
     /// eye about the origin.
     glm::dvec3 driftOffset{0.0};
     double driftApplied = 0.0; ///< driftDistance already folded into driftOffset.
-    bool autoDrift = true;     ///< driftDistance advances only while true.
     /// Free-fly pose and 4D plane angles of interactive frames.
     blackhole::tesseract::NavigationState navigation;
     float flySpeed = 6.0f;  ///< Free-fly speed, world units per second.
@@ -244,6 +243,7 @@ struct RenderState {
     double algebraClock = 0.0;  ///< Seconds the ride has run (wall time, or the record clock).
     bool wallsEnabled = true;   ///< Ammann-Beenker quasicrystal walls.
     bool kitesEnabled = true;   ///< Box-kite glyphs at the lattice vertices.
+    bool autoDrift = true;      ///< driftDistance advances only while true.
     TesseractRenderer renderer;
     HudOverlay speculativeLabel;
     int speculativeLabelWidth = 0;  ///< Render width the label layout was fitted to.

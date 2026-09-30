@@ -1013,9 +1013,9 @@ void renderTesseractNavigationControls(RenderState &rs) {
   ImGui::Checkbox("Auto drift", &tg.autoDrift);
   ImGui::SliderFloat("Fly speed", &tg.flySpeed, 0.5f, 40.0f, "%.1f units/s");
   ImGui::SliderFloat("4D turn rate", &tg.wTurnRate, 0.1f, 2.0f, "%.2f rad/s");
-  constexpr double RAD_TO_DEG = 180.0 / std::numbers::pi;
-  ImGui::Text("xw %.1f  yw %.1f  zw %.1f deg", tg.navigation.wAngles[0] * RAD_TO_DEG,
-              tg.navigation.wAngles[1] * RAD_TO_DEG, tg.navigation.wAngles[2] * RAD_TO_DEG);
+  constexpr double radToDeg = 180.0 / std::numbers::pi;
+  ImGui::Text("xw %.1f  yw %.1f  zw %.1f deg", tg.navigation.wAngles[0] * radToDeg,
+              tg.navigation.wAngles[1] * radToDeg, tg.navigation.wAngles[2] * radToDeg);
   if (ImGui::Button("Reset view")) {
     blackhole::resetTesseractView(rs);
   }
