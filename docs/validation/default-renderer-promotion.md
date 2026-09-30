@@ -17,9 +17,12 @@ PYTHON=${PYTHON:-python3} scripts/renderer_promotion_evidence.sh build/Release b
 
 The script writes `legacy.png` and `default.png`, their `.json` sidecars, one
 GPU timing CSV per path, a `glxinfo.txt` snapshot, process logs, and
-`summary.md`. Use a new output directory for each run. The script hides the
-GLFW window with `BLACKHOLE_WINDOW_HIDDEN=1`; it still requires a working
-display and GL context. The sidecars record the effective contract, camera,
+`summary.md`. Use a new output directory for each run. Every capture run
+(`--export-frame`, `--export-raw-frame`, `--record-frames`,
+`--workspace-screenshot`) opens its GLFW window hidden and unfocused and leaves
+`imgui.ini` untouched; it still requires a working display and GL context.
+`BLACKHOLE_WINDOW_HIDDEN=1` hides an interactive run as well, and `=0` shows a
+capture run's window. The sidecars record the effective contract, camera,
 resolution, spin, and scene fields.
 
 `--export-frames 180` exports the final image on settled frame 180 and ends
