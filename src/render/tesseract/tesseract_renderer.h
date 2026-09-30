@@ -27,6 +27,9 @@
 #include <glm/ext/vector_float2.hpp>
 #include <glm/ext/vector_float3.hpp>
 
+#include "render/tesseract/so4.h"
+#include "render/tesseract/tesseract_navigation.h"
+
 namespace blackhole {
 
 struct RenderState;
@@ -113,6 +116,11 @@ struct TesseractFrameInputs {
   int algebraStrut = 129; ///< Strut S of the 4096-D algebra whose DMZ edges the strands and walls show.
   bool wallsEnabled = true; ///< Ammann-Beenker walls.
   bool kitesEnabled = true; ///< Box-kite glyphs at the lattice vertices.
+  /// User rotation of the slice frame through w (identity leaves the frame unchanged).
+  tesseract::Mat4<double> userRotation{{{1.0, 0.0, 0.0, 0.0},
+                                        {0.0, 1.0, 0.0, 0.0},
+                                        {0.0, 0.0, 1.0, 0.0},
+                                        {0.0, 0.0, 0.0, 1.0}}};
 };
 
 /// Texture unit of the DMZ mask (binding in shader/include/tesseract_algebra.glsl).
@@ -151,7 +159,20 @@ struct TesseractSliceFrame {
   std::array<double, 4> eye{};
 };
 
-/** @brief Slice frame of @p rotation (column-major SO(4)) and 4D eye point (see TesseractSliceFrame). */
+/**
+ * @brief Slice frame of @p rotation (column-major SO(4)) and 4D eye point (see TesseractSliceFrame).
+ *
+ * @p userRotation (row-major, acting on column vectors) multiplies each
+ * orthonormalized axis after the Gram-Schmidt step, so the blend toward the
+ * identity never damps it and the axes stay orthonormal; the identity
+ * reproduces the frame without it bit for bit.
+ */
+TesseractSliceFrame tesseractSliceFrame(const std::array<float, 16> &rotation, float sceneScale,
+                                        float cellSize, const glm::vec3 &eye,
+                                        const glm::dvec3 &drift,
+                                        const tesseract::Mat4<double> &userRotation);
+
+/** @brief tesseractSliceFrame with the identity user rotation. */
 TesseractSliceFrame tesseractSliceFrame(const std::array<float, 16> &rotation, float sceneScale,
                                         float cellSize, const glm::vec3 &eye,
                                         const glm::dvec3 &drift);
@@ -413,6 +434,20 @@ void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
                             const std::optional<TesseractRecordFrame> &record);
 
 /**
+ * @brief Interactive free-fly frame: navigation input and the raw frame delta.
+ *
+ * With a flight, renderTesseractScene advances rs.tesseract.navigation by
+ * @p input over min(deltaSeconds, 0.1) s, frames from
+ * navigationBasis(yaw, pitch) with the eye at the origin, and adds the
+ * navigation offset and 4D plane rotation to the slice. Auto drift then runs
+ * along the flown forward. cameraBasis and focusDirection are ignored.
+ */
+struct TesseractFlight {
+  tesseract::NavigationInput input;
+  float deltaSeconds = 0.0f;
+};
+
+/**
  * @brief Render the tesseract scene for this frame into rs.targets.texBlackhole.
  *
  * Advances the motion by advanceTesseractMotion, then draws with the view of
@@ -420,7 +455,15 @@ void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
  */
 void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
                           const glm::vec3 &focusDirection, float deltaSeconds,
-                          const std::optional<TesseractRecordFrame> &record);
+                          const std::optional<TesseractRecordFrame> &record,
+                          const std::optional<TesseractFlight> &flight = std::nullopt);
+
+/**
+ * @brief Return the free-fly pose, 4D plane angles, and drift to the start.
+ *
+ * Zeroes rs.tesseract.navigation, driftOffset, driftDistance, and driftApplied.
+ */
+void resetTesseractView(RenderState &rs);
 
 } // namespace blackhole
 

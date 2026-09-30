@@ -94,6 +94,12 @@ struct Settings {
   int keyDecreaseFontSize = 294; // GLFW_KEY_F5
   int keyIncreaseTimeScale = 93; // GLFW_KEY_RIGHT_BRACKET
   int keyDecreaseTimeScale = 91; // GLFW_KEY_LEFT_BRACKET
+  int keyRotate4DXWPos = 73;      // GLFW_KEY_I
+  int keyRotate4DXWNeg = 75;      // GLFW_KEY_K
+  int keyRotate4DYWPos = 74;      // GLFW_KEY_J
+  int keyRotate4DYWNeg = 76;      // GLFW_KEY_L
+  int keyRotate4DZWPos = 85;      // GLFW_KEY_U
+  int keyRotate4DZWNeg = 79;      // GLFW_KEY_O
 
   // === GAMEPAD CONTROLS ===
   bool gamepadEnabled = true;

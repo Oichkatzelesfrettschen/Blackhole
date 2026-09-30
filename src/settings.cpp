@@ -77,7 +77,7 @@ void assignLegacyVsync(Settings &settings, const std::string &value) {
 
 // Preserve file-order matching and the legacy vsync alias while binding each
 // persisted key to the type of its Settings member.
-constexpr std::array<SettingBinding, 86> K_SETTING_BINDINGS{{
+constexpr std::array<SettingBinding, 92> K_SETTING_BINDINGS{{
     {.key = "\"windowWidth\"", .assign = assignSetting<&Settings::windowWidth>},
     {.key = "\"windowHeight\"", .assign = assignSetting<&Settings::windowHeight>},
     {.key = "\"fullscreen\"", .assign = assignSetting<&Settings::fullscreen>},
@@ -114,6 +114,12 @@ constexpr std::array<SettingBinding, 86> K_SETTING_BINDINGS{{
     {.key = "\"keyDecreaseFontSize\"", .assign = assignSetting<&Settings::keyDecreaseFontSize>},
     {.key = "\"keyIncreaseTimeScale\"", .assign = assignSetting<&Settings::keyIncreaseTimeScale>},
     {.key = "\"keyDecreaseTimeScale\"", .assign = assignSetting<&Settings::keyDecreaseTimeScale>},
+    {.key = "\"keyRotate4DXWPos\"", .assign = assignSetting<&Settings::keyRotate4DXWPos>},
+    {.key = "\"keyRotate4DXWNeg\"", .assign = assignSetting<&Settings::keyRotate4DXWNeg>},
+    {.key = "\"keyRotate4DYWPos\"", .assign = assignSetting<&Settings::keyRotate4DYWPos>},
+    {.key = "\"keyRotate4DYWNeg\"", .assign = assignSetting<&Settings::keyRotate4DYWNeg>},
+    {.key = "\"keyRotate4DZWPos\"", .assign = assignSetting<&Settings::keyRotate4DZWPos>},
+    {.key = "\"keyRotate4DZWNeg\"", .assign = assignSetting<&Settings::keyRotate4DZWNeg>},
     {.key = "\"gamepadEnabled\"", .assign = assignSetting<&Settings::gamepadEnabled>},
     {.key = "\"gamepadDeadzone\"", .assign = assignSetting<&Settings::gamepadDeadzone>},
     {.key = "\"gamepadLookSensitivity\"",
@@ -298,6 +304,12 @@ bool SettingsManager::save(const std::string &filepath) {
   file << "  \"keyDecreaseFontSize\": " << settings_.keyDecreaseFontSize << ",\n";
   file << "  \"keyIncreaseTimeScale\": " << settings_.keyIncreaseTimeScale << ",\n";
   file << "  \"keyDecreaseTimeScale\": " << settings_.keyDecreaseTimeScale << ",\n";
+  file << "  \"keyRotate4DXWPos\": " << settings_.keyRotate4DXWPos << ",\n";
+  file << "  \"keyRotate4DXWNeg\": " << settings_.keyRotate4DXWNeg << ",\n";
+  file << "  \"keyRotate4DYWPos\": " << settings_.keyRotate4DYWPos << ",\n";
+  file << "  \"keyRotate4DYWNeg\": " << settings_.keyRotate4DYWNeg << ",\n";
+  file << "  \"keyRotate4DZWPos\": " << settings_.keyRotate4DZWPos << ",\n";
+  file << "  \"keyRotate4DZWNeg\": " << settings_.keyRotate4DZWNeg << ",\n";
 
   // Gamepad
   file << "  \"gamepadEnabled\": " << writeBool(settings_.gamepadEnabled) << ",\n";

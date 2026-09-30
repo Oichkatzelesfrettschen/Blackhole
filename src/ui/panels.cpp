@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <format>
+#include <numbers>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -219,7 +220,7 @@ void renderControlsHelpPanel() {
     ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Mouse Controls");
     ImGui::Separator();
 
-    ImGui::Text("Right-drag - Orbit Camera");
+    ImGui::Text("Right-drag - Orbit Camera (Tesseract: look)");
     ImGui::Text("Mid-drag   - Roll Camera");
     ImGui::Text("Scroll     - Zoom");
 
@@ -1001,6 +1002,38 @@ void renderTesseractProjectionControls(RenderState::TesseractGroup &tg) {
   ImGui::SliderFloat("FOV (deg)", &tg.fovDeg, 20.0f, 100.0f);
 }
 
+void renderTesseractNavigationControls(RenderState &rs) {
+  auto &tg = rs.tesseract;
+  const auto &input = InputManager::instance();
+  const auto key = [&input](KeyAction action) {
+    return InputManager::getKeyName(
+        input.getKeyForAction(action)); // NOLINT(readability-static-accessed-through-instance)
+  };
+  ImGui::SeparatorText("Navigation");
+  ImGui::Checkbox("Auto drift", &tg.autoDrift);
+  ImGui::SliderFloat("Fly speed", &tg.flySpeed, 0.5f, 40.0f, "%.1f units/s");
+  ImGui::SliderFloat("4D turn rate", &tg.wTurnRate, 0.1f, 2.0f, "%.2f rad/s");
+  constexpr double radToDeg = 180.0 / std::numbers::pi;
+  ImGui::Text("xw %.1f  yw %.1f  zw %.1f deg", tg.navigation.wAngles[0] * radToDeg,
+              tg.navigation.wAngles[1] * radToDeg, tg.navigation.wAngles[2] * radToDeg);
+  if (ImGui::Button("Reset view")) {
+    blackhole::resetTesseractView(rs);
+  }
+  ImGui::Text("%s/%s - fly forward/back", key(KeyAction::CameraMoveForward).c_str(),
+              key(KeyAction::CameraMoveBackward).c_str());
+  ImGui::Text("%s/%s - fly left/right", key(KeyAction::CameraMoveLeft).c_str(),
+              key(KeyAction::CameraMoveRight).c_str());
+  ImGui::Text("%s/%s - fly up/down", key(KeyAction::CameraMoveUp).c_str(),
+              key(KeyAction::CameraMoveDown).c_str());
+  ImGui::TextUnformatted("Right-drag - look around");
+  ImGui::Text("%s/%s - rotate slice in xw", key(KeyAction::Rotate4DXWPos).c_str(),
+              key(KeyAction::Rotate4DXWNeg).c_str());
+  ImGui::Text("%s/%s - rotate slice in yw", key(KeyAction::Rotate4DYWPos).c_str(),
+              key(KeyAction::Rotate4DYWNeg).c_str());
+  ImGui::Text("%s/%s - rotate slice in zw", key(KeyAction::Rotate4DZWPos).c_str(),
+              key(KeyAction::Rotate4DZWNeg).c_str());
+}
+
 void renderTesseractCorridorControls(RenderState::TesseractGroup &tg) {
   ImGui::SeparatorText("Corridor and light");
   ImGui::SliderFloat("Corridor density", &tg.cellSize, 3.0f, 30.0f);
@@ -1060,6 +1093,7 @@ void renderTesseractPanel(RenderState &rs) {
     ImGui::PopStyleColor();
     ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
     renderTesseractRotationControls(rs.tesseract);
+    renderTesseractNavigationControls(rs);
     renderTesseractProjectionControls(rs.tesseract);
     renderTesseractCorridorControls(rs.tesseract);
     ImGui::PopItemWidth();

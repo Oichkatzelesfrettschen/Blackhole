@@ -73,6 +73,14 @@ void InputManager::initDefaultBindings() {
   // Time control
   keyBindings_[KeyAction::IncreaseTimeScale] = GLFW_KEY_RIGHT_BRACKET;
   keyBindings_[KeyAction::DecreaseTimeScale] = GLFW_KEY_LEFT_BRACKET;
+
+  // Tesseract 4D slice rotation
+  keyBindings_[KeyAction::Rotate4DXWPos] = GLFW_KEY_I;
+  keyBindings_[KeyAction::Rotate4DXWNeg] = GLFW_KEY_K;
+  keyBindings_[KeyAction::Rotate4DYWPos] = GLFW_KEY_J;
+  keyBindings_[KeyAction::Rotate4DYWNeg] = GLFW_KEY_L;
+  keyBindings_[KeyAction::Rotate4DZWPos] = GLFW_KEY_U;
+  keyBindings_[KeyAction::Rotate4DZWNeg] = GLFW_KEY_O;
 }
 
 void InputManager::syncFromSettings() {
@@ -99,6 +107,12 @@ void InputManager::syncFromSettings() {
   keyBindings_[KeyAction::DecreaseFontSize] = settings.keyDecreaseFontSize;
   keyBindings_[KeyAction::IncreaseTimeScale] = settings.keyIncreaseTimeScale;
   keyBindings_[KeyAction::DecreaseTimeScale] = settings.keyDecreaseTimeScale;
+  keyBindings_[KeyAction::Rotate4DXWPos] = settings.keyRotate4DXWPos;
+  keyBindings_[KeyAction::Rotate4DXWNeg] = settings.keyRotate4DXWNeg;
+  keyBindings_[KeyAction::Rotate4DYWPos] = settings.keyRotate4DYWPos;
+  keyBindings_[KeyAction::Rotate4DYWNeg] = settings.keyRotate4DYWNeg;
+  keyBindings_[KeyAction::Rotate4DZWPos] = settings.keyRotate4DZWPos;
+  keyBindings_[KeyAction::Rotate4DZWNeg] = settings.keyRotate4DZWNeg;
 
   // Sensitivity
   mouseSensitivity_ = settings.mouseSensitivity;
@@ -163,6 +177,12 @@ void InputManager::syncToSettings() {
   settings.keyDecreaseFontSize = keyBindings_[KeyAction::DecreaseFontSize];
   settings.keyIncreaseTimeScale = keyBindings_[KeyAction::IncreaseTimeScale];
   settings.keyDecreaseTimeScale = keyBindings_[KeyAction::DecreaseTimeScale];
+  settings.keyRotate4DXWPos = keyBindings_[KeyAction::Rotate4DXWPos];
+  settings.keyRotate4DXWNeg = keyBindings_[KeyAction::Rotate4DXWNeg];
+  settings.keyRotate4DYWPos = keyBindings_[KeyAction::Rotate4DYWPos];
+  settings.keyRotate4DYWNeg = keyBindings_[KeyAction::Rotate4DYWNeg];
+  settings.keyRotate4DZWPos = keyBindings_[KeyAction::Rotate4DZWPos];
+  settings.keyRotate4DZWNeg = keyBindings_[KeyAction::Rotate4DZWNeg];
 
   // Sensitivity
   settings.mouseSensitivity = mouseSensitivity_;
@@ -220,8 +240,8 @@ void InputManager::update(float deltaTime) {
     handleSinglePressActions();
   }
 
-  // Update camera (only if not paused)
-  if (!paused_) {
+  // Update camera (only if not paused, and while the orbit camera is enabled)
+  if (!paused_ && orbitCameraEnabled_) {
     updateCamera(deltaTime);
   }
 
@@ -356,6 +376,45 @@ void InputManager::handleHoldToToggle(KeyAction action, bool justPressed, bool /
   }
 }
 
+bool InputManager::isActionActive(KeyAction action) const {
+  if (holdToToggleCamera_) {
+    // Toggle mode reads the toggle state; the 4D rotation keys have none and
+    // stay hold-to-rotate.
+    switch (action) {
+    case KeyAction::CameraMoveForward:
+      return holdToggleState_.forward;
+    case KeyAction::CameraMoveBackward:
+      return holdToggleState_.backward;
+    case KeyAction::CameraMoveLeft:
+      return holdToggleState_.left;
+    case KeyAction::CameraMoveRight:
+      return holdToggleState_.right;
+    case KeyAction::CameraMoveUp:
+      return holdToggleState_.up;
+    case KeyAction::CameraMoveDown:
+      return holdToggleState_.down;
+    case KeyAction::CameraRollLeft:
+      return holdToggleState_.rollLeft;
+    case KeyAction::CameraRollRight:
+      return holdToggleState_.rollRight;
+    case KeyAction::ZoomIn:
+      return holdToggleState_.zoomIn;
+    case KeyAction::ZoomOut:
+      return holdToggleState_.zoomOut;
+    case KeyAction::Rotate4DXWPos:
+    case KeyAction::Rotate4DXWNeg:
+    case KeyAction::Rotate4DYWPos:
+    case KeyAction::Rotate4DYWNeg:
+    case KeyAction::Rotate4DZWPos:
+    case KeyAction::Rotate4DZWNeg:
+      return isActionPressed(action);
+    default:
+      return false;
+    }
+  }
+  return isActionPressed(action);
+}
+
 void InputManager::updateCamera(float deltaTime) {
   const float inputScale = timeScale_;
   const float scaledDelta = deltaTime * inputScale;
@@ -367,39 +426,7 @@ void InputManager::updateCamera(float deltaTime) {
   float const keyXMult = invertKeyboardX_ ? -1.0f : 1.0f;
   float const keyYMult = invertKeyboardY_ ? -1.0f : 1.0f;
 
-  // Determine if action is active (either held or toggled on)
-  auto isActive = [this](KeyAction action) {
-    if (holdToToggleCamera_) {
-      // In toggle mode, check toggle state
-      switch (action) {
-      case KeyAction::CameraMoveForward:
-        return holdToggleState_.forward;
-      case KeyAction::CameraMoveBackward:
-        return holdToggleState_.backward;
-      case KeyAction::CameraMoveLeft:
-        return holdToggleState_.left;
-      case KeyAction::CameraMoveRight:
-        return holdToggleState_.right;
-      case KeyAction::CameraMoveUp:
-        return holdToggleState_.up;
-      case KeyAction::CameraMoveDown:
-        return holdToggleState_.down;
-      case KeyAction::CameraRollLeft:
-        return holdToggleState_.rollLeft;
-      case KeyAction::CameraRollRight:
-        return holdToggleState_.rollRight;
-      case KeyAction::ZoomIn:
-        return holdToggleState_.zoomIn;
-      case KeyAction::ZoomOut:
-        return holdToggleState_.zoomOut;
-      default:
-        return false;
-      }
-    } else {
-      // In hold mode, check if key is currently pressed
-      return isActionPressed(action);
-    }
-  };
+  const auto isActive = [this](KeyAction action) { return isActionActive(action); };
 
   // Keyboard camera controls (only when UI is not capturing input)
   if (!ImGui::GetIO().WantCaptureKeyboard || ignoreGuiCapture_) {
@@ -757,6 +784,18 @@ const char *InputManager::getActionName(KeyAction action) {
     return "Speed Up";
   case KeyAction::DecreaseTimeScale:
     return "Slow Down";
+  case KeyAction::Rotate4DXWPos:
+    return "4D Rotate XW+";
+  case KeyAction::Rotate4DXWNeg:
+    return "4D Rotate XW-";
+  case KeyAction::Rotate4DYWPos:
+    return "4D Rotate YW+";
+  case KeyAction::Rotate4DYWNeg:
+    return "4D Rotate YW-";
+  case KeyAction::Rotate4DZWPos:
+    return "4D Rotate ZW+";
+  case KeyAction::Rotate4DZWNeg:
+    return "4D Rotate ZW-";
   default:
     return "Unknown";
   }

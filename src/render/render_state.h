@@ -43,6 +43,7 @@
 #include "render/renderer_contract.h"
 #include "render/terminal_counts.h"
 #include "render/tesseract/so4.h"
+#include "render/tesseract/tesseract_navigation.h"
 #include "render/tesseract/tesseract_renderer.h"
 #include "rmlui_overlay.h"
 #include "tools/compare_harness.h"
@@ -225,6 +226,10 @@ struct RenderState {
     /// eye about the origin.
     glm::dvec3 driftOffset{0.0};
     double driftApplied = 0.0; ///< driftDistance already folded into driftOffset.
+    /// Free-fly pose and 4D plane angles of interactive frames.
+    blackhole::tesseract::NavigationState navigation;
+    float flySpeed = 6.0f;  ///< Free-fly speed, world units per second.
+    float wTurnRate = 0.6f; ///< 4D plane rotation rate, radians per second.
     float strandGlow = 1.0f;    ///< Fiber and frame emissive scale.
     float fogDensity = 0.35f;   ///< Aerial-perspective fog into the void.
     Quality quality = Quality::Dense;
@@ -238,6 +243,7 @@ struct RenderState {
     double algebraClock = 0.0;  ///< Seconds the ride has run (wall time, or the record clock).
     bool wallsEnabled = true;   ///< Ammann-Beenker quasicrystal walls.
     bool kitesEnabled = true;   ///< Box-kite glyphs at the lattice vertices.
+    bool autoDrift = true;      ///< driftDistance advances only while true.
     TesseractRenderer renderer;
     HudOverlay speculativeLabel;
     int speculativeLabelWidth = 0;  ///< Render width the label layout was fitted to.

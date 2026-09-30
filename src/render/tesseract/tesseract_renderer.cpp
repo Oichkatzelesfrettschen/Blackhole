@@ -23,6 +23,7 @@
 #include <glbinding/gl/types.h>
 
 #include <glm/common.hpp>
+#include <glm/ext/matrix_double3x3.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_float3x3.hpp>
 #include <glm/ext/matrix_float4x4.hpp>
@@ -42,6 +43,7 @@
 #include "render/tesseract/emanation_table.h"
 #include "render/tesseract/so4.h"
 #include "render/tesseract/tesseract_geometry.h"
+#include "render/tesseract/tesseract_navigation.h"
 #include "shader.h"
 
 using namespace gl;
@@ -268,7 +270,8 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
                      glm::value_ptr(inputs.cameraBasis));
   glUniform1f(uniformLocation(program_, "fovScale"), inputs.fovScale);
   const TesseractSliceFrame slice = tesseractSliceFrame(inputs.rotation, inputs.sceneScale,
-                                                        inputs.cellSize, inputs.eye, inputs.drift);
+                                                        inputs.cellSize, inputs.eye, inputs.drift,
+                                                        inputs.userRotation);
   bindSliceUniforms(program_, slice, inputs.cellSize);
   const double period = std::max(static_cast<double>(inputs.corridorPeriod), 1e-3);
   const double depth = static_cast<double>(inputs.eye.z) + inputs.drift.z +
@@ -437,9 +440,33 @@ glm::mat4 tesseractViewProjection(const glm::mat3 &cameraBasis, const glm::vec3 
   return projection * view;
 }
 
+namespace {
+bool isIdentity(const tesseract::Mat4<double> &m) {
+  for (std::size_t r = 0; r < 4; ++r) {
+    for (std::size_t c = 0; c < 4; ++c) {
+      if (m.at(r).at(c) != (r == c ? 1.0 : 0.0)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+} // namespace
+
 TesseractSliceFrame tesseractSliceFrame(const std::array<float, 16> &rotation, float sceneScale,
                                         float cellSize, const glm::vec3 &eye,
                                         const glm::dvec3 &drift) {
+  return tesseractSliceFrame(rotation, sceneScale, cellSize, eye, drift,
+                             tesseract::Mat4<double>{{{1.0, 0.0, 0.0, 0.0},
+                                                      {0.0, 1.0, 0.0, 0.0},
+                                                      {0.0, 0.0, 1.0, 0.0},
+                                                      {0.0, 0.0, 0.0, 1.0}}});
+}
+
+TesseractSliceFrame tesseractSliceFrame(const std::array<float, 16> &rotation, float sceneScale,
+                                        float cellSize, const glm::vec3 &eye,
+                                        const glm::dvec3 &drift,
+                                        const tesseract::Mat4<double> &userRotation) {
   using Vec4 = std::array<double, 4>;
   const auto dot = [](const Vec4 &a, const Vec4 &b) {
     return (a[0] * b[0]) + (a[1] * b[1]) + (a[2] * b[2]) + (a[3] * b[3]);
@@ -465,6 +492,16 @@ TesseractSliceFrame tesseractSliceFrame(const std::array<float, 16> &rotation, f
   slice.axes[1] = normalized(axpy(blended[1], -dot(blended[1], slice.axes[0]), slice.axes[0]));
   const Vec4 third = axpy(blended[2], -dot(blended[2], slice.axes[0]), slice.axes[0]);
   slice.axes[2] = normalized(axpy(third, -dot(third, slice.axes[1]), slice.axes[1]));
+  if (!isIdentity(userRotation)) {
+    for (auto &axis : slice.axes) {
+      Vec4 turned{};
+      for (std::size_t r = 0; r < 4; ++r) {
+        turned.at(r) = (userRotation.at(r).at(0) * axis[0]) + (userRotation.at(r).at(1) * axis[1]) +
+                       (userRotation.at(r).at(2) * axis[2]) + (userRotation.at(r).at(3) * axis[3]);
+      }
+      axis = turned;
+    }
+  }
 
   const auto cell = static_cast<double>(cellSize);
   const std::array<double, 3> local{
@@ -531,14 +568,25 @@ void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
                                                    static_cast<double>(step) *
                                                        static_cast<double>(tg.rotationSpeed));
     tg.pulseTravel = tesseract::advancePulseTravel(tg.pulseTravel, step * tg.pulseSpeed, pulseSpan);
-    tg.driftDistance += static_cast<double>(step) * static_cast<double>(tg.driftSpeed);
+    if (tg.autoDrift) {
+      tg.driftDistance += static_cast<double>(step) * static_cast<double>(tg.driftSpeed);
+    }
     tg.algebraClock += static_cast<double>(step);
   }
 }
 
+void resetTesseractView(RenderState &rs) {
+  auto &tg = rs.tesseract;
+  tg.navigation = tesseract::NavigationState{};
+  tg.driftOffset = glm::dvec3(0.0);
+  tg.driftDistance = 0.0;
+  tg.driftApplied = 0.0;
+}
+
 void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
                           const glm::vec3 &focusDirection, float deltaSeconds,
-                          const std::optional<TesseractRecordFrame> &record) {
+                          const std::optional<TesseractRecordFrame> &record,
+                          const std::optional<TesseractFlight> &flight) {
   advanceTesseractMotion(rs, deltaSeconds, record);
   auto &tg = rs.tesseract;
   const tesseract::Mat4<double> rotation = tesseract::so4FromPair(tg.orientation);
@@ -565,16 +613,34 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
   // object (Cooper floats through the tesseract rather than around it). A
   // recorded frame's camera is fixed, so its drift is the straight path; an
   // interactive frame adds its own drift along its own forward.
-  const glm::dvec3 forward(glm::column(cameraBasis, 2));
+  glm::mat3 basis = cameraBasis;
+  glm::vec3 focus = focusDirection;
+  if (flight.has_value()) {
+    tesseract::advanceNavigation(tg.navigation, flight->input,
+                                 static_cast<double>(std::clamp(flight->deltaSeconds, 0.0f, 0.1f)),
+                                 static_cast<double>(tg.flySpeed),
+                                 static_cast<double>(tg.wTurnRate));
+    const glm::dmat3 flightBasis =
+        tesseract::navigationBasis(tg.navigation.yawDeg, tg.navigation.pitchDeg);
+    basis = glm::mat3(flightBasis);
+    focus = glm::vec3(glm::column(flightBasis, 2));
+  }
+  const glm::dvec3 forward(glm::column(basis, 2));
   if (record.has_value()) {
     tg.driftOffset = forward * tg.driftDistance;
   } else {
     tg.driftOffset += forward * (tg.driftDistance - tg.driftApplied);
   }
   tg.driftApplied = tg.driftDistance;
-  inputs.eye = -focusDirection * framing.viewDistance;
-  inputs.drift = tg.driftOffset;
-  inputs.cameraBasis = cameraBasis;
+  if (flight.has_value()) {
+    inputs.eye = glm::vec3(0.0f);
+    inputs.drift = tg.driftOffset + tg.navigation.offset;
+    inputs.userRotation = tesseract::wPlaneRotation(tg.navigation.wAngles);
+  } else {
+    inputs.eye = -focus * framing.viewDistance;
+    inputs.drift = tg.driftOffset;
+  }
+  inputs.cameraBasis = basis;
   inputs.fovScale = std::tan(glm::radians(framing.fovDeg) * 0.5f);
   inputs.rotation = tesseract::toColumnMajor(rotation);
   inputs.projectionMode = stereographic ? 1 : 0;
