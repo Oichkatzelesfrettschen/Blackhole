@@ -188,12 +188,6 @@ TEST_F(TesseractGlStateTest, TesseractPassRestoresEveryBindingItTouches) {
   glBindVertexArray(vao);
   glViewport(1, 2, 3, 4);
   glEnable(GL_DEPTH_TEST);
-  // The pass binds the emanation table and its density mip on two units.
-  const std::array<int, 2> units{blackhole::TESSERACT_EMANATION_UNIT,
-                                 blackhole::TESSERACT_EMANATION_DENSITY_UNIT};
-  for (const int unit : units) {
-    glBindTextureUnit(static_cast<GLuint>(unit), sentinelTexture);
-  }
 
   blackhole::TesseractRenderer renderer;
   blackhole::TesseractFrameInputs inputs;
@@ -202,13 +196,6 @@ TEST_F(TesseractGlStateTest, TesseractPassRestoresEveryBindingItTouches) {
   inputs.height = TARGET_SIZE;
   inputs.rotation = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
   renderer.render(inputs);
-
-  for (const int unit : units) {
-    glActiveTexture(static_cast<GLenum>(static_cast<int>(GL_TEXTURE0) + unit));
-    EXPECT_EQ(integerState(GL_TEXTURE_BINDING_2D), static_cast<GLint>(sentinelTexture))
-        << "texture unit " << unit;
-  }
-  glActiveTexture(GL_TEXTURE0);
 
   EXPECT_EQ(glIsEnabled(GL_BLEND), GL_FALSE);
   EXPECT_EQ(glIsEnabled(GL_DEPTH_TEST), GL_TRUE);

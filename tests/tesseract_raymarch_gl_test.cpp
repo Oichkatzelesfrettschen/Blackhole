@@ -16,7 +16,6 @@
 #include <cmath>
 #include <cstdio>
 #include <cstddef>
-#include <functional>
 #include <memory>
 #include <numbers>
 #include <string>
@@ -140,16 +139,9 @@ float hueDegreesOf(float r, float g, float b) {
   return hue < 0.0f ? hue + 360.0f : hue;
 }
 
-// The strand-and-beam checks characterize the lattice itself, so the
-// emanation panes (their own checks below) stay off unless @p strut is set.
-std::vector<float> renderDefaultScene(double seconds = 1.5, int strut = 0) {
+std::vector<float> renderDefaultScene(double seconds = 1.5) {
   const auto stateStorage = std::make_unique<RenderState>();
   RenderState &rs = *stateStorage;
-  rs.tesseract.emanationEnabled = strut != 0;
-  if (strut != 0) {
-    rs.tesseract.emanationRide = false;
-    rs.tesseract.emanationStrut = strut;
-  }
   const GLuint target = createColorTexture32f(WIDTH, HEIGHT);
   rs.targets.texBlackhole = target;
   rs.targets.renderWidth = WIDTH;
@@ -247,37 +239,6 @@ TEST_F(TesseractRaymarchGlTest, VoidDominatedFrameWithStrandsAsTheBrightestEleme
   std::printf("outlier fraction %.4f (%zu of %zu)\n", static_cast<double>(outlierFraction),
               outliers, interior);
   EXPECT_LE(outlierFraction, MAX_OUTLIER_FRACTION);
-}
-
-// Emanation panes are an additive layer: strands stay the brightest element
-// (amber, over the bloom threshold) and the layer changes the frame.
-TEST_F(TesseractRaymarchGlTest, EmanationPanesLeaveStrandsTheBrightestElement) {
-  const std::vector<float> plain = renderDefaultScene();
-  for (const int strut : {17, 65, 129}) {
-    const std::vector<float> panes = renderDefaultScene(1.5, strut);
-    ASSERT_EQ(panes.size(), plain.size());
-    const std::size_t pixelCount = panes.size() / 4;
-    double difference = 0.0;
-    std::vector<float> maxChannels(pixelCount);
-    for (std::size_t i = 0; i < pixelCount; ++i) {
-      maxChannels.at(i) = maxChannelAt(panes, i);
-      difference += static_cast<double>(std::abs(maxChannels.at(i) - maxChannelAt(plain, i)));
-    }
-    difference /= static_cast<double>(pixelCount);
-    std::vector<float> sorted = maxChannels;
-    const std::size_t topCount = pixelCount / TOP_FRACTION_DENOMINATOR;
-    std::ranges::nth_element(sorted, sorted.begin() + static_cast<std::ptrdiff_t>(topCount),
-                             std::greater<>());
-    double topMean = 0.0;
-    for (std::size_t k = 0; k < topCount; ++k) {
-      topMean += static_cast<double>(sorted.at(k));
-    }
-    topMean /= static_cast<double>(topCount);
-    std::printf("S=%d: mean |panes - plain| %.4f, brightest 0.5%% mean %.3f\n", strut, difference,
-                topMean);
-    EXPECT_GT(difference, 0.002) << "panes drew nothing at S=" << strut;
-    EXPECT_GT(topMean, static_cast<double>(BRIGHT_STRAND_FLOOR)) << "S=" << strut;
-  }
 }
 
 // Hours of drift keep the lattice lit: the eye's 4D point stays on the wrapped

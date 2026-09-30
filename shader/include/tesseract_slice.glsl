@@ -3,9 +3,9 @@
 
 /**
  * @file tesseract_slice.glsl
- * @brief Slice frame, 4D depth cue, and fog of the tesseract scene, shared by
- *        shader/tesseract.frag (lattice march) and shader/tesseract_panes.frag
- *        (emanation panes), so both passes evaluate one field.
+ * @brief Slice frame, 4D depth cue, and fog of the tesseract scene
+ *        (shader/tesseract.frag), so any pass over the lattice evaluates one
+ *        field.
  *
  * The CPU builds the frame and the eye's 4D point in double
  * (tesseract_renderer.h tesseractSliceFrame): sliceAxes are the three
@@ -18,7 +18,7 @@
 uniform vec4 sliceAxes[3];        // Columns of the orthonormal 4x3 slice frame F.
 uniform vec4 eyeSlice;            // 4D point of the eye, x, y, z wrapped onto the lattice period.
 uniform float cellSize;           // Lattice cell period ("Corridor density").
-uniform float latticePeriodCells; // Cells after which the strand and pane hashes repeat.
+uniform float latticePeriodCells; // Cells after which the strand hashes repeat.
 
 // exp(-kappa |p4.w|): 4D depth cue.
 const float W_DIM_KAPPA = 0.06;

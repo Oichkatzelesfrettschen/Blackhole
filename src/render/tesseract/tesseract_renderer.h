@@ -14,8 +14,6 @@
 #define BLACKHOLE_RENDER_TESSERACT_TESSERACT_RENDERER_H
 
 #include <array>
-#include <cstddef>
-#include <future>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -28,8 +26,6 @@
 #include <glm/ext/vector_double3.hpp>
 #include <glm/ext/vector_float2.hpp>
 #include <glm/ext/vector_float3.hpp>
-
-#include "render/tesseract/emanation_table.h"
 
 namespace blackhole {
 
@@ -114,19 +110,9 @@ struct TesseractFrameInputs {
   float strandGlow = 1.0f;          ///< Fiber and frame emissive scale.
   float fogDensity = 0.35f;         ///< Aerial-perspective fog into the void.
   int qualityTier = 0; ///< 0 dense, 1 sparse (Mesa llvmpipe and other slow rasterizers).
-  bool emanationEnabled = true; ///< Draw the emanation-table panes.
-  int emanationStrut = 17;      ///< Strut S of the level-10 table the panes show, in [1, 511].
-  float emanationGain = 1.0f;   ///< Pane emissive scale.
-  bool emanationNesting = true; ///< Show distant pages at lower-level tables, unfolding as the eye nears.
-  bool emanationWalk = true;    ///< Draw the xor-triple pulse walk.
-  int emanationWalkStep = 0;    ///< Step index of the walk (floor(clock / period)).
-  float emanationWalkPhase = 0.0f; ///< Fraction of the current step elapsed, in [0, 1).
-  /// Build a changed table before drawing instead of on a worker thread; record
-  /// frames set it so every frame shows the strut its clock selects.
-  bool emanationBakeBlocking = false;
 };
 
-/// Cells after which the strand and pane hashes repeat along x, y, and z of
+/// Cells after which the strand hashes repeat along x, y, and z of
 /// the 4D lattice; tesseractSliceFrame wraps the eye onto this period.
 inline constexpr int TESSERACT_LATTICE_PERIOD_CELLS = 64;
 /// Offset of the lattice from the world origin, in cells: places the default
@@ -161,27 +147,6 @@ struct TesseractSliceFrame {
 TesseractSliceFrame tesseractSliceFrame(const std::array<float, 16> &rotation, float sceneScale,
                                         float cellSize, const glm::vec3 &eye,
                                         const glm::dvec3 &drift);
-
-/// Level of the Cayley-Dickson algebra whose emanation table the panes show (dim 1024).
-inline constexpr int TESSERACT_EMANATION_LEVEL = 10;
-/// Edge of that level's table, 2^(N-1) - 2 tone-row positions.
-inline constexpr int TESSERACT_EMANATION_SIZE = 510;
-/// Largest strut of the level, 2^(N-1) - 1.
-inline constexpr int TESSERACT_EMANATION_MAX_STRUT = 511;
-/// Cells of the pulse walk drawn at once: the lead cell and its trail.
-inline constexpr int TESSERACT_EMANATION_TRAIL = 8;
-/// Ints of the trail uniform: a (row, column) pair per trail cell.
-inline constexpr std::size_t TESSERACT_EMANATION_TRAIL_INTS =
-    2 * static_cast<std::size_t>(TESSERACT_EMANATION_TRAIL);
-/// Texture unit the pass binds the emanation texture to (binding in tesseract.frag).
-inline constexpr int TESSERACT_EMANATION_UNIT = 3;
-/// Texture unit of the fill-density mip chain (binding in tesseract_panes.frag).
-inline constexpr int TESSERACT_EMANATION_DENSITY_UNIT = 4;
-/// Edge of the density texture: the table padded to a power of two, so every
-/// mip texel averages whole 2^k blocks of cells.
-inline constexpr int TESSERACT_EMANATION_DENSITY_SIZE = 512;
-/// Mip levels of the density texture, 512 down to 1.
-inline constexpr int TESSERACT_EMANATION_DENSITY_LEVELS = 10;
 
 /**
  * @brief Owner of the tesseract pass GL objects.
@@ -224,71 +189,15 @@ public:
    */
   bool isLlvmpipe();
 
-  /// R16I texture of the baked table (row-major, tone-row order), 0 before the first render.
-  [[nodiscard]] gl::GLuint emanationTexture() const { return emanationTexture_; }
-  /// Strut of the baked table, 0 before the first render.
-  [[nodiscard]] int emanationBakedStrut() const { return emanationStrut_; }
-  /// Filled (DMZ) cells of the baked table.
-  [[nodiscard]] std::size_t emanationDmzCount() const { return emanationDmz_; }
-  /// Walk cells drawn by the last render, lead cell first; empty when the walk is off.
-  [[nodiscard]] const std::vector<tesseract::WalkCell> &emanationTrail() const {
-    return emanationTrail_;
-  }
-
 private:
   void ensureResources();
-  /**
-   * Makes the texture show the table of @p strut. The first table, and every
-   * table when @p blocking is set, is built before drawing; otherwise a
-   * changed strut is built on a worker thread (about 30 ms for a level-10
-   * table) while the previous table stays bound, and uploaded on the first
-   * render after it finishes.
-   */
-  void bakeEmanation(int strut, bool blocking);
-  /// Uploads @p table as the texture and derives the walk and fill of @p strut.
-  void uploadEmanation(int strut, const tesseract::EmanationTable &table);
-  /// Uploads the filled fractions of @p table (red positive, green negative)
-  /// and their mip chain, which a page shows where its cells are sub-pixel.
-  void uploadEmanationDensity(const tesseract::EmanationTable &table);
-
-  /// Walk cells (level-10 row, column pairs) and lead value the shaders read.
-  struct EmanationTrail {
-    std::array<int, TESSERACT_EMANATION_TRAIL_INTS> cells{};
-    int leadValue = 0;
-  };
-  /// Fills emanationTrail_ for the frame's walk step and returns the shader uniforms.
-  EmanationTrail updateEmanationTrail(const TesseractFrameInputs &inputs);
-  /// Additive second draw of shader/tesseract_panes.frag over the lattice.
-  void drawEmanationPanes(const TesseractFrameInputs &inputs, const TesseractSliceFrame &slice,
-                          const EmanationTrail &trail);
 
   gl::GLuint program_ = 0;
-  gl::GLuint panesProgram_ = 0;
   gl::GLuint vao_ = 0;
   gl::GLuint fbo_ = 0;
-  gl::GLuint emanationTexture_ = 0;
-  gl::GLuint emanationDensity_ = 0;
-  int emanationStrut_ = 0;
-  std::size_t emanationDmz_ = 0;
-  float emanationFill_ = 0.0f; ///< Filled fraction of the addressable cells.
-  std::vector<tesseract::WalkCell> emanationWalk_; ///< One period of the walk of the baked table.
-  std::vector<int> emanationWalkValues_;           ///< Table value at each walk cell.
-  std::vector<tesseract::WalkCell> emanationTrail_;
-  std::future<tesseract::EmanationTable> pendingTable_; ///< Worker build of pendingStrut_.
-  int pendingStrut_ = 0;
   bool llvmpipeChecked_ = false;
   bool llvmpipeDetected_ = false;
 };
-
-/**
- * @brief Strut of the emanation panes for this frame.
- *
- * With the ride on, the strut is entry floor(emanationClock / emanationDwell)
- * of the sky-regime list of level TESSERACT_EMANATION_LEVEL (one strut per
- * sky regime, ascending; tesseract/emanation_table.h skyRegimeStruts),
- * wrapped. With it off, emanationStrut clamped to [1, TESSERACT_EMANATION_MAX_STRUT].
- */
-int tesseractEmanationStrut(bool ride, double clockSeconds, float dwellSeconds, int manualStrut);
 
 /// Near clip plane of the tesseract view, in world units from the eye.
 inline constexpr float TESSERACT_NEAR_PLANE = 0.05f;

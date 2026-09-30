@@ -4076,19 +4076,6 @@ if(BUILD_TESTING)
     endif()
   endif()
 
-  if(EXISTS "${PROJECT_SOURCE_DIR}/tests/emanation_table_gl_test.cpp")
-    # Live-GL readback of the baked emanation texture against the CPU table.
-    # Skips without a GL 4.6 context.
-    add_executable(emanation_table_gl_test "${PROJECT_SOURCE_DIR}/tests/emanation_table_gl_test.cpp")
-    target_link_libraries(emanation_table_gl_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)
-    target_compile_definitions(emanation_table_gl_test PRIVATE
-      BH_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
-    )
-    target_compile_options(emanation_table_gl_test PRIVATE ${PROJECT_WARNINGS})
-    add_test(NAME emanation_table_gl COMMAND emanation_table_gl_test)
-    set_tests_properties(emanation_table_gl PROPERTIES LABELS "render;gpu;tesseract" TIMEOUT 60)
-  endif()
-
   if(EXISTS "${PROJECT_SOURCE_DIR}/tests/tesseract_label_test.cpp")
     add_executable(tesseract_label_test "${PROJECT_SOURCE_DIR}/tests/tesseract_label_test.cpp")
     target_link_libraries(tesseract_label_test PRIVATE blackhole_testcore GTest::gtest GTest::gtest_main)

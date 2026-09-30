@@ -8,10 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <chrono>
 #include <cstddef>
-#include <cstdint>
-#include <future>
 #include <iostream>
 #include <numeric>
 #include <optional>
@@ -40,7 +37,6 @@
 #include "input.h"
 #include "render.h"
 #include "render/render_state.h"
-#include "render/tesseract/emanation_table.h"
 #include "render/tesseract/so4.h"
 #include "render/tesseract/tesseract_geometry.h"
 #include "shader.h"
@@ -63,9 +59,6 @@ GLint uniformLocation(GLuint program, const char *name) {
  * vertex array; the read and draw framebuffer bindings, which
  * glBindFramebuffer(GL_FRAMEBUFFER) sets together; and the program.
  */
-constexpr std::array<int, 2> EMANATION_UNITS{TESSERACT_EMANATION_UNIT,
-                                             TESSERACT_EMANATION_DENSITY_UNIT};
-
 struct SavedGlState {
   GLboolean blendEnabled = GL_FALSE;
   GLboolean depthTestEnabled = GL_FALSE;
@@ -80,8 +73,6 @@ struct SavedGlState {
   GLint drawFramebuffer = 0;
   GLint readFramebuffer = 0;
   GLint program = 0;
-  GLint activeTexture = 0;
-  std::array<GLint, 2> emanationBindings{}; ///< Units TESSERACT_EMANATION_UNIT and _DENSITY_UNIT.
 
   void capture() {
     blendEnabled = glIsEnabled(GL_BLEND);
@@ -97,14 +88,6 @@ struct SavedGlState {
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFramebuffer);
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFramebuffer);
     glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-    // The pass binds two texture units; glBindTextureUnit leaves the active
-    // unit alone, but reading a unit's binding goes through it.
-    glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture);
-    for (std::size_t i = 0; i < EMANATION_UNITS.size(); ++i) {
-      glActiveTexture(static_cast<GLenum>(static_cast<int>(GL_TEXTURE0) + EMANATION_UNITS.at(i)));
-      glGetIntegerv(GL_TEXTURE_BINDING_2D, &emanationBindings.at(i));
-    }
-    glActiveTexture(static_cast<GLenum>(activeTexture));
   }
 
   void restore() const {
@@ -127,14 +110,10 @@ struct SavedGlState {
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(drawFramebuffer));
     glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(readFramebuffer));
     glUseProgram(static_cast<GLuint>(program));
-    for (std::size_t i = 0; i < EMANATION_UNITS.size(); ++i) {
-      glBindTextureUnit(static_cast<GLuint>(EMANATION_UNITS.at(i)),
-                        static_cast<GLuint>(emanationBindings.at(i)));
-    }
   }
 };
 
-// Uploads the slice frame both passes march from (shader/include/tesseract_slice.glsl).
+// Uploads the slice frame the lattice pass marches from (shader/include/tesseract_slice.glsl).
 void bindSliceUniforms(GLuint program, const TesseractSliceFrame &slice, float cellSize) {
   std::array<float, 12> axes{};
   for (std::size_t c = 0; c < slice.axes.size(); ++c) {
@@ -162,10 +141,6 @@ void TesseractRenderer::shutdown() {
     glDeleteProgram(program_);
     program_ = 0;
   }
-  if (panesProgram_ != 0) {
-    glDeleteProgram(panesProgram_);
-    panesProgram_ = 0;
-  }
   if (vao_ != 0) {
     glDeleteVertexArrays(1, &vao_);
     vao_ = 0;
@@ -174,22 +149,6 @@ void TesseractRenderer::shutdown() {
     glDeleteFramebuffers(1, &fbo_);
     fbo_ = 0;
   }
-  if (pendingTable_.valid()) {
-    pendingTable_.wait();
-    pendingTable_ = {};
-  }
-  pendingStrut_ = 0;
-  if (emanationTexture_ != 0) {
-    glDeleteTextures(1, &emanationTexture_);
-    emanationTexture_ = 0;
-  }
-  if (emanationDensity_ != 0) {
-    glDeleteTextures(1, &emanationDensity_);
-    emanationDensity_ = 0;
-  }
-  emanationStrut_ = 0;
-  emanationDmz_ = 0;
-  emanationFill_ = 0.0f;
 }
 
 bool TesseractRenderer::reloadShaders() {
@@ -197,28 +156,20 @@ bool TesseractRenderer::reloadShaders() {
     return true;
   }
   // createShaderProgram throws const char* on compile or link failure and
-  // std::string when a source file cannot be read. Each program keeps its last
-  // working build when its own source fails.
-  bool reloaded = true;
-  const auto reload = [&reloaded](GLuint &program, const char *vertex, const char *fragment) {
-    try {
-      const GLuint fresh = createShaderProgram(std::string(vertex), std::string(fragment));
-      glDeleteProgram(program);
-      program = fresh;
-      std::cout << "[HotReload] Reloaded " << fragment << '\n';
-    } catch (const char *error) {
-      std::cerr << "[HotReload] " << fragment << " kept: " << error << '\n';
-      reloaded = false;
-    } catch (const std::string &error) {
-      std::cerr << "[HotReload] " << fragment << " kept: " << error << '\n';
-      reloaded = false;
-    }
-  };
-  reload(program_, "shader/simple.vert", "shader/tesseract.frag");
-  if (panesProgram_ != 0) {
-    reload(panesProgram_, "shader/simple.vert", "shader/tesseract_panes.frag");
+  // std::string when a source file cannot be read.
+  try {
+    const GLuint fresh = createShaderProgram(std::string("shader/simple.vert"),
+                                             std::string("shader/tesseract.frag"));
+    glDeleteProgram(program_);
+    program_ = fresh;
+    std::cout << "[HotReload] Reloaded shader/tesseract.frag\n";
+    return true;
+  } catch (const char *error) {
+    std::cerr << "[HotReload] tesseract shader kept: " << error << '\n';
+  } catch (const std::string &error) {
+    std::cerr << "[HotReload] tesseract shader kept: " << error << '\n';
   }
-  return reloaded;
+  return false;
 }
 
 bool TesseractRenderer::isLlvmpipe() {
@@ -236,154 +187,12 @@ void TesseractRenderer::ensureResources() {
     program_ = createShaderProgram(std::string("shader/simple.vert"),
                                    std::string("shader/tesseract.frag"));
   }
-  if (panesProgram_ == 0) {
-    panesProgram_ = createShaderProgram(std::string("shader/simple.vert"),
-                                        std::string("shader/tesseract_panes.frag"));
-  }
   if (fbo_ == 0) {
     glCreateFramebuffers(1, &fbo_);
   }
   if (vao_ == 0) {
     vao_ = createQuadVAO();
   }
-}
-
-void TesseractRenderer::bakeEmanation(int strut, bool blocking) {
-  if (emanationTexture_ != 0 && strut == emanationStrut_) {
-    return;
-  }
-  if (pendingTable_.valid()) {
-    const bool ready =
-        pendingTable_.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-    if (ready || blocking || emanationTexture_ == 0) {
-      const int builtStrut = pendingStrut_;
-      const tesseract::EmanationTable built = pendingTable_.get();
-      if (builtStrut == strut) {
-        uploadEmanation(strut, built);
-        return;
-      }
-    } else {
-      // One build runs at a time; a strut requested meanwhile starts after it.
-      return;
-    }
-  }
-  if (blocking || emanationTexture_ == 0) {
-    uploadEmanation(strut, tesseract::createStruttedEt(TESSERACT_EMANATION_LEVEL, strut));
-    return;
-  }
-  pendingStrut_ = strut;
-  pendingTable_ = std::async(std::launch::async, [strut] {
-    return tesseract::createStruttedEt(TESSERACT_EMANATION_LEVEL, strut);
-  });
-}
-
-void TesseractRenderer::uploadEmanation(int strut, const tesseract::EmanationTable &table) {
-  if (emanationTexture_ == 0) {
-    glCreateTextures(GL_TEXTURE_2D, 1, &emanationTexture_);
-    glTextureStorage2D(emanationTexture_, 1, GL_R16I, TESSERACT_EMANATION_SIZE,
-                       TESSERACT_EMANATION_SIZE);
-    // Integer textures do not filter; the shader reads them with texelFetch.
-    glTextureParameteri(emanationTexture_, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(GL_NEAREST));
-    glTextureParameteri(emanationTexture_, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(GL_NEAREST));
-  }
-  GLint unpackAlignment = 4;
-  glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpackAlignment);
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 2);
-  glTextureSubImage2D(emanationTexture_, 0, 0, 0, TESSERACT_EMANATION_SIZE,
-                      TESSERACT_EMANATION_SIZE, GL_RED_INTEGER, GL_SHORT, table.value.data());
-  uploadEmanationDensity(table);
-  glPixelStorei(GL_UNPACK_ALIGNMENT, unpackAlignment);
-  emanationStrut_ = strut;
-  emanationDmz_ = table.dmzCount;
-  emanationWalk_ = tesseract::xorTripleWalk(table, tesseract::EMANATION_WALK_LENGTH);
-  emanationWalkValues_.resize(emanationWalk_.size());
-  std::ranges::transform(emanationWalk_, emanationWalkValues_.begin(),
-                         [&table](const tesseract::WalkCell &cell) {
-                           return table.at(cell.row, cell.col);
-                         });
-  emanationFill_ = table.totalPossible == 0
-                       ? 0.0f
-                       : static_cast<float>(table.dmzCount) / static_cast<float>(table.totalPossible);
-}
-
-void TesseractRenderer::uploadEmanationDensity(const tesseract::EmanationTable &table) {
-  constexpr int edge = TESSERACT_EMANATION_DENSITY_SIZE;
-  if (emanationDensity_ == 0) {
-    glCreateTextures(GL_TEXTURE_2D, 1, &emanationDensity_);
-    glTextureStorage2D(emanationDensity_, TESSERACT_EMANATION_DENSITY_LEVELS, GL_RG8, edge, edge);
-    glTextureParameteri(emanationDensity_, GL_TEXTURE_MIN_FILTER,
-                        static_cast<GLint>(GL_LINEAR_MIPMAP_LINEAR));
-    glTextureParameteri(emanationDensity_, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(GL_LINEAR));
-    glTextureParameteri(emanationDensity_, GL_TEXTURE_WRAP_S, static_cast<GLint>(GL_CLAMP_TO_EDGE));
-    glTextureParameteri(emanationDensity_, GL_TEXTURE_WRAP_T, static_cast<GLint>(GL_CLAMP_TO_EDGE));
-  }
-  // Red marks a positive (warm) filled cell and green a negative (cool) one;
-  // the texels past the 510-cell table stay empty.
-  std::vector<std::uint8_t> texels(static_cast<std::size_t>(edge) * edge * 2, 0);
-  for (int row = 0; row < TESSERACT_EMANATION_SIZE; ++row) {
-    for (int col = 0; col < TESSERACT_EMANATION_SIZE; ++col) {
-      const int v = table.at(row, col);
-      const std::size_t texel = (static_cast<std::size_t>(row) * edge) + static_cast<std::size_t>(col);
-      texels.at((2 * texel) + (v > 0 ? 0 : 1)) = v != 0 ? 255 : 0;
-    }
-  }
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  glTextureSubImage2D(emanationDensity_, 0, 0, 0, edge, edge, GL_RG, GL_UNSIGNED_BYTE,
-                      texels.data());
-  glGenerateTextureMipmap(emanationDensity_);
-}
-
-TesseractRenderer::EmanationTrail TesseractRenderer::updateEmanationTrail(
-    const TesseractFrameInputs &inputs) {
-  EmanationTrail trail;
-  emanationTrail_.clear();
-  if (!inputs.emanationWalk || emanationWalk_.empty()) {
-    return trail;
-  }
-  const auto length = static_cast<long long>(emanationWalk_.size());
-  for (int i = 0; i < TESSERACT_EMANATION_TRAIL; ++i) {
-    const long long step = static_cast<long long>(inputs.emanationWalkStep) - i;
-    const auto index = static_cast<std::size_t>(((step % length) + length) % length);
-    const tesseract::WalkCell cell = emanationWalk_[index];
-    emanationTrail_.push_back(cell);
-    // The uniform holds level-10 table indices, row first.
-    const std::size_t slot = 2 * static_cast<std::size_t>(i);
-    trail.cells.at(slot) = cell.row;
-    trail.cells.at(slot + 1) = cell.col;
-    if (i == 0) {
-      trail.leadValue = emanationWalkValues_[index];
-    }
-  }
-  return trail;
-}
-
-void TesseractRenderer::drawEmanationPanes(const TesseractFrameInputs &inputs,
-                                           const TesseractSliceFrame &slice,
-                                           const EmanationTrail &trail) {
-  // Panes add light over the lattice already in the target.
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_ONE, GL_ONE);
-  glBlendEquation(GL_FUNC_ADD);
-  glUseProgram(panesProgram_);
-  glUniform2f(uniformLocation(panesProgram_, "resolution"), static_cast<float>(inputs.width),
-              static_cast<float>(inputs.height));
-  glUniformMatrix3fv(uniformLocation(panesProgram_, "cameraBasis"), 1, GL_FALSE,
-                     glm::value_ptr(inputs.cameraBasis));
-  glUniform1f(uniformLocation(panesProgram_, "fovScale"), inputs.fovScale);
-  bindSliceUniforms(panesProgram_, slice, inputs.cellSize);
-  glUniform1f(uniformLocation(panesProgram_, "strandGlow"), inputs.strandGlow);
-  glUniform1f(uniformLocation(panesProgram_, "fogDensity"), inputs.fogDensity);
-  glUniform1f(uniformLocation(panesProgram_, "emanationGain"), inputs.emanationGain);
-  glUniform1f(uniformLocation(panesProgram_, "emanationFill"), emanationFill_);
-  glUniform1i(uniformLocation(panesProgram_, "emanationMinLevel"),
-              inputs.emanationNesting ? tesseract::minLevelForStrut(emanationStrut_)
-                                      : TESSERACT_EMANATION_LEVEL);
-  glUniform2iv(uniformLocation(panesProgram_, "emanationTrail"), TESSERACT_EMANATION_TRAIL,
-               trail.cells.data());
-  glUniform1i(uniformLocation(panesProgram_, "emanationTrailCount"),
-              static_cast<GLint>(emanationTrail_.size()));
-  glUniform1f(uniformLocation(panesProgram_, "emanationTrailPhase"), inputs.emanationWalkPhase);
-  glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
 void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
@@ -398,10 +207,6 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   saved.capture();
 
   ensureResources();
-  bakeEmanation(std::clamp(inputs.emanationStrut, 1, TESSERACT_EMANATION_MAX_STRUT),
-                inputs.emanationBakeBlocking);
-  glBindTextureUnit(static_cast<GLuint>(TESSERACT_EMANATION_UNIT), emanationTexture_);
-  glBindTextureUnit(static_cast<GLuint>(TESSERACT_EMANATION_DENSITY_UNIT), emanationDensity_);
 
   glNamedFramebufferTexture(fbo_, GL_COLOR_ATTACHMENT0, inputs.targetTexture, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
@@ -432,17 +237,9 @@ void TesseractRenderer::render(const TesseractFrameInputs &inputs) {
   glUniform1f(uniformLocation(program_, "strandGlow"), inputs.strandGlow);
   glUniform1f(uniformLocation(program_, "fogDensity"), inputs.fogDensity);
   glUniform1i(uniformLocation(program_, "qualityTier"), inputs.qualityTier);
-  const EmanationTrail trail = updateEmanationTrail(inputs);
-  glUniform1i(uniformLocation(program_, "pulseTintEnabled"),
-              inputs.emanationEnabled && !emanationTrail_.empty() ? 1 : 0);
-  glUniform1i(uniformLocation(program_, "emanationLeadValue"), trail.leadValue);
 
   glBindVertexArray(vao_);
   glDrawArrays(GL_TRIANGLES, 0, 6);
-
-  if (inputs.emanationEnabled) {
-    drawEmanationPanes(inputs, slice, trail);
-  }
 
   saved.restore();
 }
@@ -637,16 +434,6 @@ TesseractSliceFrame tesseractSliceFrame(const std::array<float, 16> &rotation, f
   return slice;
 }
 
-int tesseractEmanationStrut(bool ride, double clockSeconds, float dwellSeconds, int manualStrut) {
-  if (!ride) {
-    return std::clamp(manualStrut, 1, TESSERACT_EMANATION_MAX_STRUT);
-  }
-  static const std::vector<int> skyRide = tesseract::skyRegimeStruts(TESSERACT_EMANATION_LEVEL);
-  const double dwell = std::max(static_cast<double>(dwellSeconds), 0.1);
-  const auto step = static_cast<long long>(std::floor(std::max(clockSeconds, 0.0) / dwell));
-  return skyRide[static_cast<std::size_t>(step % static_cast<long long>(skyRide.size()))];
-}
-
 void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
                             const std::optional<TesseractRecordFrame> &record) {
   auto &tg = rs.tesseract;
@@ -666,7 +453,6 @@ void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
     tg.pulseTravel = motion.pulseTravel;
     tg.orientationInitialized = true;
     tg.driftDistance = static_cast<double>(tg.driftSpeed) * seconds;
-    tg.emanationClock = seconds;
   } else {
     if (!tg.orientationInitialized) {
       const tesseract::TesseractMotion reset = tesseract::tesseractMotionAt(
@@ -682,7 +468,6 @@ void advanceTesseractMotion(RenderState &rs, float deltaSeconds,
                                                        static_cast<double>(tg.rotationSpeed));
     tg.pulseTravel = tesseract::advancePulseTravel(tg.pulseTravel, step * tg.pulseSpeed, pulseSpan);
     tg.driftDistance += static_cast<double>(step) * static_cast<double>(tg.driftSpeed);
-    tg.emanationClock += static_cast<double>(step);
   }
 }
 
@@ -740,17 +525,6 @@ void renderTesseractScene(RenderState &rs, const glm::mat3 &cameraBasis,
   inputs.strandGlow = std::max(tg.strandGlow, 0.0f);
   inputs.fogDensity = std::max(tg.fogDensity, 0.0f);
   inputs.qualityTier = static_cast<int>(tg.quality);
-  inputs.emanationEnabled = tg.emanationEnabled;
-  inputs.emanationStrut = tesseractEmanationStrut(tg.emanationRide, tg.emanationClock,
-                                                  tg.emanationDwell, tg.emanationStrut);
-  inputs.emanationGain = std::max(tg.emanationGain, 0.0f);
-  inputs.emanationNesting = tg.emanationNesting;
-  inputs.emanationWalk = tg.emanationWalk;
-  const float walkPeriod = std::max(tg.emanationWalkPeriod, 0.05f);
-  const double walkClock = std::max(tg.emanationClock, 0.0) / static_cast<double>(walkPeriod);
-  inputs.emanationWalkStep = static_cast<int>(std::floor(walkClock));
-  inputs.emanationWalkPhase = static_cast<float>(walkClock - std::floor(walkClock));
-  inputs.emanationBakeBlocking = record.has_value();
   tg.renderer.render(inputs);
 }
 

@@ -37,15 +37,10 @@
  * threshold. Radiance falls with exponential extinction along the ray and
  * with exp(-kappa |p4.w|), the distance of the sampled point from the w = 0
  * hyperplane in the world frame. Output is linear HDR radiance with alpha 1.
- *
- * The emanation-table panes are a separate additive pass,
- * shader/tesseract_panes.frag, sharing the slice frame of
- * shader/include/tesseract_slice.glsl.
  */
 
 #include "include/interop_raygen.glsl"
 #include "include/tesseract_slice.glsl"
-#include "include/tesseract_emanation_palette.glsl"
 
 layout(location = 0) out vec4 fragColor;
 
@@ -64,10 +59,6 @@ uniform int pulseEnabled;
 uniform float strandGlow;
 uniform float fogDensity;
 uniform int qualityTier; // 0 dense (real GPUs), 1 sparse (Mesa llvmpipe and other slow rasterizers).
-// Hue of the traveling pulse: the lead cell of the emanation pulse walk
-// (tesseract_panes.frag), when the panes are on.
-uniform int pulseTintEnabled;
-uniform int emanationLeadValue; // Table value at the lead cell.
 
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
@@ -278,13 +269,8 @@ vec3 shadeHit(vec3 p, vec3 rayDir, float footprint) {
     float pulse = pulseEnabled != 0 ? gaussian(depthPattern, mod(pulseDepth, period), pulseWidth) : 0.0;
     // Round fiber: brightest on the axis, falling off across the width.
     float core = pow(facing, 1.5);
-    // The traveling pulse takes the hue of the walk's lead cell while panes are on.
-    vec3 pulseTint = vec3(1.0);
-    if (pulseTintEnabled != 0) {
-      pulseTint = mix(vec3(1.0), emanationColor(emanationLeadValue, 10) * 2.0, 0.5);
-    }
     radiance = mix(STRAND_HALO_COLOR, STRAND_CORE_COLOR, core) * (0.25 + (0.75 * core)) *
-               tierBrightness * (vec3(1.0 + lit) + (1.8 * pulse * pulseTint));
+               tierBrightness * (1.0 + lit + (1.8 * pulse));
     radius = tierRadius;
   } else {
     float rim = pow(1.0 - facing, 4.0);
