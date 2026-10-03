@@ -557,11 +557,12 @@ bool tesseractFlightActive(const RenderState &rs, const platform::CliOptions &cl
 }
 
 /// Navigation input of one interactive tesseract frame: WASD/QE flight, the
-/// six 4D rotation keys, and right-drag look, each yielding to ImGui capture.
+/// six 4D rotation keys, and right-drag look. Each yields to ImGui capture
+/// except while the pointer is over the viewport image, the same rule the
+/// orbit camera follows.
 blackhole::tesseract::NavigationInput gatherTesseractNavigation(const InputManager &input) {
   blackhole::tesseract::NavigationInput nav;
-  const ImGuiIO &io = ImGui::GetIO();
-  if (!io.WantCaptureKeyboard) {
+  if (!input.guiCapturesKeyboard()) {
     const auto axis = [&input](KeyAction positive, KeyAction negative) {
       return (input.isActionActive(positive) ? 1.0 : 0.0) -
              (input.isActionActive(negative) ? 1.0 : 0.0);
@@ -573,7 +574,7 @@ blackhole::tesseract::NavigationInput gatherTesseractNavigation(const InputManag
                  axis(KeyAction::Rotate4DYWPos, KeyAction::Rotate4DYWNeg),
                  axis(KeyAction::Rotate4DZWPos, KeyAction::Rotate4DZWNeg)};
   }
-  if (!io.WantCaptureMouse && input.isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
+  if (!input.guiCapturesMouse() && input.isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
     constexpr double degreesPerPixel = 0.3;
     nav.lookYawDeg = -static_cast<double>(input.getMouseDeltaX()) * degreesPerPixel;
     nav.lookPitchDeg = -static_cast<double>(input.getMouseDeltaY()) * degreesPerPixel;
