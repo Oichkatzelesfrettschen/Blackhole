@@ -440,6 +440,13 @@ public:
     return reset;
   }
 
+  /// True while ImGui owns the keyboard (WantCaptureKeyboard) and the
+  /// pointer is off the viewport image (ignoreGuiCapture_ unset).
+  [[nodiscard]] bool guiCapturesKeyboard() const;
+  /// True while ImGui owns the mouse (WantCaptureMouse) and the pointer is
+  /// off the viewport image (ignoreGuiCapture_ unset).
+  [[nodiscard]] bool guiCapturesMouse() const;
+
   InputManager(const InputManager &) = delete;
   InputManager &operator=(const InputManager &) = delete;
 
@@ -449,9 +456,6 @@ private:
 
   void initDefaultBindings();
   void updateCamera(float deltaTime);
-  /// True while an ImGui field's keyboard capture (WantCaptureKeyboard)
-  /// should suppress the single-press action block, per ignoreGuiCapture_.
-  [[nodiscard]] bool guiCapturesKeyboard() const;
   /// Dispatches the single-press keyboard actions (Quit, ToggleUI, resets,
   /// time/font scale, hold-to-toggle arming) against this frame's just-
   /// pressed edges.

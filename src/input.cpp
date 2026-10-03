@@ -264,6 +264,11 @@ bool InputManager::guiCapturesKeyboard() const {
          !ignoreGuiCapture_;
 }
 
+bool InputManager::guiCapturesMouse() const {
+  return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureMouse &&
+         !ignoreGuiCapture_;
+}
+
 void InputManager::handleSinglePressActions() {
   if (isActionJustPressed(KeyAction::Quit)) {
     glfwSetWindowShouldClose(window_, GLFW_TRUE);
