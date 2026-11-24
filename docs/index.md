@@ -19,6 +19,8 @@ maintaining separate release evidence.
 - [Status](developer-guide/status.md) -- current project status and active issues
 - [Repo Truth](developer-guide/repo-truth.md) -- measured build inventory and generated report
 - [Release Evidence](developer-guide/release-evidence.md) -- product obligations and validation classes
+- [CI Execution](developer-guide/ci.md) -- hosted gates, evidence boundaries, and replay costs
+- [Build and Analysis Tooling](developer-guide/build-tooling.md) -- compiler and analyzer versions, local replicas
 - [Bibliography](references/bibliography.md) -- running external-reference ledger
 - [Blender Bridge Requirements](requirements/blender.md) -- bridge, addon, staging, and smoke workflows
 - [Octane Requirements](requirements/octane.md) -- optional Octane-backed Blender lane
@@ -94,6 +96,7 @@ maintaining separate release evidence.
 - [Rendered-Output Lane](validation/rendered-output-lane.md) -- deterministic desktop captures, analytic geometry, image metrics, and offscreen CI
 - [Workspace Screenshot Lane](validation/workspace-screenshot-lane.md) -- full UI captures and dock layout assertions in CI
 - [OpenUniverse Import Validation](validation/openuniverse-import-validation.md) -- deep research and OpenUniverse import validation results
+- [Campaign Desktop Proof](validation/campaign-desktop-proof.md) -- executable campaign gates and live UI obligations
 - [Physics, Numerics, and Game-Engine Audit](audits/physics-and-game-engine/00-summary.md) -- ranked defects in Kerr tracing, disk emission, library physics, game clocks, and open_gororoba numerics adoptions
 
 ## Archive
